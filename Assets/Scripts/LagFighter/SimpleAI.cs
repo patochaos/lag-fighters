@@ -2,9 +2,9 @@ using System.Collections.Generic;
 
 namespace LagFighter
 {
-    // IA de planificación: arma una cola completa de hasta TurnFrames por
-    // turno, igual que el jugador. No ve el plan del rival (solo posiciones
-    // y stun actuales) — mismo juego de adivinar.
+    // IA de planificación: arma la cola completa del turno a ciegas (solo ve
+    // posiciones y stun actuales). Juega un Ryu razonable: zonea con hadouken,
+    // castiga knockdowns, mezcla footsies, y cada tanto apuesta un shoryuken.
     public class SimpleAI
     {
         readonly System.Random _rng;
@@ -16,13 +16,11 @@ namespace LagFighter
             int opp = 1 - me;
             var plan = new List<int>();
             int frames = 0;
-            // posición estimada propia mientras planifica (rival asumido quieto)
             float myX = sim.Fighters[me].X;
             float oppX = sim.Fighters[opp].X;
             int face = oppX >= myX ? 1 : -1;
-
-            // si el rival quedó derribado, presionar el okizeme
             bool oppDown = sim.StunRemaining(opp) > 20;
+            bool threwFireball = false;
 
             while (frames < SimConfig.TurnFrames)
             {
@@ -32,40 +30,47 @@ namespace LagFighter
 
                 if (oppDown && plan.Count < 3)
                 {
-                    pick = dist > 1.6f ? MoveCatalog.DashF : (r < 0.5 ? MoveCatalog.AttackB : MoveCatalog.AttackA);
+                    // okizeme: acercarse y plantar una patada o presión
+                    pick = dist > 1.8f ? MoveCatalog.DashF :
+                           r < 0.45 ? MoveCatalog.AttackB :
+                           r < 0.75 ? MoveCatalog.AttackA : MoveCatalog.Hadouken;
                 }
-                else if (dist > 2.4f)
+                else if (dist > 2.6f)
                 {
-                    if (r < 0.50) pick = MoveCatalog.WalkF;
-                    else if (r < 0.68) pick = MoveCatalog.DashF;
-                    else if (r < 0.78) pick = MoveCatalog.Wait;
-                    else if (r < 0.88) pick = MoveCatalog.WalkB;
-                    else pick = MoveCatalog.AttackB; // patada al aire de amenaza
+                    if (!threwFireball && r < 0.35) { pick = MoveCatalog.Hadouken; threwFireball = true; }
+                    else if (r < 0.60) pick = MoveCatalog.WalkF;
+                    else if (r < 0.72) pick = MoveCatalog.DashF;
+                    else if (r < 0.82) pick = MoveCatalog.JumpF; // por si viene hadouken de vuelta
+                    else if (r < 0.92) pick = MoveCatalog.Wait;
+                    else pick = MoveCatalog.WalkB;
                 }
-                else if (dist > 1.4f)
+                else if (dist > 1.5f)
                 {
-                    if (r < 0.24) pick = MoveCatalog.WalkF;
-                    else if (r < 0.42) pick = MoveCatalog.AttackB;
-                    else if (r < 0.54) pick = MoveCatalog.AttackA;
-                    else if (r < 0.68) pick = MoveCatalog.Guard;
-                    else if (r < 0.78) pick = MoveCatalog.DashB;
-                    else if (r < 0.88) pick = MoveCatalog.WalkB;
-                    else pick = MoveCatalog.Wait;
+                    if (r < 0.20) pick = MoveCatalog.WalkF;
+                    else if (r < 0.38) pick = MoveCatalog.AttackB;
+                    else if (r < 0.48) pick = MoveCatalog.AttackA;
+                    else if (r < 0.58) pick = MoveCatalog.WalkB;   // bloquea caminando atrás
+                    else if (r < 0.66) pick = MoveCatalog.Wait;    // neutral que bloquea
+                    else if (r < 0.74) pick = MoveCatalog.DashB;
+                    else if (r < 0.82) pick = MoveCatalog.JumpF;
+                    else if (r < 0.90 && !threwFireball) { pick = MoveCatalog.Hadouken; threwFireball = true; }
+                    else pick = MoveCatalog.AttackB;
                 }
                 else
                 {
-                    if (r < 0.30) pick = MoveCatalog.AttackA;
-                    else if (r < 0.44) pick = MoveCatalog.AttackB;
-                    else if (r < 0.64) pick = MoveCatalog.Guard;
-                    else if (r < 0.76) pick = MoveCatalog.WalkB;
-                    else if (r < 0.88) pick = MoveCatalog.DashB;
-                    else pick = MoveCatalog.Wait;
+                    if (r < 0.26) pick = MoveCatalog.AttackA;
+                    else if (r < 0.40) pick = MoveCatalog.AttackB;
+                    else if (r < 0.52) pick = MoveCatalog.WalkB;
+                    else if (r < 0.62) pick = MoveCatalog.Wait;
+                    else if (r < 0.70) pick = MoveCatalog.DashB;
+                    else if (r < 0.78) pick = MoveCatalog.Shoryuken; // la apuesta
+                    else if (r < 0.88) pick = MoveCatalog.JumpB;
+                    else pick = MoveCatalog.AttackA;
                 }
 
                 var m = MoveCatalog.All[pick];
                 if (frames + m.Total > SimConfig.TurnFrames)
                 {
-                    // rellenar el hueco final con esperas si entran
                     if (frames + MoveCatalog.All[MoveCatalog.Wait].Total <= SimConfig.TurnFrames)
                     {
                         plan.Add(MoveCatalog.Wait);

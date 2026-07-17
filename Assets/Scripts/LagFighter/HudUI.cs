@@ -18,6 +18,7 @@ namespace LagFighter
         readonly Image[][] _pips = new Image[2][];
         Text _banner, _prompt;
         readonly Text[] _feedback = new Text[2];
+        readonly Text[] _stateLabel = new Text[2];
         readonly float[] _fbTimer = new float[2];
         TimelineRow _row0, _row1;
 
@@ -84,6 +85,11 @@ namespace LagFighter
                 24, Color.white, left ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight);
             _feedback[i].rectTransform.pivot = anchor;
             _feedback[i].fontStyle = FontStyle.Bold;
+
+            _stateLabel[i] = MakeText(_canvasRt, label + "State", "", anchor, new Vector2(sign * 40f, -148f), new Vector2(400f, 26f),
+                18, Color.white, left ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight);
+            _stateLabel[i].rectTransform.pivot = anchor;
+            _stateLabel[i].fontStyle = FontStyle.Bold;
         }
 
         public void SetPrompt(string s) => _prompt.text = s;
@@ -99,14 +105,15 @@ namespace LagFighter
         {
             int atk = ev.Attacker;
             string mv = MoveCatalog.All[ev.MoveIndex].Name.ToUpperInvariant();
+            string adv = ev.FrameAdv >= 0 ? $"+{ev.FrameAdv}f" : $"−{-ev.FrameAdv}f";
             switch (ev.Kind)
             {
                 case EvKind.Hit:
-                    Feedback(atk, ev.Counter ? $"¡COUNTER! {mv} −{ev.Damage:0}" : $"{mv} −{ev.Damage:0}",
+                    Feedback(atk, (ev.Counter ? $"¡COUNTER! {mv}" : mv) + $" −{ev.Damage:0} · {adv}",
                         ev.Counter ? new Color(1f, 0.55f, 0.15f) : Color.white);
                     break;
                 case EvKind.Blocked:
-                    Feedback(1 - atk, "BLOQUEADO", new Color(0.5f, 0.75f, 1f));
+                    Feedback(atk, $"{mv}: BLOQUEADO · {adv}", new Color(0.5f, 0.75f, 1f));
                     break;
                 case EvKind.Whiff:
                     Feedback(atk, $"{mv}: AL AIRE", new Color(1f, 1f, 1f, 0.55f));
@@ -141,6 +148,33 @@ namespace LagFighter
                     c.a = Mathf.Clamp01(_fbTimer[i] / 0.4f);
                     _feedback[i].color = c;
                 }
+
+                // estado con framedata en vivo
+                if (sim.IsStunned(i))
+                {
+                    int rem = sim.StunRemaining(i);
+                    switch (sim.Fighters[i].Stun)
+                    {
+                        case StunKind.Knockdown:
+                            _stateLabel[i].text = $"KNOCKDOWN {rem}f";
+                            _stateLabel[i].color = new Color(1f, 0.5f, 0.2f);
+                            break;
+                        case StunKind.Blockstun:
+                            _stateLabel[i].text = $"BLOCKSTUN {rem}f";
+                            _stateLabel[i].color = new Color(0.5f, 0.75f, 1f);
+                            break;
+                        default:
+                            _stateLabel[i].text = $"HITSTUN {rem}f";
+                            _stateLabel[i].color = new Color(1f, 0.35f, 0.3f);
+                            break;
+                    }
+                }
+                else
+                {
+                    _stateLabel[i].text = sim.IsBlockingState(i) && (_mc.State == MatchController.Flow.Executing || _mc.State == MatchController.Flow.Replay)
+                        ? "bloqueando" : "";
+                    _stateLabel[i].color = new Color(0.55f, 0.8f, 1f, 0.7f);
+                }
             }
 
             bool executing = _mc.State == MatchController.Flow.Executing || _mc.State == MatchController.Flow.Replay;
@@ -161,7 +195,11 @@ namespace LagFighter
             {
                 case MoveCatalog.AttackA: return new Color(0.9f, 0.32f, 0.24f);
                 case MoveCatalog.AttackB: return new Color(0.65f, 0.3f, 0.85f);
-                case MoveCatalog.Guard: return new Color(0.25f, 0.5f, 0.9f);
+                case MoveCatalog.Hadouken: return new Color(0.25f, 0.55f, 0.95f);
+                case MoveCatalog.Shoryuken: return new Color(0.95f, 0.7f, 0.15f);
+                case MoveCatalog.JumpF:
+                case MoveCatalog.JumpN:
+                case MoveCatalog.JumpB: return new Color(0.55f, 0.8f, 0.35f);
                 case MoveCatalog.DashF:
                 case MoveCatalog.DashB: return new Color(0.2f, 0.72f, 0.72f);
                 case MoveCatalog.Wait: return new Color(0.45f, 0.47f, 0.52f);
@@ -175,7 +213,11 @@ namespace LagFighter
             {
                 case MoveCatalog.AttackA: return "A";
                 case MoveCatalog.AttackB: return "B";
-                case MoveCatalog.Guard: return "G";
+                case MoveCatalog.Hadouken: return "HD";
+                case MoveCatalog.Shoryuken: return "DP";
+                case MoveCatalog.JumpF: return "J→";
+                case MoveCatalog.JumpN: return "J";
+                case MoveCatalog.JumpB: return "J←";
                 case MoveCatalog.WalkF: return "→";
                 case MoveCatalog.WalkB: return "←";
                 case MoveCatalog.DashF: return "»";

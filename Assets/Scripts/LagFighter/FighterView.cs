@@ -3,15 +3,14 @@ using UnityEngine;
 
 namespace LagFighter
 {
-    // Stickman de bloques 3D: legible, barato, y calza perfecto con los
-    // hurtboxes/hitboxes rectangulares. Animación 100% procedural desde el
-    // estado de la sim. Sin lógica de juego.
+    // Stickman de bloques 3D: legible, barato, y calza con los hurt/hitboxes
+    // rectangulares. Animación 100% procedural desde el estado de la sim.
     public class FighterView : MonoBehaviour
     {
         MatchController _mc;
         int _index;
 
-        Transform _rig;           // rota para encarar y para caídas
+        Transform _rig;
         Transform _torso, _head, _armF, _armB, _legF, _legB;
         readonly List<Renderer> _tintRenderers = new List<Renderer>();
         readonly List<Color> _origColors = new List<Color>();
@@ -19,7 +18,6 @@ namespace LagFighter
         Color _flashColor;
         float _faceYaw;
 
-        // poses base (local, +z = hacia el rival)
         static readonly Vector3 TorsoPos = new Vector3(0f, 1.22f, 0f);
         static readonly Vector3 HeadPos = new Vector3(0f, 1.66f, 0f);
         static readonly Vector3 ArmFPos = new Vector3(0.16f, 1.38f, 0.18f);
@@ -83,17 +81,14 @@ namespace LagFighter
             float tf = _mc.TickFloat;
             float dt = Time.deltaTime;
 
-            // posición y facing
             var target = new Vector3(f.X, 0f, 0f);
             transform.position = Vector3.Lerp(transform.position, target, 1f - Mathf.Exp(-14f * dt));
-            float wantYaw = f.Face > 0 ? 90f : -90f; // local +z hacia el rival
+            float wantYaw = f.Face > 0 ? 90f : -90f;
             _faceYaw = Mathf.LerpAngle(_faceYaw, wantYaw, 1f - Mathf.Exp(-10f * dt));
 
-            // estado visual
             var m = sim.CurrentMove(_index);
             float phase = m != null ? Mathf.Clamp(tf - f.MoveStartTick, 0f, m.Total) : 0f;
-            float p01 = m != null ? phase / m.Total : 0f;
-            float pk = 0f; // progreso 0→1→0 por fases
+            float pk = 0f;
             if (m != null)
             {
                 if (phase < m.Startup) pk = m.Startup <= 0 ? 1f : phase / m.Startup;
@@ -102,14 +97,21 @@ namespace LagFighter
             }
 
             bool stunned = sim.IsStunned(_index);
-            bool down = f.Down && stunned;
+            bool down = stunned && f.Stun == StunKind.Knockdown;
             bool loser = sim.Over && sim.Winner != _index;
             bool winner = sim.Over && sim.Winner == _index;
 
-            // pose por defecto + respiración
+            // arco vertical (saltos y shoryuken)
+            float airY = 0f;
+            if (m != null && m.HasAir && phase >= m.AirStart && phase < m.AirEnd)
+            {
+                float ap = (phase - m.AirStart) / (m.AirEnd - m.AirStart);
+                airY = Mathf.Sin(ap * Mathf.PI) * (m.Anim == AnimKind.Dragon ? 1.0f : 1.25f);
+            }
+
             float breathe = Mathf.Sin(Time.time * 2.5f + _index) * 0.015f;
             var armF = ArmFPos; var armB = ArmBPos; var legF = LegFPos; var legB = LegBPos;
-            var armFRot = Quaternion.identity; var legFRot = Quaternion.identity; var legBRot = Quaternion.identity;
+            var legFRot = Quaternion.identity; var legBRot = Quaternion.identity;
             float rigPitch = 0f, rigZOff = 0f;
 
             if (m != null && !stunned)
@@ -117,7 +119,7 @@ namespace LagFighter
                 switch (m.Anim)
                 {
                     case AnimKind.Walk:
-                        float swing = Mathf.Sin(p01 * Mathf.PI * 2f) * 22f;
+                        float swing = Mathf.Sin(pk * Mathf.PI * 2f) * 22f;
                         legFRot = Quaternion.Euler(swing, 0f, 0f);
                         legBRot = Quaternion.Euler(-swing, 0f, 0f);
                         break;
@@ -125,6 +127,11 @@ namespace LagFighter
                         rigPitch = m.MoveDx > 0f ? 14f : -12f;
                         legFRot = Quaternion.Euler(30f, 0f, 0f);
                         legBRot = Quaternion.Euler(-30f, 0f, 0f);
+                        break;
+                    case AnimKind.Jump:
+                        // piernas recogidas en el aire
+                        legFRot = Quaternion.Euler(airY > 0.05f ? 55f : 0f, 0f, 0f);
+                        legBRot = Quaternion.Euler(airY > 0.05f ? 40f : 0f, 0f, 0f);
                         break;
                     case AnimKind.AttackA:
                         armF = Vector3.Lerp(ArmFPos, new Vector3(0.1f, 1.42f, 0.78f), pk);
@@ -135,38 +142,50 @@ namespace LagFighter
                         legFRot = Quaternion.Euler(Mathf.Lerp(0f, 80f, pk), 0f, 0f);
                         rigPitch = -pk * 10f;
                         break;
-                    case AnimKind.Guard:
-                        armF = new Vector3(0.1f, 1.3f, 0.42f);
-                        armB = new Vector3(-0.1f, 1.45f, 0.38f);
+                    case AnimKind.Fireball:
+                        // las dos manos juntas al frente
+                        armF = Vector3.Lerp(ArmFPos, new Vector3(0.06f, 1.2f, 0.7f), pk);
+                        armB = Vector3.Lerp(ArmBPos, new Vector3(-0.06f, 1.2f, 0.66f), pk);
+                        rigZOff = pk * 0.06f;
+                        break;
+                    case AnimKind.Dragon:
+                        // uppercut: brazo al cielo, cuerpo subiendo
+                        armF = Vector3.Lerp(ArmFPos, new Vector3(0.1f, 2.05f, 0.3f), Mathf.Clamp01(phase / Mathf.Max(1, m.Startup + m.Active)));
+                        legFRot = Quaternion.Euler(45f, 0f, 0f);
+                        rigPitch = -6f;
                         break;
                 }
             }
 
-            if (stunned && !down) rigPitch = -16f;
+            if (stunned && !down) rigPitch = f.Stun == StunKind.Blockstun ? -6f : -16f;
 
-            // caída (knockdown / KO): el rig se acuesta
             float lieAngle = down || loser ? -85f : rigPitch;
             var wantRot = Quaternion.Euler(lieAngle, _faceYaw, 0f);
             _rig.localRotation = Quaternion.Slerp(_rig.localRotation, wantRot, 1f - Mathf.Exp(-9f * dt));
-            _rig.localPosition = new Vector3(0f, (down || loser) ? 0.25f : breathe, 0f);
+            _rig.localPosition = new Vector3(0f, (down || loser) ? 0.25f : airY + breathe, 0f);
 
-            // brazo ganador al cielo
             if (winner) armF = new Vector3(0.12f, 1.7f, 0.1f);
+
+            // bloqueo visible: brazos cubriendo (si está en estado de guardia durante ejecución)
+            bool blocking = sim.IsBlockingState(_index) && !sim.Over &&
+                            (_mc.State == MatchController.Flow.Executing || _mc.State == MatchController.Flow.Replay);
+            if (blocking && (m == null || m.Anim == AnimKind.Walk || m.Anim == AnimKind.Wait))
+            {
+                armF = new Vector3(0.1f, 1.3f, 0.4f);
+                armB = new Vector3(-0.1f, 1.44f, 0.36f);
+            }
 
             _armF.localPosition = armF + new Vector3(0f, 0f, rigZOff);
             _armB.localPosition = armB;
-            _armF.localRotation = armFRot;
             _legF.localPosition = legF;
             _legB.localPosition = legB;
             _legF.localRotation = legFRot;
             _legB.localRotation = legBRot;
 
-            // flashes
             _flash = Mathf.Max(0f, _flash - dt * 4f);
-            bool guarding = sim.IsGuarding(_index);
             for (int i = 0; i < _tintRenderers.Count; i++)
             {
-                Color shown = guarding ? Color.Lerp(_origColors[i], new Color(0.4f, 0.6f, 1f), 0.4f) : _origColors[i];
+                Color shown = f.Stun == StunKind.Blockstun && stunned ? Color.Lerp(_origColors[i], new Color(0.4f, 0.6f, 1f), 0.4f) : _origColors[i];
                 shown = Color.Lerp(shown, _flashColor, _flash);
                 _tintRenderers[i].material.color = shown;
             }

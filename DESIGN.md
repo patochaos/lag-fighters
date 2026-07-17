@@ -17,22 +17,33 @@ Is HUSTLE* (planificar viendo framedata, ghost, replay final).
   prompt lo muestra ("VENTAJA +50f, rival derribado") → okizeme natural.
 - Counter hit: pegarle a alguien en el startup de su ataque = +1 daño y más stun.
 
-### Comandos (8) — `MoveCatalog` en `Sim.cs`
+### Comandos (12) — `MoveCatalog` en `Sim.cs` (sabor Ryu vs Ken)
 
 | # | Comando | Frames (S/A/R) | Notas |
 |---|---------|------------|-------|
-| 1 | Caminar + | 20f | +0.55 |
-| 2 | Caminar − | 20f | −0.5 |
-| 3 | Dash + | 16f | +1.0, rápido |
-| 4 | Dash − | 16f | −1.0, el bait |
-| 5 | Golpe A | 8/4/18 | 1 dmg, corto, hitstun 24 |
-| 6 | Patada B | 16/6/30 | 2 dmg, larga, **derriba** (50f) |
-| 7 | Guardia | 2..30 bloquea | cola final punisheable |
-| 8 | Esperar | 12f | timing |
+| 1 | Caminar + | 20f | +0.55, NO bloquea |
+| 2 | Caminar − | 20f | −0.5, **bloquea** |
+| 3 | Dash + | 16f | +1.0, no bloquea |
+| 4 | Dash − | 16f | −1.0, el bait, no bloquea |
+| 5 | Salto + | 6/28/6 | +1.5, aéreo 6..34: pasa hadoukens, no bloquea |
+| 6 | Salto N | 6/28/6 | vertical |
+| 7 | Salto − | 6/28/6 | −1.5 |
+| 8 | Golpe A | 8/4/18 | 1 dmg, hs24/bs14, pega alto (anti-aéreo pobre) |
+| 9 | Patada B | 16/6/30 | 2 dmg, hs50/bs20, **derriba** |
+| 10 | Hadouken | 14/2/26 | proyectil 3 u/s, 1 dmg, hs22/bs16, uno por vez |
+| 11 | Shoryuken | 4/8/32 | **invuln 2..16**, hitbox altísima (anti-aéreo), 2 dmg, derriba, 32f de caída |
+| 12 | Esperar | 12f | neutral, **bloquea** |
 
-- HP: 6. KO al llegar a 0. Sin niveles alto/bajo por ahora (ver "Puerta al 3D").
-- Hurtbox: rect 0.7×1.75 (0.55 de alto caído). Hitboxes: rects con framedata.
-- Escenario: línea de ±4.2, separación mínima 0.8, sin cruzarse.
+- **Guardia automática (sin botón)**: bloqueás en neutral, esperando o caminando
+  atrás, en el piso. Bloquear = BLOCKSTUN (te come turno). En el aire y en
+  dash/walk-forward NO se bloquea.
+- **Estados**: HITSTUN / BLOCKSTUN / KNOCKDOWN con frames visibles en el HUD.
+  Cancelan el comando actual, comen turno, y apenas terminan la cola sigue con
+  lo que quedaba. Golpe aéreo = knockdown. Counter (pegar en startup) = +1 dmg.
+- Feedback muestra frame advantage real de cada intercambio ("+6f"/"−16f").
+- HP: 6. Hurtbox 0.7×1.75 (aérea 1.35–2.6; caído 0.55). Proyectil y 0.95–1.28.
+- Escenario: línea de ±4.2, separación mínima 0.8 (en el aire se pueden cruzar).
+- Menús clickeables con mouse (cartas, botones BORRAR/LISTO, modos).
 
 ### Estructura técnica
 

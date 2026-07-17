@@ -1,18 +1,21 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace LagFighter
 {
-    // Menú de planificación del turno (tiempo pausado): 8 cartas con framedata.
-    // 1-8 agrega directo · ←/→ + Enter/J agrega · Backspace borra la última ·
-    // Espacio/F cierra el turno (el resto queda en neutral).
+    // Menú de planificación del turno (tiempo pausado): 12 cartas con framedata.
+    // Click en carta agrega · 1-9/0 agrega directo · ←/→ + Enter/J agrega ·
+    // Backspace (o botón ⌫) borra la última · Espacio (o botón LISTO) cierra.
     public class PlanMenuUI : MonoBehaviour
     {
-        const float CardW = 172f, CardH = 96f, Gap = 5f;
+        const float CardW = 148f, CardH = 100f, Gap = 4f;
 
         MatchController _mc;
         GameObject _root;
         Image[] _cardBg;
+        RectTransform[] _cardRt;
+        Image _undoBtn, _doneBtn;
         Text _detail, _status;
         int _sel;
         bool _active;
@@ -52,25 +55,51 @@ namespace LagFighter
             var panel = MakeImage(rootRt, "Panel", new Vector2(0.5f, 0f), new Vector2(0f, 88f), new Vector2(totalW + 24f, CardH + 20f), new Color(0f, 0f, 0f, 0.65f), font);
 
             _cardBg = new Image[moves.Length];
+            _cardRt = new RectTransform[moves.Length];
             for (int i = 0; i < moves.Length; i++)
             {
                 var m = moves[i];
                 float x = -totalW / 2f + CardW / 2f + i * (CardW + Gap);
                 var card = MakeImage(panel.rectTransform, "Card" + i, new Vector2(0.5f, 0.5f), new Vector2(x, 0f), new Vector2(CardW, CardH), new Color(0.13f, 0.14f, 0.18f, 0.95f), font);
                 _cardBg[i] = card;
+                _cardRt[i] = card.rectTransform;
 
-                MakeText(card.rectTransform, "Key", (i + 1).ToString(), new Vector2(0f, 1f), new Vector2(9f, -3f), new Vector2(30f, 16f), 12, new Color(1f, 1f, 1f, 0.4f), TextAnchor.UpperLeft, font);
-                MakeText(card.rectTransform, "Name", m.Name, new Vector2(0.5f, 1f), new Vector2(0f, -14f), new Vector2(CardW - 8f, 24f), 16, Color.white, TextAnchor.UpperCenter, font);
-                MakeText(card.rectTransform, "Frames", $"{m.Startup}/{m.Active}/{m.Recovery}  ·  {m.Total}f", new Vector2(0.5f, 0f), new Vector2(0f, 32f), new Vector2(CardW - 8f, 18f), 13, new Color(0.95f, 0.85f, 0.4f), TextAnchor.MiddleCenter, font);
-                string extra = m.IsAttack ? $"{m.TotalDamage:0} DMG" + (m.Hits[0].Knockdown ? " · DERRIBA" : "") :
-                               m.IsGuard ? "BLOQUEA" :
-                               m.MoveDx != 0f ? (m.MoveDx > 0f ? "AVANZA" : "RETROCEDE") : "—";
-                MakeText(card.rectTransform, "Extra", extra, new Vector2(0.5f, 0f), new Vector2(0f, 12f), new Vector2(CardW - 8f, 16f), 12, new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleCenter, font);
+                string key = i < 9 ? (i + 1).ToString() : i == 9 ? "0" : "";
+                MakeText(card.rectTransform, "Key", key, new Vector2(0f, 1f), new Vector2(8f, -3f), new Vector2(30f, 16f), 12, new Color(1f, 1f, 1f, 0.4f), TextAnchor.UpperLeft, font);
+                MakeText(card.rectTransform, "Name", m.Name, new Vector2(0.5f, 1f), new Vector2(0f, -14f), new Vector2(CardW - 6f, 24f), 15, Color.white, TextAnchor.UpperCenter, font);
+                MakeText(card.rectTransform, "Frames", $"{m.Startup}/{m.Active}/{m.Recovery} · {m.Total}f", new Vector2(0.5f, 0f), new Vector2(0f, 32f), new Vector2(CardW - 6f, 18f), 12, new Color(0.95f, 0.85f, 0.4f), TextAnchor.MiddleCenter, font);
+                MakeText(card.rectTransform, "Extra", CardTag(m, i), new Vector2(0.5f, 0f), new Vector2(0f, 12f), new Vector2(CardW - 4f, 16f), 11, TagColor(m, i), TextAnchor.MiddleCenter, font);
             }
 
-            _detail = MakeText(rootRt, "Detail", "", new Vector2(0.5f, 0f), new Vector2(0f, 222f), new Vector2(1600f, 24f), 17, Color.white, TextAnchor.MiddleCenter, font);
-            _status = MakeText(rootRt, "Status", "", new Vector2(0.5f, 0f), new Vector2(0f, 198f), new Vector2(1600f, 22f), 16, new Color(0.5f, 1f, 0.6f), TextAnchor.MiddleCenter, font);
-            MakeText(rootRt, "Help", "1-8 agrega · ←/→ + Enter agrega · Backspace borra · ESPACIO cierra el turno", new Vector2(0.5f, 0f), new Vector2(0f, 40f), new Vector2(1200f, 22f), 15, new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleCenter, font);
+            // botones clickeables
+            _undoBtn = MakeImage(rootRt, "UndoBtn", new Vector2(0.5f, 0f), new Vector2(-totalW / 2f - 70f, 88f + (CardH + 20f) / 2f), new Vector2(100f, 46f), new Color(0.35f, 0.18f, 0.18f, 0.95f), font);
+            MakeText(_undoBtn.rectTransform, "T", "← BORRAR", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(96f, 30f), 14, Color.white, TextAnchor.MiddleCenter, font);
+            _doneBtn = MakeImage(rootRt, "DoneBtn", new Vector2(0.5f, 0f), new Vector2(totalW / 2f + 70f, 88f + (CardH + 20f) / 2f), new Vector2(100f, 46f), new Color(0.16f, 0.4f, 0.2f, 0.95f), font);
+            MakeText(_doneBtn.rectTransform, "T", "¡LISTO!", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(96f, 30f), 14, Color.white, TextAnchor.MiddleCenter, font);
+
+            _detail = MakeText(rootRt, "Detail", "", new Vector2(0.5f, 0f), new Vector2(0f, 226f), new Vector2(1700f, 24f), 16, Color.white, TextAnchor.MiddleCenter, font);
+            _status = MakeText(rootRt, "Status", "", new Vector2(0.5f, 0f), new Vector2(0f, 202f), new Vector2(1700f, 22f), 16, new Color(0.5f, 1f, 0.6f), TextAnchor.MiddleCenter, font);
+            MakeText(rootRt, "Help", "click o 1-9/0 agrega · ←/→ + Enter agrega · Backspace borra · ESPACIO cierra el turno", new Vector2(0.5f, 0f), new Vector2(0f, 40f), new Vector2(1300f, 22f), 14, new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleCenter, font);
+        }
+
+        static string CardTag(MoveDef m, int i)
+        {
+            if (i == MoveCatalog.Shoryuken) return "INVULN · DERRIBA";
+            if (i == MoveCatalog.Hadouken) return "PROYECTIL";
+            if (m.HasAir) return "AÉREO · no bloquea";
+            if (i == MoveCatalog.WalkB || i == MoveCatalog.Wait) return "BLOQUEA";
+            if (m.Hits.Length > 0)
+                return $"{m.TotalDamage:0} DMG" + (m.Hits[0].Knockdown ? " · DERRIBA" : "") + $" · hs{m.Hits[0].Hitstun}/bs{m.Hits[0].Blockstun}";
+            return m.MoveDx > 0f ? "AVANZA · no bloquea" : m.MoveDx < 0f ? "RETROCEDE" : "—";
+        }
+
+        static Color TagColor(MoveDef m, int i)
+        {
+            if (i == MoveCatalog.Shoryuken) return new Color(1f, 0.75f, 0.25f);
+            if (i == MoveCatalog.Hadouken) return new Color(0.45f, 0.75f, 1f);
+            if (i == MoveCatalog.WalkB || i == MoveCatalog.Wait) return new Color(0.5f, 0.75f, 1f);
+            if (m.Hits.Length > 0) return new Color(1f, 0.55f, 0.45f);
+            return new Color(0.6f, 0.9f, 0.65f);
         }
 
         public void Open(int picker)
@@ -89,8 +118,10 @@ namespace LagFighter
         public void SetPrediction(PlanPreview g, int framesUsed)
         {
             int left = SimConfig.TurnFrames - framesUsed;
-            string dmg = g.DamageIfStill > 0f ? $"  ·  pegaría {g.DamageIfStill:0} si el rival no se mueve" : "";
-            _status.text = $"{framesUsed}/{SimConfig.TurnFrames} frames planificados — quedan {left}{dmg}";
+            string extra = "";
+            if (g.DamageIfStill > 0f) extra += $"  ·  pegaría {g.DamageIfStill:0} si no reacciona";
+            if (g.BlockedCount > 0) extra += $"  ·  {g.BlockedCount} bloqueado(s) si se queda en neutral";
+            _status.text = $"{framesUsed}/{SimConfig.TurnFrames} frames planificados — quedan {left}{extra}";
             _status.color = left == 0 ? new Color(1f, 0.85f, 0.3f) : new Color(0.5f, 1f, 0.6f);
         }
 
@@ -111,6 +142,30 @@ namespace LagFighter
         void Update()
         {
             if (!_active) return;
+
+            if (GameInput.ClickPressed())
+            {
+                var pos = GameInput.MousePos();
+                for (int i = 0; i < _cardRt.Length; i++)
+                {
+                    if (!RectTransformUtility.RectangleContainsScreenPoint(_cardRt[i], pos, null)) continue;
+                    _mc.PlanAdd(i);
+                    Highlight(i);
+                    return;
+                }
+                if (RectTransformUtility.RectangleContainsScreenPoint(_undoBtn.rectTransform, pos, null))
+                {
+                    _mc.PlanUndo();
+                    Highlight(_sel);
+                    return;
+                }
+                if (RectTransformUtility.RectangleContainsScreenPoint(_doneBtn.rectTransform, pos, null))
+                {
+                    _mc.PlanConfirm();
+                    return;
+                }
+            }
+
             if (GameInput.LeftPressed()) Highlight(_sel - 1);
             if (GameInput.RightPressed()) Highlight(_sel + 1);
             int num = GameInput.NumberPressed();

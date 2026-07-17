@@ -119,6 +119,16 @@ namespace LagFighter
         void Update()
         {
             if (!_active) return;
+            if (GameInput.ClickPressed())
+            {
+                var pos = GameInput.MousePos();
+                for (int i = 0; i < _cards.Length; i++)
+                {
+                    if (!RectTransformUtility.RectangleContainsScreenPoint(_cards[i].rectTransform, pos, null)) continue;
+                    _mc.StartMatch(Options[i].mode);
+                    return;
+                }
+            }
             if (GameInput.LeftPressed()) Highlight(_sel - 1);
             if (GameInput.RightPressed()) Highlight(_sel + 1);
             int n = GameInput.NumberPressed();

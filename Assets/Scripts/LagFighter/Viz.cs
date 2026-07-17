@@ -39,12 +39,13 @@ namespace LagFighter
         }
     }
 
-    // Hurtboxes y hitboxes activas de la partida en vivo.
+    // Hurtboxes, hitboxes activas y proyectiles de la partida en vivo.
     public class LiveViz : MonoBehaviour
     {
         MatchController _mc;
         readonly GameObject[] _hurt = new GameObject[2];
         readonly List<GameObject> _hitPool = new List<GameObject>();
+        readonly List<GameObject> _projPool = new List<GameObject>();
         readonly List<WorldRect> _rects = new List<WorldRect>();
 
         public static LiveViz Create(MatchController mc)
@@ -68,6 +69,8 @@ namespace LagFighter
             _rects.Clear();
             sim.GetActiveHitRects(0, _rects);
             sim.GetActiveHitRects(1, _rects);
+            sim.GetProjectileRects(0, _rects);
+            sim.GetProjectileRects(1, _rects);
             for (int i = 0; i < _rects.Count; i++)
             {
                 if (i >= _hitPool.Count)
@@ -77,6 +80,30 @@ namespace LagFighter
             }
             for (int i = _rects.Count; i < _hitPool.Count; i++)
                 _hitPool[i].SetActive(false);
+
+            // bolas de energía de los hadoukens
+            int used = 0;
+            foreach (var p in sim.Projectiles)
+            {
+                if (!p.Alive) continue;
+                if (used >= _projPool.Count)
+                {
+                    var ball = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    ball.name = "Hadouken";
+                    ball.transform.SetParent(transform, false);
+                    var c = ball.GetComponent<Collider>();
+                    if (c != null) Destroy(c);
+                    ball.GetComponent<Renderer>().material = new Material(VizLib.BaseMat) { color = new Color(0.5f, 0.8f, 1f, 0.9f) };
+                    _projPool.Add(ball);
+                }
+                var go = _projPool[used++];
+                go.SetActive(true);
+                go.transform.position = new Vector3(p.X, (SimConfig.ProjY0 + SimConfig.ProjY1) * 0.5f, 0f);
+                float pulse = 0.42f + Mathf.Sin(Time.time * 14f) * 0.04f;
+                go.transform.localScale = new Vector3(pulse, pulse, pulse);
+            }
+            for (int i = used; i < _projPool.Count; i++)
+                _projPool[i].SetActive(false);
         }
     }
 

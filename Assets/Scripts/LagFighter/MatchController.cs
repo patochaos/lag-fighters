@@ -81,6 +81,7 @@ namespace LagFighter
         void ResetMatch()
         {
             Sim = new MatchSim();
+            if (Mode == GameMode.Practice) Sim.Fighters[1].BlockEnabled = false; // el dummy no bloquea
             _ai = new SimpleAI(_seed++);
             _acc = 0f;
             TurnNumber = 0;
@@ -116,9 +117,19 @@ namespace LagFighter
             int myStun = Sim.StunRemaining(Picker);
             int oppStun = Sim.StunRemaining(1 - Picker);
             string adv = "";
-            if (myStun > 0) adv = $"  ·  arrancás −{myStun}f ({(Sim.Fighters[Picker].Down ? "derribado" : "aturdido")})";
-            else if (oppStun > 0) adv = $"  ·  VENTAJA +{oppStun}f (rival {(Sim.Fighters[1 - Picker].Down ? "derribado" : "aturdido")})";
+            if (myStun > 0) adv = $"  ·  arrancás −{myStun}f ({StunName(Picker)})";
+            else if (oppStun > 0) adv = $"  ·  VENTAJA +{oppStun}f (rival en {StunName(1 - Picker)})";
             _hud.SetPrompt($"TURNO {TurnNumber} — {who}{adv}");
+        }
+
+        string StunName(int i)
+        {
+            switch (Sim.Fighters[i].Stun)
+            {
+                case StunKind.Knockdown: return "KNOCKDOWN";
+                case StunKind.Blockstun: return "BLOCKSTUN";
+                default: return "HITSTUN";
+            }
         }
 
         public List<int> GetPlan(int i) => State == Flow.Planning ? _plans[i] : Sim.Fighters[i].Queue;
@@ -251,6 +262,7 @@ namespace LagFighter
         void StartReplay()
         {
             Sim = new MatchSim();
+            if (Mode == GameMode.Practice) Sim.Fighters[1].BlockEnabled = false;
             _replayTurn = 0;
             _acc = 0f;
             TurnNumber = 0;
@@ -333,6 +345,8 @@ namespace LagFighter
         public static bool RestartPressed() => K != null && K.rKey.wasPressedThisFrame;
         public static bool MenuPressed() => K != null && (K.mKey.wasPressedThisFrame || K.escapeKey.wasPressedThisFrame);
         public static bool ReplayPressed() => K != null && K.vKey.wasPressedThisFrame;
+        public static bool ClickPressed() => Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame;
+        public static Vector2 MousePos() => Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero;
         public static int NumberPressed()
         {
             if (K == null) return -1;
@@ -351,6 +365,8 @@ namespace LagFighter
         public static bool RestartPressed() => Input.GetKeyDown(KeyCode.R);
         public static bool MenuPressed() => Input.GetKeyDown(KeyCode.M) || Input.GetKeyDown(KeyCode.Escape);
         public static bool ReplayPressed() => Input.GetKeyDown(KeyCode.V);
+        public static bool ClickPressed() => Input.GetMouseButtonDown(0);
+        public static Vector2 MousePos() => Input.mousePosition;
         public static int NumberPressed()
         {
             for (int n = 1; n <= 9; n++)

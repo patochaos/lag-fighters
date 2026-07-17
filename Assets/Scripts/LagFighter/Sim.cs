@@ -3,36 +3,48 @@ using System.Collections.Generic;
 
 namespace LagFighter
 {
-    // Simulación pura y determinista. Footsies por turnos programados:
-    //  - 60 ticks/s = frames. Cada turno, ambos jugadores arman en pausa una
-    //    cola de comandos de hasta TurnFrames (240 = 4s) y se ejecutan juntos.
-    //  - 2D: posición en X sobre una línea (la puerta al 3D queda abierta:
-    //    todo pasa por rects y no por la geometría del escenario).
-    //  - Si te pegan, tu comando actual se cancela y la cola se desfasa;
-    //    lo que no llegó a ejecutarse se pierde al final del turno, y el
-    //    stun/knockdown arrastra desventaja de frames al turno siguiente.
+    // Simulación pura y determinista. Ryu vs Ken por turnos programados:
+    //  - 60 ticks/s = frames. Cada turno ambos arman una cola de hasta 240
+    //    frames y se ejecutan simultáneas.
+    //  - Guardia automática: bloqueás si estás en neutral, esperando o
+    //    caminando hacia atrás (y en el piso). No hay botón de bloqueo.
+    //  - Estados con framedata: HITSTUN / BLOCKSTUN / KNOCKDOWN. Comen parte
+    //    del turno; apenas terminan, la cola sigue ejecutando lo que quede.
+    //  - Proyectiles (Hadouken), saltos que los pasan por arriba, y Shoryuken
+    //    invulnerable anti-aéreo con recuperación gigante.
 
     public static class SimConfig
     {
-        public const int TicksPerSecond = 60;   // 1 tick = 1 frame
+        public const int TicksPerSecond = 60;
         public const float TickDuration = 1f / TicksPerSecond;
-        public const int TurnFrames = 240;      // 4 segundos por turno
+        public const int TurnFrames = 240;
         public const int MaxHp = 6;
         public const float StageHalfWidth = 4.2f;
         public const float MinSeparation = 0.8f;
         public const float StartX = 2.0f;
         public const float HurtHalfWidth = 0.35f;
         public const float HurtHeight = 1.75f;
+        public const float AirHurtY0 = 1.35f;  // saltando, la hurtbox sube:
+        public const float AirHurtY1 = 2.6f;   // los hadoukens pasan por abajo
+
+        // proyectil (Hadouken)
+        public const float ProjSpeed = 0.05f;      // por frame (3 u/s)
+        public const float ProjHalfWidth = 0.22f;
+        public const float ProjY0 = 0.95f, ProjY1 = 1.28f;
+        public const float ProjDamage = 1f;
+        public const int ProjHitstun = 22, ProjBlockstun = 16;
+        public const float ProjPush = 0.3f;
     }
 
-    public enum AnimKind { Walk, Dash, AttackA, AttackB, Guard, Wait }
+    public enum AnimKind { Walk, Dash, Jump, AttackA, AttackB, Fireball, Dragon, Wait }
+    public enum StunKind { None, Hitstun, Blockstun, Knockdown }
 
-    public struct HitBoxDef
+    public struct HitWindow
     {
-        public int Start, Duration;      // frames desde el inicio del comando
-        public float Fwd0, Fwd1, Y0, Y1; // rect local: hacia adelante y altura
+        public int Start, Duration;
+        public float Fwd0, Fwd1, Y0, Y1;
         public float Damage;
-        public int Hitstun, CounterStun; // frames de stun (counter: pegado en startup)
+        public int Hitstun, Blockstun, CounterStun;
         public float Push;
         public bool Knockdown;
     }
@@ -47,58 +59,91 @@ namespace LagFighter
     {
         public string Id, Name, Desc;
         public AnimKind Anim;
-        public int Startup, Active, Recovery;   // framedata para mostrar
-        public HitBoxDef[] Hits = Array.Empty<HitBoxDef>();
-        public float MoveDx;                    // desplazamiento local (positivo = hacia el rival)
+        public int Startup, Active, Recovery;
+        public HitWindow[] Hits = Array.Empty<HitWindow>();
+        public float MoveDx;
         public int MotionStart, MotionEnd;
-        public int GuardStart, GuardEnd;        // ventana de bloqueo
+        public int AirStart = -1, AirEnd = -1;       // ventana en el aire (hurtbox alta, no bloquea)
+        public int InvulnStart = -1, InvulnEnd = -1; // ventana invulnerable (Shoryuken)
+        public int SpawnFrame = -1;                  // frame en que larga el proyectil
         public int Total => Startup + Active + Recovery;
-        public bool IsAttack => Hits.Length > 0;
-        public bool IsGuard => GuardEnd > GuardStart;
-        public float TotalDamage { get { float s = 0f; foreach (var h in Hits) s += h.Damage; return s; } }
+        public bool IsAttack => Hits.Length > 0 || SpawnFrame >= 0;
+        public bool HasAir => AirEnd > AirStart;
+        public float TotalDamage { get { float s = 0f; foreach (var h in Hits) s += h.Damage; return SpawnFrame >= 0 ? s + SimConfig.ProjDamage : s; } }
     }
 
-    // Arsenal mínimo estilo Footsies: el juego es distancia, whiff punish y
-    // frame advantage, no la lista de movimientos.
     public static class MoveCatalog
     {
         public const int WalkF = 0, WalkB = 1, DashF = 2, DashB = 3,
-                         AttackA = 4, AttackB = 5, Guard = 6, Wait = 7;
+                         JumpF = 4, JumpN = 5, JumpB = 6,
+                         AttackA = 7, AttackB = 8, Hadouken = 9, Shoryuken = 10, Wait = 11;
 
         public static readonly MoveDef[] All =
         {
             new MoveDef { Id = "walkF", Name = "Caminar +", Anim = AnimKind.Walk, Startup = 2, Active = 16, Recovery = 2,
-                Desc = "Avanza un paso corto. Controlá la distancia.",
+                Desc = "Avanza un paso corto. Caminando hacia adelante NO bloqueás.",
                 MoveDx = 0.55f, MotionStart = 0, MotionEnd = 20 },
 
             new MoveDef { Id = "walkB", Name = "Caminar −", Anim = AnimKind.Walk, Startup = 2, Active = 16, Recovery = 2,
-                Desc = "Retrocede un paso corto. Hacé whiffear y castigá.",
+                Desc = "Retrocede bloqueando: caminar para atrás es guardia.",
                 MoveDx = -0.5f, MotionStart = 0, MotionEnd = 20 },
 
             new MoveDef { Id = "dashF", Name = "Dash +", Anim = AnimKind.Dash, Startup = 2, Active = 10, Recovery = 4,
-                Desc = "Arremetida rápida hacia adelante. Para cerrar distancia de golpe.",
+                Desc = "Arremetida hacia adelante. NO bloquea: es puro compromiso.",
                 MoveDx = 1.0f, MotionStart = 2, MotionEnd = 12 },
 
             new MoveDef { Id = "dashB", Name = "Dash −", Anim = AnimKind.Dash, Startup = 2, Active = 10, Recovery = 4,
-                Desc = "Salto atrás rápido. El corazón del bait.",
+                Desc = "Salto atrás rápido. Tampoco bloquea, pero te saca del rango.",
                 MoveDx = -1.0f, MotionStart = 2, MotionEnd = 12 },
 
+            new MoveDef { Id = "jumpF", Name = "Salto +", Anim = AnimKind.Jump, Startup = 6, Active = 28, Recovery = 6,
+                Desc = "Salto adelante: pasa por arriba de los hadoukens. En el aire no bloqueás.",
+                MoveDx = 1.5f, MotionStart = 6, MotionEnd = 34, AirStart = 6, AirEnd = 34 },
+
+            new MoveDef { Id = "jumpN", Name = "Salto N", Anim = AnimKind.Jump, Startup = 6, Active = 28, Recovery = 6,
+                Desc = "Salto vertical. Esquiva proyectiles sin regalar posición.",
+                AirStart = 6, AirEnd = 34 },
+
+            new MoveDef { Id = "jumpB", Name = "Salto −", Anim = AnimKind.Jump, Startup = 6, Active = 28, Recovery = 6,
+                Desc = "Salto atrás. La retirada elegante sobre el hadouken.",
+                MoveDx = -1.5f, MotionStart = 6, MotionEnd = 34, AirStart = 6, AirEnd = 34 },
+
             new MoveDef { Id = "atkA", Name = "Golpe A", Anim = AnimKind.AttackA, Startup = 8, Active = 4, Recovery = 18,
-                Desc = "Rápido y corto. 1 de daño. Counter si lo pegás en el startup ajeno.",
-                Hits = new[] { new HitBoxDef { Start = 8, Duration = 4, Fwd0 = 0.45f, Fwd1 = 1.1f, Y0 = 1.0f, Y1 = 1.5f,
-                    Damage = 1f, Hitstun = 24, CounterStun = 36, Push = 0.35f } } },
+                Desc = "Rápido y corto. Atrapa avances y pega al que salta cerca.",
+                Hits = new[] { new HitWindow { Start = 8, Duration = 4, Fwd0 = 0.45f, Fwd1 = 1.1f, Y0 = 1.0f, Y1 = 1.6f,
+                    Damage = 1f, Hitstun = 24, Blockstun = 14, CounterStun = 36, Push = 0.35f } } },
 
             new MoveDef { Id = "atkB", Name = "Patada B", Anim = AnimKind.AttackB, Startup = 16, Active = 6, Recovery = 30,
-                Desc = "Lenta, larga, 2 de daño y DERRIBA. Castigo grande, riesgo grande.",
-                Hits = new[] { new HitBoxDef { Start = 16, Duration = 6, Fwd0 = 0.5f, Fwd1 = 1.6f, Y0 = 0.5f, Y1 = 1.2f,
-                    Damage = 2f, Hitstun = 50, CounterStun = 65, Push = 0.55f, Knockdown = true } } },
+                Desc = "Lenta, larga, 2 de daño y DERRIBA. El botón del footsies.",
+                Hits = new[] { new HitWindow { Start = 16, Duration = 6, Fwd0 = 0.5f, Fwd1 = 1.6f, Y0 = 0.5f, Y1 = 1.2f,
+                    Damage = 2f, Hitstun = 50, Blockstun = 20, CounterStun = 65, Push = 0.55f, Knockdown = true } } },
 
-            new MoveDef { Id = "guard", Name = "Guardia", Anim = AnimKind.Guard, Startup = 2, Active = 28, Recovery = 6,
-                Desc = "Bloquea todo durante la ventana. La cola final es punisheable.",
-                GuardStart = 2, GuardEnd = 30 },
+            new MoveDef { Id = "hadouken", Name = "Hadouken", Anim = AnimKind.Fireball, Startup = 14, Active = 2, Recovery = 26,
+                Desc = "Proyectil que viaja solo. Controla el suelo… hasta que saltan. Uno por vez.",
+                SpawnFrame = 14 },
+
+            new MoveDef { Id = "shoryu", Name = "Shoryuken", Anim = AnimKind.Dragon, Startup = 4, Active = 8, Recovery = 32,
+                Desc = "INVULNERABLE al subir, pega altísimo (anti-aéreo), derriba. Si falla: 32f de caída.",
+                InvulnStart = 2, InvulnEnd = 16, AirStart = 6, AirEnd = 30, MoveDx = 0.4f, MotionStart = 2, MotionEnd = 12,
+                Hits = new[] { new HitWindow { Start = 4, Duration = 8, Fwd0 = 0.15f, Fwd1 = 0.95f, Y0 = 0.7f, Y1 = 2.5f,
+                    Damage = 2f, Hitstun = 55, Blockstun = 22, CounterStun = 70, Push = 0.4f, Knockdown = true } } },
 
             new MoveDef { Id = "wait", Name = "Esperar", Anim = AnimKind.Wait, Startup = 0, Active = 12, Recovery = 0,
-                Desc = "12 frames de nada. El timing lo es todo." },
+                Desc = "12 frames quieto, bloqueando. El neutral también es una decisión." },
+        };
+    }
+
+    public struct Projectile
+    {
+        public int Owner;
+        public float X;
+        public int Dir;
+        public bool Alive;
+
+        public WorldRect Rect => new WorldRect
+        {
+            X0 = X - SimConfig.ProjHalfWidth, X1 = X + SimConfig.ProjHalfWidth,
+            Y0 = SimConfig.ProjY0, Y1 = SimConfig.ProjY1
         };
     }
 
@@ -106,14 +151,15 @@ namespace LagFighter
     {
         public float Hp = SimConfig.MaxHp;
         public float X;
-        public int Face = 1; // +1 mira a la derecha
+        public int Face = 1;
         public List<int> Queue = new List<int>();
         public int QueueIndex;
         public int MoveIndex = -1;
         public int MoveStartTick;
         public bool[] WindowHit = Array.Empty<bool>();
+        public StunKind Stun = StunKind.None;
         public int StunEndTick;
-        public bool Down; // knockdown (visual + dura más)
+        public bool BlockEnabled = true; // el dummy de práctica no bloquea
 
         public FighterState Clone()
         {
@@ -133,11 +179,13 @@ namespace LagFighter
         public float Damage;
         public bool Counter;
         public int MoveIndex;
+        public int FrameAdv; // ventaja del atacante tras el intercambio (+ = a favor)
     }
 
     public class MatchSim
     {
         public FighterState[] Fighters = { new FighterState(), new FighterState() };
+        public List<Projectile> Projectiles = new List<Projectile>();
         public int Tick;
         public bool Over;
         public int Winner = -1;
@@ -156,6 +204,7 @@ namespace LagFighter
             return new MatchSim
             {
                 Fighters = new[] { Fighters[0].Clone(), Fighters[1].Clone() },
+                Projectiles = new List<Projectile>(Projectiles),
                 Tick = Tick,
                 Over = Over,
                 Winner = Winner,
@@ -164,8 +213,33 @@ namespace LagFighter
 
         public MoveDef CurrentMove(int i) => Fighters[i].MoveIndex < 0 ? null : MoveCatalog.All[Fighters[i].MoveIndex];
         public int Phase(int i) => Tick - Fighters[i].MoveStartTick;
-        public bool IsStunned(int i) => Tick < Fighters[i].StunEndTick;
-        public int StunRemaining(int i) => Math.Max(0, Fighters[i].StunEndTick - Tick);
+        public bool IsStunned(int i) => Tick < Fighters[i].StunEndTick && Fighters[i].Stun != StunKind.None;
+        public int StunRemaining(int i) => IsStunned(i) ? Fighters[i].StunEndTick - Tick : 0;
+
+        public bool IsAirborne(int i)
+        {
+            var m = CurrentMove(i);
+            if (m == null || !m.HasAir) return false;
+            int p = Phase(i);
+            return p >= m.AirStart && p < m.AirEnd;
+        }
+
+        public bool IsInvulnerable(int i)
+        {
+            var m = CurrentMove(i);
+            if (m == null || m.InvulnEnd <= m.InvulnStart) return false;
+            int p = Phase(i);
+            return p >= m.InvulnStart && p < m.InvulnEnd;
+        }
+
+        // Guardia automática: neutral, esperar o caminar hacia atrás — en el piso.
+        public bool IsBlockingState(int i)
+        {
+            var f = Fighters[i];
+            if (!f.BlockEnabled || IsStunned(i) || IsAirborne(i)) return false;
+            if (f.MoveIndex < 0) return true;
+            return f.MoveIndex == MoveCatalog.WalkB || f.MoveIndex == MoveCatalog.Wait;
+        }
 
         public void SetQueue(int i, IEnumerable<int> moves)
         {
@@ -173,8 +247,6 @@ namespace LagFighter
             Fighters[i].QueueIndex = 0;
         }
 
-        // Fin de turno: lo no ejecutado se pierde; el stun se arrastra.
-        // Devuelve cuántas órdenes perdió cada uno (para feedback).
         public int OnTurnEnd(int i)
         {
             var f = Fighters[i];
@@ -185,22 +257,16 @@ namespace LagFighter
             return lost;
         }
 
-        public bool IsGuarding(int i)
-        {
-            var m = CurrentMove(i);
-            if (m == null || !m.IsGuard) return false;
-            int p = Phase(i);
-            return p >= m.GuardStart && p < m.GuardEnd;
-        }
-
         public WorldRect HurtRect(int i)
         {
             var f = Fighters[i];
-            float h = f.Down ? 0.55f : SimConfig.HurtHeight; // caído: hurtbox baja (para el futuro okizeme)
+            if (IsAirborne(i))
+                return new WorldRect { X0 = f.X - SimConfig.HurtHalfWidth, X1 = f.X + SimConfig.HurtHalfWidth, Y0 = SimConfig.AirHurtY0, Y1 = SimConfig.AirHurtY1 };
+            float h = f.Stun == StunKind.Knockdown && IsStunned(i) ? 0.55f : SimConfig.HurtHeight;
             return new WorldRect { X0 = f.X - SimConfig.HurtHalfWidth, X1 = f.X + SimConfig.HurtHalfWidth, Y0 = 0f, Y1 = h };
         }
 
-        public WorldRect HitRectWorld(int i, HitBoxDef h)
+        public WorldRect HitRectWorld(int i, HitWindow h)
         {
             var f = Fighters[i];
             float a = f.X + h.Fwd0 * f.Face, b = f.X + h.Fwd1 * f.Face;
@@ -221,6 +287,19 @@ namespace LagFighter
             }
         }
 
+        public void GetProjectileRects(int owner, List<WorldRect> result)
+        {
+            foreach (var p in Projectiles)
+                if (p.Alive && p.Owner == owner) result.Add(p.Rect);
+        }
+
+        bool HasProjectile(int owner)
+        {
+            foreach (var p in Projectiles)
+                if (p.Alive && p.Owner == owner) return true;
+            return false;
+        }
+
         void StartQueuedMove(int i)
         {
             var f = Fighters[i];
@@ -235,7 +314,7 @@ namespace LagFighter
             if (Over) return;
             LastEvents.Clear();
 
-            // fin de comandos (+ whiff), fin de knockdown, arranque del siguiente
+            // fin de comandos (+ whiff), fin de stun, arranque del siguiente
             for (int i = 0; i < 2; i++)
             {
                 var f = Fighters[i];
@@ -244,7 +323,7 @@ namespace LagFighter
                     var m = MoveCatalog.All[f.MoveIndex];
                     if (Tick - f.MoveStartTick >= m.Total)
                     {
-                        if (m.IsAttack)
+                        if (m.Hits.Length > 0)
                         {
                             bool any = false;
                             foreach (var h in f.WindowHit) any |= h;
@@ -255,7 +334,8 @@ namespace LagFighter
                 }
                 if (!IsStunned(i))
                 {
-                    f.Down = false;
+                    f.Stun = StunKind.None;
+                    // apenas puede, sigue ejecutando lo que le quedaba
                     if (f.MoveIndex < 0 && f.QueueIndex < f.Queue.Count)
                         StartQueuedMove(i);
                 }
@@ -276,41 +356,66 @@ namespace LagFighter
 
             SeparateAndClamp();
 
-            // golpes
+            // spawn de proyectiles
+            for (int i = 0; i < 2; i++)
+            {
+                var m = CurrentMove(i);
+                if (m == null || m.SpawnFrame < 0 || Phase(i) != m.SpawnFrame) continue;
+                if (HasProjectile(i)) continue; // uno por vez
+                var f = Fighters[i];
+                Projectiles.Add(new Projectile { Owner = i, X = f.X + f.Face * 0.7f, Dir = f.Face, Alive = true });
+            }
+
+            // proyectiles: mover, chocar entre sí, pegar
+            for (int pi = 0; pi < Projectiles.Count; pi++)
+            {
+                var p = Projectiles[pi];
+                if (!p.Alive) continue;
+                p.X += p.Dir * SimConfig.ProjSpeed;
+                if (Math.Abs(p.X) > SimConfig.StageHalfWidth + 1.2f) p.Alive = false;
+                Projectiles[pi] = p;
+            }
+            for (int a = 0; a < Projectiles.Count; a++)
+                for (int b = a + 1; b < Projectiles.Count; b++)
+                {
+                    if (!Projectiles[a].Alive || !Projectiles[b].Alive) continue;
+                    if (Projectiles[a].Owner == Projectiles[b].Owner) continue;
+                    if (!Projectiles[a].Rect.Overlaps(Projectiles[b].Rect)) continue;
+                    var pa = Projectiles[a]; pa.Alive = false; Projectiles[a] = pa;
+                    var pb = Projectiles[b]; pb.Alive = false; Projectiles[b] = pb;
+                }
+            for (int pi = 0; pi < Projectiles.Count; pi++)
+            {
+                var p = Projectiles[pi];
+                if (!p.Alive) continue;
+                int def = 1 - p.Owner;
+                if (IsInvulnerable(def) || !p.Rect.Overlaps(HurtRect(def))) continue;
+                ResolveContact(p.Owner, MoveCatalog.Hadouken,
+                    SimConfig.ProjDamage, SimConfig.ProjHitstun, SimConfig.ProjBlockstun, SimConfig.ProjHitstun + 8,
+                    SimConfig.ProjPush, knockdown: false, attackerFreeTick: AttackerFreeTick(p.Owner));
+                p.Alive = false;
+                Projectiles[pi] = p;
+            }
+            Projectiles.RemoveAll(x => !x.Alive);
+
+            // golpes cuerpo a cuerpo
             for (int i = 0; i < 2; i++)
             {
                 var atk = Fighters[i];
                 var m = CurrentMove(i);
                 if (m == null) continue;
                 int phase = Phase(i);
-                var def = Fighters[1 - i];
 
                 for (int wi = 0; wi < m.Hits.Length; wi++)
                 {
                     var h = m.Hits[wi];
                     if (phase < h.Start || phase >= h.Start + h.Duration || atk.WindowHit[wi]) continue;
+                    if (IsInvulnerable(1 - i)) continue; // pasa de largo, la ventana sigue viva
                     if (!HitRectWorld(i, h).Overlaps(HurtRect(1 - i))) continue;
 
                     atk.WindowHit[wi] = true;
-
-                    if (IsGuarding(1 - i))
-                    {
-                        def.X += atk.Face * h.Push * 0.6f;
-                        LastEvents.Add(new SimEvent { Attacker = i, Kind = EvKind.Blocked, MoveIndex = atk.MoveIndex });
-                        continue;
-                    }
-
-                    var defMove = CurrentMove(1 - i);
-                    bool counter = defMove != null && defMove.IsAttack && Phase(1 - i) < defMove.Startup;
-                    float dmg = h.Damage + (counter ? 1f : 0f);
-
-                    def.Hp = Math.Max(0f, def.Hp - dmg);
-                    def.X += atk.Face * h.Push;
-                    def.MoveIndex = -1; // el comando actual se cancela; la cola queda desfasada
-                    def.StunEndTick = Tick + (counter ? h.CounterStun : h.Hitstun);
-                    def.Down = h.Knockdown;
-
-                    LastEvents.Add(new SimEvent { Attacker = i, Kind = EvKind.Hit, Damage = dmg, Counter = counter, MoveIndex = atk.MoveIndex });
+                    ResolveContact(i, atk.MoveIndex, h.Damage, h.Hitstun, h.Blockstun, h.CounterStun, h.Push,
+                        h.Knockdown, attackerFreeTick: atk.MoveStartTick + m.Total);
                 }
             }
 
@@ -326,11 +431,55 @@ namespace LagFighter
             Tick++;
         }
 
+        int AttackerFreeTick(int i)
+        {
+            var m = CurrentMove(i);
+            return m == null ? Tick : Fighters[i].MoveStartTick + m.Total;
+        }
+
+        // Resolución común de contacto (golpe o proyectil) sobre el defensor.
+        void ResolveContact(int attacker, int moveIndex, float damage, int hitstun, int blockstun, int counterStun,
+            float push, bool knockdown, int attackerFreeTick)
+        {
+            int d = 1 - attacker;
+            var def = Fighters[d];
+            int face = Fighters[attacker].Face;
+
+            if (IsBlockingState(d))
+            {
+                def.MoveIndex = -1; // el paso atrás / espera se corta en blockstun
+                def.Stun = StunKind.Blockstun;
+                def.StunEndTick = Tick + blockstun;
+                def.X += face * push * 0.6f;
+                LastEvents.Add(new SimEvent { Attacker = attacker, Kind = EvKind.Blocked, MoveIndex = moveIndex,
+                    FrameAdv = def.StunEndTick - attackerFreeTick });
+                return;
+            }
+
+            var defMove = CurrentMove(d);
+            bool counter = defMove != null && defMove.IsAttack && Phase(d) < defMove.Startup;
+            bool airHit = IsAirborne(d);
+            bool kd = knockdown || airHit; // pegarle a alguien en el aire lo derriba
+            float dmg = damage + (counter ? 1f : 0f);
+            int stun = counter ? counterStun : hitstun;
+            if (airHit) stun = Math.Max(stun, 45);
+
+            def.Hp = Math.Max(0f, def.Hp - dmg);
+            def.X += face * push;
+            def.MoveIndex = -1;
+            def.Stun = kd ? StunKind.Knockdown : StunKind.Hitstun;
+            def.StunEndTick = Tick + stun;
+
+            LastEvents.Add(new SimEvent { Attacker = attacker, Kind = EvKind.Hit, Damage = dmg, Counter = counter,
+                MoveIndex = moveIndex, FrameAdv = def.StunEndTick - attackerFreeTick });
+        }
+
         void SeparateAndClamp()
         {
             float d = Fighters[1].X - Fighters[0].X;
             float abs = Math.Abs(d);
-            if (abs < SimConfig.MinSeparation)
+            // en el aire se pueden cruzar; en el piso no se atraviesan
+            if (abs < SimConfig.MinSeparation && !IsAirborne(0) && !IsAirborne(1))
             {
                 float push = (SimConfig.MinSeparation - abs) * 0.5f * (d >= 0f ? 1f : -1f);
                 Fighters[0].X -= push;
@@ -341,9 +490,8 @@ namespace LagFighter
         }
     }
 
-    // Preview del plan: simula TU cola contra un rival que no mete inputs
-    // nuevos (pero conserva su stun/knockdown arrastrado). Muestra trayectoria,
-    // hitboxes y qué pasaría si el rival se queda quieto.
+    // Preview del plan: tu cola contra un rival que no mete inputs nuevos
+    // (conserva su stun arrastrado; en neutral bloquea, como en el juego real).
     public class PlanPreview
     {
         public struct Snap
@@ -354,6 +502,7 @@ namespace LagFighter
 
         public List<Snap> Snaps = new List<Snap>();
         public float DamageIfStill;
+        public int BlockedCount;
 
         public static PlanPreview Build(MatchSim src, int fighter, List<int> plan)
         {
@@ -366,10 +515,15 @@ namespace LagFighter
             {
                 var snap = new Snap { X = sim.Fighters[fighter].X, HitRects = new List<WorldRect>() };
                 sim.GetActiveHitRects(fighter, snap.HitRects);
+                sim.GetProjectileRects(fighter, snap.HitRects);
                 g.Snaps.Add(snap);
                 sim.Step();
                 foreach (var ev in sim.LastEvents)
-                    if (ev.Attacker == fighter && ev.Kind == EvKind.Hit) g.DamageIfStill += ev.Damage;
+                {
+                    if (ev.Attacker != fighter) continue;
+                    if (ev.Kind == EvKind.Hit) g.DamageIfStill += ev.Damage;
+                    else if (ev.Kind == EvKind.Blocked) g.BlockedCount++;
+                }
                 if (sim.Over) break;
             }
             return g;
