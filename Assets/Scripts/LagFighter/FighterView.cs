@@ -44,13 +44,11 @@ namespace LagFighter
             v._index = index;
             v._ghostMode = true;
             v.BuildRig(index == 0 ? new Color(0.35f, 0.8f, 1f) : new Color(1f, 0.55f, 0.35f));
-            var ghostShader = Shader.Find("Sprites/Default");
             for (int i = 0; i < v._tintRenderers.Count; i++)
             {
                 var c = v._origColors[i];
                 c.a = 0.34f;
-                var mat = new Material(ghostShader) { color = c };
-                v._tintRenderers[i].material = mat;
+                v._tintRenderers[i].material = new Material(VizLib.BaseMat) { color = c };
                 v._origColors[i] = c; // el tint loop de ApplyPose conserva el alpha
             }
             return v;
@@ -78,8 +76,8 @@ namespace LagFighter
             go.transform.localScale = scale;
             var col = go.GetComponent<Collider>();
             if (col != null) Destroy(col);
+            MatLib.Apply(go, color);
             var r = go.GetComponent<Renderer>();
-            r.material.color = color;
             _tintRenderers.Add(r);
             _origColors.Add(color);
             return go.transform;

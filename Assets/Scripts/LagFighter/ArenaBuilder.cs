@@ -72,10 +72,6 @@ namespace LagFighter
             }
         }
 
-        public static void Tint(GameObject go, Color c)
-        {
-            var rend = go.GetComponent<Renderer>();
-            if (rend != null) rend.material.color = c;
-        }
+        public static void Tint(GameObject go, Color c) => MatLib.Apply(go, c);
     }
 }

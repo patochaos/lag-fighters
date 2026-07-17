@@ -9,9 +9,34 @@ namespace LagFighter
         public static bool ShowBoxes = true;
     }
 
+    // Materiales base cargados desde Resources: al ser assets referenciados,
+    // sus shaders SÍ entran en la build (los creados 100% por código se
+    // strippean y todo sale magenta, como pasó en la primera build).
+    public static class MatLib
+    {
+        static Material _lit;
+
+        public static Material Lit
+        {
+            get
+            {
+                if (_lit == null) _lit = Resources.Load<Material>("LagFighter/LitBase");
+                return _lit;
+            }
+        }
+
+        // Asigna material lit con color a un primitivo (fallback: tintar el default)
+        public static void Apply(GameObject go, Color c)
+        {
+            var r = go.GetComponent<Renderer>();
+            if (r == null) return;
+            if (Lit != null) r.material = new Material(Lit) { color = c };
+            else r.material.color = c;
+        }
+    }
+
     // Cajas translúcidas para hurtboxes (verde/naranja) y hitboxes (rojo),
-    // y el ghost del plan propio. Shader Sprites/Default: transparente,
-    // sin luz, siempre incluido en builds.
+    // y el ghost del plan propio. Sprites/Default vía asset de Resources.
     public static class VizLib
     {
         static Material _mat;
@@ -20,7 +45,11 @@ namespace LagFighter
         {
             get
             {
-                if (_mat == null) _mat = new Material(Shader.Find("Sprites/Default"));
+                if (_mat == null)
+                {
+                    _mat = Resources.Load<Material>("LagFighter/GhostBase");
+                    if (_mat == null) _mat = new Material(Shader.Find("Sprites/Default"));
+                }
                 return _mat;
             }
         }
