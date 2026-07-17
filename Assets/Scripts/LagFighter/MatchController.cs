@@ -389,6 +389,18 @@ namespace LagFighter
                 _hud.OnSimEvent(ev);
             }
 
+            // TRADE: los dos conectaron en el mismo frame → énfasis extra
+            bool hit0 = false, hit1 = false;
+            foreach (var ev in Sim.LastEvents)
+                if (ev.Kind == EvKind.Hit) { if (ev.Attacker == 0) hit0 = true; else hit1 = true; }
+            if (hit0 && hit1)
+            {
+                _hitstop = Mathf.Max(_hitstop, 0.15f);
+                CamFx()?.Shake(0.11f);
+                _hud.Feedback(0, "¡TRADE!", new Color(1f, 0.85f, 0.3f));
+                _hud.Feedback(1, "¡TRADE!", new Color(1f, 0.85f, 0.3f));
+            }
+
             if (Sim.Projectiles.Count > _lastProjCount)
                 SfxLib.Play(SfxLib.Kind.Fireball, 0.9f);
             _lastProjCount = Sim.Projectiles.Count;

@@ -96,8 +96,8 @@ namespace LagFighter
                 Desc = "Salto atrás rápido. Tampoco bloquea, pero te saca del rango.",
                 MoveDx = -1.0f, MotionStart = 2, MotionEnd = 12 },
 
-            new MoveDef { Id = "jumpF", Name = "Salto + (patada)", Anim = AnimKind.Jump, Startup = 6, Active = 28, Recovery = 6,
-                Desc = "Salto adelante con patada en la bajada: EL jump-in. Pasa hadoukens; en el aire no bloqueás.",
+            new MoveDef { Id = "jumpF", Name = "Salto + (patada)", Anim = AnimKind.Jump, Startup = 6, Active = 28, Recovery = 10,
+                Desc = "Jump-in con patada en la bajada + 10f de recovery al caer. Pasa hadoukens; en el aire no bloqueás.",
                 MoveDx = 1.9f, MotionStart = 6, MotionEnd = 34, AirStart = 6, AirEnd = 34,
                 Hits = new[] { new HitWindow { Start = 20, Duration = 10, Fwd0 = 0.2f, Fwd1 = 0.95f, Y0 = 0.85f, Y1 = 1.65f,
                     Damage = 1f, Hitstun = 26, Blockstun = 15, CounterStun = 36, Push = 0.2f } } },
@@ -392,15 +392,19 @@ namespace LagFighter
                 if (!p.Alive) continue;
                 int def = 1 - p.Owner;
                 if (IsInvulnerable(def) || !p.Rect.Overlaps(HurtRect(def))) continue;
-                ResolveContact(p.Owner, MoveCatalog.Hadouken,
+                ApplyContact(BuildPending(p.Owner, MoveCatalog.Hadouken,
                     SimConfig.ProjDamage, SimConfig.ProjHitstun, SimConfig.ProjBlockstun, SimConfig.ProjHitstun + 8,
-                    SimConfig.ProjPush, knockdown: false, attackerFreeTick: AttackerFreeTick(p.Owner));
+                    SimConfig.ProjPush, knockdown: false, attackerFreeTick: AttackerFreeTick(p.Owner)));
                 p.Alive = false;
                 Projectiles[pi] = p;
             }
             Projectiles.RemoveAll(x => !x.Alive);
 
-            // golpes cuerpo a cuerpo
+            // Golpes cuerpo a cuerpo, en DOS FASES: primero se evalúan todos
+            // contra el estado previo del frame, y recién después se aplican.
+            // Si los dos conectan en el mismo frame es un TRADE: ambos comen
+            // daño y stun (sin esto, el jugador 0 ganaría por orden de loop).
+            _pending.Clear();
             for (int i = 0; i < 2; i++)
             {
                 var atk = Fighters[i];
@@ -416,10 +420,12 @@ namespace LagFighter
                     if (!HitRectWorld(i, h).Overlaps(HurtRect(1 - i))) continue;
 
                     atk.WindowHit[wi] = true;
-                    ResolveContact(i, atk.MoveIndex, h.Damage, h.Hitstun, h.Blockstun, h.CounterStun, h.Push,
-                        h.Knockdown, attackerFreeTick: atk.MoveStartTick + m.Total);
+                    _pending.Add(BuildPending(i, atk.MoveIndex, h.Damage, h.Hitstun, h.Blockstun, h.CounterStun,
+                        h.Push, h.Knockdown, attackerFreeTick: atk.MoveStartTick + m.Total));
                 }
             }
+            foreach (var pending in _pending)
+                ApplyContact(pending);
 
             SeparateAndClamp();
 
@@ -439,41 +445,70 @@ namespace LagFighter
             return m == null ? Tick : Fighters[i].MoveStartTick + m.Total;
         }
 
-        // Resolución común de contacto (golpe o proyectil) sobre el defensor.
-        void ResolveContact(int attacker, int moveIndex, float damage, int hitstun, int blockstun, int counterStun,
+        // Contacto pendiente: los flags del defensor (bloqueo, counter, aéreo)
+        // se capturan ANTES de aplicar nada, para que los trades sean justos.
+        struct PendingHit
+        {
+            public int Attacker, MoveIndex;
+            public float Damage, Push;
+            public int Hitstun, Blockstun, CounterStun, AttackerFree;
+            public bool Knockdown, Guarded, Counter, AirHit;
+        }
+
+        readonly List<PendingHit> _pending = new List<PendingHit>();
+
+        PendingHit BuildPending(int attacker, int moveIndex, float damage, int hitstun, int blockstun, int counterStun,
             float push, bool knockdown, int attackerFreeTick)
         {
             int d = 1 - attacker;
-            var def = Fighters[d];
-            int face = Fighters[attacker].Face;
+            var defMove = CurrentMove(d);
+            return new PendingHit
+            {
+                Attacker = attacker,
+                MoveIndex = moveIndex,
+                Damage = damage,
+                Push = push,
+                Hitstun = hitstun,
+                Blockstun = blockstun,
+                CounterStun = counterStun,
+                AttackerFree = attackerFreeTick,
+                Knockdown = knockdown,
+                Guarded = IsBlockingState(d),
+                Counter = defMove != null && defMove.IsAttack && Phase(d) < defMove.Startup,
+                AirHit = IsAirborne(d),
+            };
+        }
 
-            if (IsBlockingState(d))
+        void ApplyContact(PendingHit p)
+        {
+            int d = 1 - p.Attacker;
+            var def = Fighters[d];
+            int face = Fighters[p.Attacker].Face;
+
+            if (p.Guarded)
             {
                 def.MoveIndex = -1; // el paso atrás / espera se corta en blockstun
                 def.Stun = StunKind.Blockstun;
-                def.StunEndTick = Tick + blockstun;
-                def.X += face * push * 0.6f;
-                LastEvents.Add(new SimEvent { Attacker = attacker, Kind = EvKind.Blocked, MoveIndex = moveIndex,
-                    FrameAdv = def.StunEndTick - attackerFreeTick });
+                def.StunEndTick = Tick + p.Blockstun;
+                def.X += face * p.Push * 0.6f;
+                LastEvents.Add(new SimEvent { Attacker = p.Attacker, Kind = EvKind.Blocked, MoveIndex = p.MoveIndex,
+                    FrameAdv = def.StunEndTick - p.AttackerFree });
                 return;
             }
 
-            var defMove = CurrentMove(d);
-            bool counter = defMove != null && defMove.IsAttack && Phase(d) < defMove.Startup;
-            bool airHit = IsAirborne(d);
-            bool kd = knockdown || airHit; // pegarle a alguien en el aire lo derriba
-            float dmg = damage + (counter ? 1f : 0f);
-            int stun = counter ? counterStun : hitstun;
-            if (airHit) stun = Math.Max(stun, 60); // caída del aire = hard knockdown
+            bool kd = p.Knockdown || p.AirHit; // pegarle a alguien en el aire lo derriba
+            float dmg = p.Damage + (p.Counter ? 1f : 0f);
+            int stun = p.Counter ? p.CounterStun : p.Hitstun;
+            if (p.AirHit) stun = Math.Max(stun, 60); // caída del aire = hard knockdown
 
             def.Hp = Math.Max(0f, def.Hp - dmg);
-            def.X += face * push;
+            def.X += face * p.Push;
             def.MoveIndex = -1;
             def.Stun = kd ? StunKind.Knockdown : StunKind.Hitstun;
             def.StunEndTick = Tick + stun;
 
-            LastEvents.Add(new SimEvent { Attacker = attacker, Kind = EvKind.Hit, Damage = dmg, Counter = counter,
-                MoveIndex = moveIndex, FrameAdv = def.StunEndTick - attackerFreeTick });
+            LastEvents.Add(new SimEvent { Attacker = p.Attacker, Kind = EvKind.Hit, Damage = dmg, Counter = p.Counter,
+                MoveIndex = p.MoveIndex, FrameAdv = def.StunEndTick - p.AttackerFree });
         }
 
         void SeparateAndClamp()
