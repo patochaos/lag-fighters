@@ -76,11 +76,12 @@ Golpe aéreo = hard KD 60f (un turno entero de okizeme — vigilar si es mucho).
   Log de turnos (`_turnLog`) → **replay completo con V** re-simulando.
 - Modos: Práctica (dummy quieto, revive) / VS IA (planifica en secreto) / 1v1
   local hotseat.
-- UI: cartas con framedata (PlanMenuUI), timelines de 240f con fichas por
-  comando (HudUI) — la fila rival se revela al ejecutar. Hurt/hitboxes siempre
-  visibles (Viz.cs). Blockman procedural (FighterView.cs).
-- Controles: 1-8 agrega comando · ←/→+Enter agrega · Backspace borra ·
-  Espacio cierra turno · V replay · R reinicia · M menú.
+- UI: cartas con framedata (PlanMenuUI), timelines de 60f con fichas por
+  comando y bloque de stun arrastrado al inicio (HudUI) — la fila rival se
+  revela al ejecutar. Hurt/hitboxes con toggle (Viz.cs). Blockman procedural
+  (FighterView.cs).
+- Controles: click o 1-9/0 agrega · flechas+Enter agrega · Backspace borra ·
+  Espacio cierra turno · V replay · R reinicia · M menú · H cajas.
 
 ### Puerta al 3D (después)
 
@@ -94,7 +95,6 @@ La sim usa rects y posición X; el escenario no está acoplado. Para volver al
   de bloques separados a propósito).
 - Picks secretos reales en 1v1 (ocultar ghost del picker 2, o online lockstep
   — la sim determinista ya lo permite).
-- Blockstun (hoy bloquear no frena la cola del que bloquea).
 
 ## Historial de pivots
 
