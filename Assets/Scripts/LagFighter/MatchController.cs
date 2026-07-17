@@ -224,8 +224,8 @@ namespace LagFighter
 
         void UpdateGhost()
         {
+            _ghost.Show(Sim, Picker, _plans[Picker], CurrentTurnFrames);
             var g = PlanPreview.Build(Sim, Picker, _plans[Picker], CurrentTurnFrames);
-            _ghost.Show(g, Picker);
             _menu.SetPrediction(g, PlanFramesUsed(Picker), PlanFramesAvailable(Picker));
         }
 

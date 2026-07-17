@@ -9,6 +9,7 @@ namespace LagFighter
     {
         MatchController _mc;
         int _index;
+        bool _ghostMode;
 
         Transform _rig;
         Transform _torso, _head, _armF, _armB, _legF, _legB;
@@ -32,6 +33,26 @@ namespace LagFighter
             v._mc = mc;
             v._index = index;
             v.BuildRig(index == 0 ? new Color(0.25f, 0.7f, 0.95f) : new Color(0.95f, 0.45f, 0.25f));
+            return v;
+        }
+
+        // Mismo blockman pero fantasma: semi-transparente, posado por GhostViz.
+        public static FighterView CreateGhost(int index)
+        {
+            var go = new GameObject("GhostFighter" + index);
+            var v = go.AddComponent<FighterView>();
+            v._index = index;
+            v._ghostMode = true;
+            v.BuildRig(index == 0 ? new Color(0.35f, 0.8f, 1f) : new Color(1f, 0.55f, 0.35f));
+            var ghostShader = Shader.Find("Sprites/Default");
+            for (int i = 0; i < v._tintRenderers.Count; i++)
+            {
+                var c = v._origColors[i];
+                c.a = 0.34f;
+                var mat = new Material(ghostShader) { color = c };
+                v._tintRenderers[i].material = mat;
+                v._origColors[i] = c; // el tint loop de ApplyPose conserva el alpha
+            }
             return v;
         }
 
@@ -75,14 +96,22 @@ namespace LagFighter
 
         void Update()
         {
-            var sim = _mc.Sim;
-            if (sim == null) return;
+            if (_ghostMode) return; // al ghost lo posa GhostViz con su propia sim
+            if (_mc == null || _mc.Sim == null) return;
+            bool showBlock = _mc.State == MatchController.Flow.Executing || _mc.State == MatchController.Flow.Replay;
+            ApplyPose(_mc.Sim, _mc.TickFloat, Time.deltaTime, showBlock);
+        }
+
+        // Posa el rig desde CUALQUIER sim (la real o la del ghost de preview).
+        public void ApplyPose(MatchSim sim, float tf, float dt, bool showBlockPose)
+        {
             var f = sim.Fighters[_index];
-            float tf = _mc.TickFloat;
-            float dt = Time.deltaTime;
 
             var target = new Vector3(f.X, 0f, 0f);
-            transform.position = Vector3.Lerp(transform.position, target, 1f - Mathf.Exp(-14f * dt));
+            if ((target - transform.position).sqrMagnitude > 4f)
+                transform.position = target; // salto grande (loop del ghost / reset): sin smear
+            else
+                transform.position = Vector3.Lerp(transform.position, target, 1f - Mathf.Exp(-14f * dt));
             float wantYaw = f.Face > 0 ? 90f : -90f;
             _faceYaw = Mathf.LerpAngle(_faceYaw, wantYaw, 1f - Mathf.Exp(-10f * dt));
 
@@ -201,8 +230,7 @@ namespace LagFighter
             if (winner) armF = new Vector3(0.12f, 1.7f, 0.1f);
 
             // bloqueo visible: brazos cubriendo (si está en estado de guardia durante ejecución)
-            bool blocking = sim.IsBlockingState(_index) && !sim.Over &&
-                            (_mc.State == MatchController.Flow.Executing || _mc.State == MatchController.Flow.Replay);
+            bool blocking = sim.IsBlockingState(_index) && !sim.Over && showBlockPose;
             if (blocking && (m == null || m.Anim == AnimKind.Walk || m.Anim == AnimKind.Wait))
             {
                 armF = new Vector3(0.1f, 1.3f, 0.4f);

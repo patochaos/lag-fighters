@@ -28,7 +28,6 @@ namespace LagFighter
         Image[] _cards;
         Text[] _cardLabels;
         Text _desc, _stepTitle;
-        AudioSource _announcer;
         int _sel;
         int _step; // 0 = lag mode, 1 = modo de juego
         bool _lagChoice;
@@ -82,15 +81,6 @@ namespace LagFighter
                 bgGo.transform.SetAsFirstSibling(); // detrás de todo lo demás… pero delante del velo oscuro
                 _root.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);
             }
-            var clip = Resources.Load<AudioClip>("LagFighter/announcer");
-            if (clip != null)
-            {
-                _announcer = gameObject.AddComponent<AudioSource>();
-                _announcer.clip = clip;
-                _announcer.spatialBlend = 0f;
-                _announcer.playOnAwake = false;
-            }
-
             bool hasSplash = splash != null;
             if (!hasSplash)
             {
@@ -162,7 +152,6 @@ namespace LagFighter
             _step = 0;
             _sel = 0;
             Layout();
-            if (_announcer != null && !_announcer.isPlaying) _announcer.Play(); // "¡LAG FIGHTERS!"
         }
 
         public void Close()
