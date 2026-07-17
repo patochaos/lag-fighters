@@ -16,7 +16,11 @@ namespace LagFighter
         Font _font;
         RectTransform _canvasRt;
         readonly Image[][] _pips = new Image[2][];
-        Text _banner, _prompt;
+        readonly Image[][] _winPips = new Image[2][];
+        Text _banner, _prompt, _dist;
+        string _bannerOverride = "";
+        Image _boxBtn;
+        Text _boxBtnLabel;
         readonly Text[] _feedback = new Text[2];
         readonly Text[] _stateLabel = new Text[2];
         readonly float[] _fbTimer = new float[2];
@@ -50,6 +54,13 @@ namespace LagFighter
                 28, new Color(1f, 0.9f, 0.4f), TextAnchor.MiddleCenter);
             _prompt.fontStyle = FontStyle.Bold;
 
+            _dist = MakeText(_canvasRt, "Dist", "", new Vector2(0.5f, 1f), new Vector2(0f, -82f), new Vector2(300f, 22f),
+                15, new Color(1f, 1f, 1f, 0.45f), TextAnchor.MiddleCenter);
+
+            _boxBtn = MakeImage(_canvasRt, "BoxBtn", new Vector2(0.5f, 1f), new Vector2(0f, -116f), new Vector2(150f, 32f), new Color(0.12f, 0.14f, 0.18f, 0.9f));
+            _boxBtnLabel = MakeText(_boxBtn.rectTransform, "T", "CAJAS: ON", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(146f, 24f),
+                14, new Color(0.5f, 1f, 0.6f), TextAnchor.MiddleCenter);
+
             // timelines del turno (fila propia abajo, rival arriba)
             _row1 = new TimelineRow(this, "Row1", y: 262f, height: 40f, dim: true);
             _row0 = new TimelineRow(this, "Row0", y: 316f, height: 40f, dim: false);
@@ -81,6 +92,16 @@ namespace LagFighter
                 _pips[i][p] = pip;
             }
 
+            // rounds ganados (al mejor de 3)
+            _winPips[i] = new Image[MatchController.RoundsToWin];
+            for (int w = 0; w < MatchController.RoundsToWin; w++)
+            {
+                var wp = MakeImage(_canvasRt, $"{label}Win{w}", anchor,
+                    new Vector2(sign * (300f + w * 26f), -84f), new Vector2(18f, 18f), new Color(1f, 0.85f, 0.3f));
+                wp.rectTransform.pivot = anchor;
+                _winPips[i][w] = wp;
+            }
+
             _feedback[i] = MakeText(_canvasRt, label + "Feedback", "", anchor, new Vector2(sign * 40f, -116f), new Vector2(640f, 34f),
                 24, Color.white, left ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight);
             _feedback[i].rectTransform.pivot = anchor;
@@ -93,16 +114,20 @@ namespace LagFighter
         }
 
         public void SetPrompt(string s) => _prompt.text = s;
+        public void SetBanner(string s) => _bannerOverride = s;
 
         public void OnMatchReset()
         {
             _fbTimer[0] = _fbTimer[1] = 0f;
             _feedback[0].text = _feedback[1].text = "";
             _banner.text = "";
+            _bannerOverride = "";
         }
 
         public void OnSimEvent(SimEvent ev)
         {
+            // los saltos son movimiento: no avisar cuando la patada aérea no conecta
+            if (ev.Kind == EvKind.Whiff && ev.MoveIndex == MoveCatalog.JumpF) return;
             int atk = ev.Attacker;
             string mv = MoveCatalog.All[ev.MoveIndex].Name.ToUpperInvariant();
             string adv = ev.FrameAdv >= 0 ? $"+{ev.FrameAdv}f" : $"−{-ev.FrameAdv}f";
@@ -182,9 +207,33 @@ namespace LagFighter
             _row0.UpdateRow(_mc.GetPlan(0), _mc.RowRevealed(0), playX);
             _row1.UpdateRow(_mc.GetPlan(1), _mc.RowRevealed(1), playX);
 
-            if (_mc.State == MatchController.Flow.GameOver)
-                _banner.text = (sim.Winner == 0 ? "¡GANASTE!" : sim.Winner == 1 ? "PERDISTE" : "DOBLE KO")
-                               + "\n<size=28>V ver la pelea de corrido · R reiniciar · M menú</size>";
+            // distancia, rounds ganados y toggle de cajas
+            _dist.text = $"dist {Mathf.Abs(sim.Fighters[1].X - sim.Fighters[0].X):0.00}";
+            for (int i = 0; i < 2; i++)
+                for (int w = 0; w < MatchController.RoundsToWin; w++)
+                {
+                    var c = _winPips[i][w].color;
+                    c.a = w < _mc.GetWins(i) ? 1f : 0.15f;
+                    _winPips[i][w].color = c;
+                }
+
+            bool toggle = GameInput.BoxesPressed();
+            if (!toggle && GameInput.ClickPressed() &&
+                RectTransformUtility.RectangleContainsScreenPoint(_boxBtn.rectTransform, GameInput.MousePos(), null))
+                toggle = true;
+            if (toggle)
+            {
+                VizPrefs.ShowBoxes = !VizPrefs.ShowBoxes;
+                _boxBtnLabel.text = VizPrefs.ShowBoxes ? "CAJAS: ON" : "CAJAS: OFF";
+                _boxBtnLabel.color = VizPrefs.ShowBoxes ? new Color(0.5f, 1f, 0.6f) : new Color(1f, 1f, 1f, 0.5f);
+            }
+
+            if (_bannerOverride != "")
+                _banner.text = _bannerOverride;
+            else if (_mc.State == MatchController.Flow.GameOver)
+                _banner.text = (sim.Winner == 0 ? "¡GANASTE LA PELEA!" : sim.Winner == 1 ? "PERDISTE LA PELEA" : "DOBLE KO")
+                               + $"\n<size=30>{_mc.GetWins(0)} — {_mc.GetWins(1)}</size>"
+                               + "\n<size=26>V repetir último round · R revancha · M menú</size>";
             else
                 _banner.text = "";
         }

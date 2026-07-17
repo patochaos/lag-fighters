@@ -15,7 +15,9 @@ namespace LagFighter
     //  - Al final, V reproduce la pelea completa de corrido (replay determinista).
     public class MatchController : MonoBehaviour
     {
-        public enum Flow { ModeSelect, Planning, Executing, GameOver, Replay }
+        public enum Flow { ModeSelect, Planning, Executing, RoundOver, GameOver, Replay }
+
+        public const int RoundsToWin = 2; // al mejor de 3
 
         public MatchSim Sim { get; private set; }
         public float TickFloat => Sim == null ? 0f : Sim.Tick + _acc / SimConfig.TickDuration;
@@ -28,6 +30,10 @@ namespace LagFighter
         readonly List<int>[] _plans = { new List<int>(), new List<int>() };
         readonly List<(List<int> q0, List<int> q1)> _turnLog = new List<(List<int>, List<int>)>();
         int _replayTurn;
+        readonly int[] _wins = new int[2];
+        float _roundTimer;
+        float _hitstop;
+        int _lastProjCount;
 
         readonly FighterView[] _views = new FighterView[2];
         HudUI _hud;
@@ -80,12 +86,20 @@ namespace LagFighter
 
         void ResetMatch()
         {
+            _wins[0] = _wins[1] = 0;
+            _ai = new SimpleAI(_seed++);
+            StartRound();
+        }
+
+        void StartRound()
+        {
             Sim = new MatchSim();
             if (Mode == GameMode.Practice) Sim.Fighters[1].BlockEnabled = false; // el dummy no bloquea
-            _ai = new SimpleAI(_seed++);
             _acc = 0f;
+            _hitstop = 0f;
+            _lastProjCount = 0;
             TurnNumber = 0;
-            _turnLog.Clear();
+            _turnLog.Clear(); // el replay cubre el round en curso
             _ghost.Clear();
             _menu.Close();
             _views[0].OnMatchReset();
@@ -93,6 +107,8 @@ namespace LagFighter
             _hud.OnMatchReset();
             StartPlanning();
         }
+
+        public int GetWins(int i) => _wins[i];
 
         // ---------- planning ----------
 
@@ -196,6 +212,7 @@ namespace LagFighter
             _menu.Close();
             State = Flow.Executing;
             _hud.SetPrompt($"TURNO {TurnNumber} — ¡EJECUTANDO!");
+            SfxLib.Play(SfxLib.Kind.TurnStart, 0.6f);
         }
 
         void EndTurn()
@@ -217,12 +234,25 @@ namespace LagFighter
             if (State == Flow.GameOver && GameInput.ReplayPressed()) { StartReplay(); return; }
             if (GameInput.RestartPressed()) { ResetMatch(); return; }
 
+            if (State == Flow.RoundOver)
+            {
+                _roundTimer -= Time.deltaTime;
+                if (_roundTimer <= 0f)
+                {
+                    _hud.SetBanner("");
+                    StartRound();
+                }
+                return;
+            }
+
             if (State == Flow.Executing) TickExecuting();
             else if (State == Flow.Replay) TickReplay();
         }
 
         void TickExecuting()
         {
+            if (_hitstop > 0f) { _hitstop -= Time.deltaTime; return; } // pausa cosmética, la sim no avanza
+
             _acc += Time.deltaTime;
             while (_acc >= SimConfig.TickDuration)
             {
@@ -241,9 +271,7 @@ namespace LagFighter
                     }
                     else
                     {
-                        State = Flow.GameOver;
-                        _acc = 0f;
-                        _hud.SetPrompt("");
+                        OnRoundEnd();
                         return;
                     }
                 }
@@ -254,7 +282,26 @@ namespace LagFighter
                     EndTurn();
                     return;
                 }
+                if (_hitstop > 0f) return;
             }
+        }
+
+        void OnRoundEnd()
+        {
+            _acc = 0f;
+            _hud.SetPrompt("");
+            if (Sim.Winner >= 0) _wins[Sim.Winner]++;
+
+            if (Sim.Winner >= 0 && _wins[Sim.Winner] >= RoundsToWin)
+            {
+                State = Flow.GameOver;
+                return;
+            }
+
+            State = Flow.RoundOver;
+            _roundTimer = 2.6f;
+            string txt = Sim.Winner == 0 ? "ROUND PARA VOS" : Sim.Winner == 1 ? "ROUND PARA EL RIVAL" : "ROUND EMPATADO";
+            _hud.SetBanner($"{txt}\n<size=30>{_wins[0]} — {_wins[1]}</size>");
         }
 
         // ---------- replay ----------
@@ -285,6 +332,8 @@ namespace LagFighter
 
         void TickReplay()
         {
+            if (_hitstop > 0f) { _hitstop -= Time.deltaTime; return; }
+
             _acc += Time.deltaTime;
             while (_acc >= SimConfig.TickDuration)
             {
@@ -317,17 +366,48 @@ namespace LagFighter
             }
         }
 
+        CameraFX _camFx;
+
         void DispatchEvents()
         {
             foreach (var ev in Sim.LastEvents)
             {
                 switch (ev.Kind)
                 {
-                    case EvKind.Hit: _views[1 - ev.Attacker].FlashHit(); break;
-                    case EvKind.Blocked: _views[1 - ev.Attacker].FlashBlock(); break;
+                    case EvKind.Hit:
+                        _views[1 - ev.Attacker].FlashHit();
+                        SfxLib.Play(ev.Counter ? SfxLib.Kind.Counter : SfxLib.Kind.Hit);
+                        _hitstop = Mathf.Max(_hitstop, ev.Counter ? 0.11f : 0.075f);
+                        CamFx()?.Shake(ev.Counter ? 0.09f : 0.05f);
+                        break;
+                    case EvKind.Blocked:
+                        _views[1 - ev.Attacker].FlashBlock();
+                        SfxLib.Play(SfxLib.Kind.Block, 0.8f);
+                        _hitstop = Mathf.Max(_hitstop, 0.04f);
+                        break;
                 }
                 _hud.OnSimEvent(ev);
             }
+
+            if (Sim.Projectiles.Count > _lastProjCount)
+                SfxLib.Play(SfxLib.Kind.Fireball, 0.9f);
+            _lastProjCount = Sim.Projectiles.Count;
+
+            if (Sim.Over)
+            {
+                SfxLib.Play(SfxLib.Kind.Ko);
+                CamFx()?.Shake(0.14f);
+            }
+        }
+
+        CameraFX CamFx()
+        {
+            if (_camFx == null && Camera.main != null)
+            {
+                _camFx = Camera.main.GetComponent<CameraFX>();
+                if (_camFx == null) _camFx = Camera.main.gameObject.AddComponent<CameraFX>();
+            }
+            return _camFx;
         }
     }
 
@@ -347,6 +427,7 @@ namespace LagFighter
         public static bool ReplayPressed() => K != null && K.vKey.wasPressedThisFrame;
         public static bool ClickPressed() => Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame;
         public static Vector2 MousePos() => Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero;
+        public static bool BoxesPressed() => K != null && K.hKey.wasPressedThisFrame;
         public static int NumberPressed()
         {
             if (K == null) return -1;
@@ -367,6 +448,7 @@ namespace LagFighter
         public static bool ReplayPressed() => Input.GetKeyDown(KeyCode.V);
         public static bool ClickPressed() => Input.GetMouseButtonDown(0);
         public static Vector2 MousePos() => Input.mousePosition;
+        public static bool BoxesPressed() => Input.GetKeyDown(KeyCode.H);
         public static int NumberPressed()
         {
             for (int n = 1; n <= 9; n++)

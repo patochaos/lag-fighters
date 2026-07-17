@@ -96,9 +96,11 @@ namespace LagFighter
                 Desc = "Salto atrás rápido. Tampoco bloquea, pero te saca del rango.",
                 MoveDx = -1.0f, MotionStart = 2, MotionEnd = 12 },
 
-            new MoveDef { Id = "jumpF", Name = "Salto +", Anim = AnimKind.Jump, Startup = 6, Active = 28, Recovery = 6,
-                Desc = "Salto adelante: pasa por arriba de los hadoukens. En el aire no bloqueás.",
-                MoveDx = 1.9f, MotionStart = 6, MotionEnd = 34, AirStart = 6, AirEnd = 34 },
+            new MoveDef { Id = "jumpF", Name = "Salto + (patada)", Anim = AnimKind.Jump, Startup = 6, Active = 28, Recovery = 6,
+                Desc = "Salto adelante con patada en la bajada: EL jump-in. Pasa hadoukens; en el aire no bloqueás.",
+                MoveDx = 1.9f, MotionStart = 6, MotionEnd = 34, AirStart = 6, AirEnd = 34,
+                Hits = new[] { new HitWindow { Start = 20, Duration = 10, Fwd0 = 0.2f, Fwd1 = 0.95f, Y0 = 0.85f, Y1 = 1.65f,
+                    Damage = 1f, Hitstun = 26, Blockstun = 15, CounterStun = 36, Push = 0.2f } } },
 
             new MoveDef { Id = "jumpN", Name = "Salto N", Anim = AnimKind.Jump, Startup = 6, Active = 28, Recovery = 6,
                 Desc = "Salto vertical. Esquiva proyectiles sin regalar posición.",

@@ -129,9 +129,19 @@ namespace LagFighter
                         legBRot = Quaternion.Euler(-30f, 0f, 0f);
                         break;
                     case AnimKind.Jump:
-                        // piernas recogidas en el aire
-                        legFRot = Quaternion.Euler(airY > 0.05f ? 55f : 0f, 0f, 0f);
-                        legBRot = Quaternion.Euler(airY > 0.05f ? 40f : 0f, 0f, 0f);
+                        if (m.Hits.Length > 0 && phase >= 18f && phase < 32f)
+                        {
+                            // patada aérea: pierna estirada adelante-abajo
+                            legF = new Vector3(0.08f, 0.42f, 0.5f);
+                            legFRot = Quaternion.Euler(115f, 0f, 0f);
+                            legBRot = Quaternion.Euler(35f, 0f, 0f);
+                        }
+                        else
+                        {
+                            // piernas recogidas en el aire
+                            legFRot = Quaternion.Euler(airY > 0.05f ? 55f : 0f, 0f, 0f);
+                            legBRot = Quaternion.Euler(airY > 0.05f ? 40f : 0f, 0f, 0f);
+                        }
                         break;
                     case AnimKind.AttackA:
                         armF = Vector3.Lerp(ArmFPos, new Vector3(0.1f, 1.42f, 0.78f), pk);

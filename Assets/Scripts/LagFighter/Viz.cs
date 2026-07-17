@@ -3,6 +3,12 @@ using UnityEngine;
 
 namespace LagFighter
 {
+    // Preferencias de visualización (toggle del botón CAJAS en el HUD).
+    public static class VizPrefs
+    {
+        public static bool ShowBoxes = true;
+    }
+
     // Cajas translúcidas para hurtboxes (verde/naranja) y hitboxes (rojo),
     // y el ghost del plan propio. Shader Sprites/Default: transparente,
     // sin luz, siempre incluido en builds.
@@ -63,14 +69,21 @@ namespace LagFighter
             var sim = _mc.Sim;
             if (sim == null) return;
 
+            bool show = VizPrefs.ShowBoxes;
             for (int i = 0; i < 2; i++)
-                VizLib.SetRect(_hurt[i], sim.HurtRect(i), 0.55f, 0f);
+            {
+                _hurt[i].SetActive(show);
+                if (show) VizLib.SetRect(_hurt[i], sim.HurtRect(i), 0.55f, 0f);
+            }
 
             _rects.Clear();
-            sim.GetActiveHitRects(0, _rects);
-            sim.GetActiveHitRects(1, _rects);
-            sim.GetProjectileRects(0, _rects);
-            sim.GetProjectileRects(1, _rects);
+            if (show)
+            {
+                sim.GetActiveHitRects(0, _rects);
+                sim.GetActiveHitRects(1, _rects);
+                sim.GetProjectileRects(0, _rects);
+                sim.GetProjectileRects(1, _rects);
+            }
             for (int i = 0; i < _rects.Count; i++)
             {
                 if (i >= _hitPool.Count)
