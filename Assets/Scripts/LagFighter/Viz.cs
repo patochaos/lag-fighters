@@ -87,8 +87,12 @@ namespace LagFighter
             for (int i = 0; i < _rects.Count; i++)
             {
                 if (i >= _hitPool.Count)
-                    _hitPool.Add(VizLib.MakeBox("Hit", new Color(1f, 0.15f, 0.1f, 0.4f), transform));
+                    _hitPool.Add(VizLib.MakeBox("Hit", Color.white, transform));
                 _hitPool[i].SetActive(true);
+                // agarre en magenta para que se lea distinto de un golpe
+                _hitPool[i].GetComponent<Renderer>().material.color = _rects[i].Grab
+                    ? new Color(0.9f, 0.25f, 0.8f, 0.45f)
+                    : new Color(1f, 0.15f, 0.1f, 0.4f);
                 VizLib.SetRect(_hitPool[i], _rects[i], 0.62f, 0f);
             }
             for (int i = _rects.Count; i < _hitPool.Count; i++)
@@ -124,8 +128,9 @@ namespace LagFighter
     // turno + las hitboxes que vas a tirar (contra rival quieto).
     public class GhostViz : MonoBehaviour
     {
-        readonly List<GameObject> _pool = new List<GameObject>();
-        int _used;
+        readonly List<GameObject> _bodyPool = new List<GameObject>();
+        readonly List<GameObject> _rectPool = new List<GameObject>();
+        int _bodyUsed, _rectUsed;
 
         public static GhostViz Create()
         {
@@ -134,8 +139,16 @@ namespace LagFighter
 
         public void Clear()
         {
-            _used = 0;
-            foreach (var go in _pool) go.SetActive(false);
+            _bodyUsed = _rectUsed = 0;
+            foreach (var go in _bodyPool) go.SetActive(false);
+            foreach (var go in _rectPool) go.SetActive(false);
+        }
+
+        void Update()
+        {
+            // el toggle CAJAS también apaga las hitboxes del ghost (no las siluetas)
+            for (int i = 0; i < _rectUsed; i++)
+                _rectPool[i].SetActive(VizPrefs.ShowBoxes);
         }
 
         public void Show(PlanPreview g, int fighter)
@@ -152,35 +165,37 @@ namespace LagFighter
                 Body(g.Snaps[g.Snaps.Count - 1].X, c);
             }
 
-            // hitboxes del plan (una caja por ventana, muestreadas)
+            // hitboxes del plan (muestreadas; los agarres en magenta)
             for (int t = 0; t < g.Snaps.Count; t += 3)
                 foreach (var r in g.Snaps[t].HitRects)
                 {
-                    var box = Next();
-                    box.GetComponent<Renderer>().material.color = new Color(1f, 0.2f, 0.1f, 0.10f);
+                    var box = Next(_rectPool, ref _rectUsed);
+                    box.GetComponent<Renderer>().material.color = r.Grab
+                        ? new Color(0.9f, 0.25f, 0.8f, 0.13f)
+                        : new Color(1f, 0.2f, 0.1f, 0.10f);
                     VizLib.SetRect(box, r, 0.45f, 0f);
                 }
         }
 
         void Body(float x, Color c)
         {
-            var go = Next();
+            var go = Next(_bodyPool, ref _bodyUsed);
             go.GetComponent<Renderer>().material.color = c;
             go.transform.position = new Vector3(x, SimConfig.HurtHeight * 0.5f, 0f);
             go.transform.localScale = new Vector3(SimConfig.HurtHalfWidth * 2f, SimConfig.HurtHeight, 0.4f);
         }
 
-        GameObject Next()
+        GameObject Next(List<GameObject> pool, ref int used)
         {
-            if (_used < _pool.Count)
+            if (used < pool.Count)
             {
-                var go = _pool[_used++];
+                var go = pool[used++];
                 go.SetActive(true);
                 return go;
             }
             var box = VizLib.MakeBox("GhostBox", Color.white, transform);
-            _pool.Add(box);
-            _used = _pool.Count;
+            pool.Add(box);
+            used = pool.Count;
             return box;
         }
     }

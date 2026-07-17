@@ -11,7 +11,7 @@ namespace LagFighter
 
         public SimpleAI(int seed) { _rng = new System.Random(seed); }
 
-        public List<int> Plan(MatchSim sim, int me)
+        public List<int> Plan(MatchSim sim, int me, int turnFrames)
         {
             int opp = 1 - me;
             var plan = new List<int>();
@@ -21,7 +21,7 @@ namespace LagFighter
             int face = oppX >= myX ? 1 : -1;
             bool oppDown = sim.StunRemaining(opp) > 20;
             bool threwFireball = false;
-            int budget = SimConfig.TurnFrames - sim.StunRemaining(me); // el stun arrastrado come turno
+            int budget = turnFrames - sim.StunRemaining(me); // el stun arrastrado come turno
 
             while (frames < budget)
             {

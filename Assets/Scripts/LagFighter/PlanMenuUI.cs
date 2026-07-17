@@ -28,7 +28,7 @@ namespace LagFighter
         MatchController _mc;
         Font _font;
         GameObject _root;
-        Image[] _cardBg, _cardHeader;
+        Image[] _cardBg, _cardHeader, _cardOverlay;
         RectTransform[] _cardRt;
         Image _undoBtn, _doneBtn;
         Text _detail, _status;
@@ -109,6 +109,7 @@ namespace LagFighter
 
             _cardBg = new Image[Order.Length];
             _cardHeader = new Image[Order.Length];
+            _cardOverlay = new Image[Order.Length];
             _cardRt = new RectTransform[Order.Length];
 
             for (int pos = 0; pos < Order.Length; pos++)
@@ -156,6 +157,11 @@ namespace LagFighter
 
                 MakeText(card.rectTransform, "Tag", CardTag(mi), new Vector2(0.5f, 0f), new Vector2(0f, 13f),
                     new Vector2(CardW - 8f, 16f), 11, new Color(cat.r * 0.6f + 0.4f, cat.g * 0.6f + 0.4f, cat.b * 0.6f + 0.4f), TextAnchor.MiddleCenter);
+
+                // overlay de "no te entra en el turno" (tapa toda la carta)
+                _cardOverlay[pos] = MakeImage(card.rectTransform, "Overlay", new Vector2(0.5f, 0.5f), Vector2.zero,
+                    new Vector2(CardW, CardH), new Color(0.02f, 0.02f, 0.03f, 0.78f));
+                _cardOverlay[pos].gameObject.SetActive(false);
             }
 
             float sideX = totalW / 2f + 84f;
@@ -209,11 +215,11 @@ namespace LagFighter
             {
                 bool fits = _mc.PlanFits(Order[i]);
                 bool sel = i == _sel;
-                _cardBg[i].color = sel ? new Color(0.22f, 0.3f, 0.42f, 1f) :
-                    fits ? new Color(0.12f, 0.13f, 0.17f, 0.98f) : new Color(0.08f, 0.08f, 0.1f, 0.6f);
+                _cardBg[i].color = sel ? new Color(0.22f, 0.3f, 0.42f, 1f) : new Color(0.12f, 0.13f, 0.17f, 0.98f);
                 var hc = _cardHeader[i].color;
-                hc.a = sel ? 1f : fits ? 0.85f : 0.3f;
+                hc.a = sel ? 1f : 0.85f;
                 _cardHeader[i].color = hc;
+                _cardOverlay[i].gameObject.SetActive(!fits);
             }
             var m = MoveCatalog.All[Order[_sel]];
             _detail.text = $"{m.Name} — {m.Desc}";

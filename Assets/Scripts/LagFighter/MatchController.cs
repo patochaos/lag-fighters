@@ -22,10 +22,16 @@ namespace LagFighter
         public MatchSim Sim { get; private set; }
         public float TickFloat => Sim == null ? 0f : Sim.Tick + _acc / SimConfig.TickDuration;
         public GameMode Mode { get; private set; }
+        public bool LagMode { get; private set; }
         public Flow State { get; private set; } = Flow.ModeSelect;
         public int Picker { get; private set; }
         public int TurnNumber { get; private set; }
         public int TurnStartTick { get; private set; }
+
+        // Lag Mode: cada 4 turnos se duplican los frames del turno. IT GETS LAGGIER.
+        public int LagLevel => LagMode ? Mathf.Min((Mathf.Max(TurnNumber, 1) - 1) / 4, 4) : 0;
+        public int CurrentTurnFrames => SimConfig.TurnFrames << LagLevel;
+        int _prevLagLevel;
 
         readonly List<int>[] _plans = { new List<int>(), new List<int>() };
         readonly List<(List<int> q0, List<int> q1)> _turnLog = new List<(List<int>, List<int>)>();
@@ -79,9 +85,10 @@ namespace LagFighter
             _hud.SetPrompt("");
         }
 
-        public void StartMatch(GameMode mode)
+        public void StartMatch(GameMode mode, bool lagMode)
         {
             Mode = mode;
+            LagMode = lagMode;
             _modeMenu.Close();
             ResetMatch();
         }
@@ -101,6 +108,7 @@ namespace LagFighter
             _hitstop = 0f;
             _lastProjCount = 0;
             TurnNumber = 0;
+            _prevLagLevel = 0;
             _turnLog.Clear(); // el replay cubre el round en curso
             _ghost.Clear();
             _menu.Close();
@@ -117,11 +125,17 @@ namespace LagFighter
         void StartPlanning()
         {
             TurnNumber++;
+            if (LagMode && LagLevel != _prevLagLevel)
+            {
+                _prevLagLevel = LagLevel;
+                _hud.ShowLagMessage(LagMessage(LagLevel));
+                SfxLib.Play(SfxLib.Kind.Ko, 0.5f);
+            }
             CaptureTurnStartStun();
             _plans[0].Clear();
             _plans[1].Clear();
             if (Mode != GameMode.PvP)
-                _plans[1] = Mode == GameMode.Practice ? new List<int>() : _ai.Plan(Sim, 1);
+                _plans[1] = Mode == GameMode.Practice ? new List<int>() : _ai.Plan(Sim, 1, CurrentTurnFrames);
             Picker = 0;
             State = Flow.Planning;
             _menu.Open(Picker);
@@ -139,6 +153,17 @@ namespace LagFighter
             if (myStun > 0) adv = $"  ·  arrancás −{myStun}f ({StunName(Picker)})";
             else if (oppStun > 0) adv = $"  ·  VENTAJA +{oppStun}f (rival en {StunName(1 - Picker)})";
             _hud.SetPrompt($"TURNO {TurnNumber} — {who}{adv}");
+        }
+
+        static string LagMessage(int level)
+        {
+            switch (level)
+            {
+                case 1: return "IT GETS LAGGIER…\n<size=30>120 frames por turno</size>";
+                case 2: return "EL WIFI ESTÁ LLORANDO\n<size=30>240 frames por turno</size>";
+                case 3: return "MODO DIAL-UP\n<size=30>480 frames por turno</size>";
+                default: return "PALOMA MENSAJERA\n<size=30>960 frames por turno</size>";
+            }
         }
 
         string StunName(int i)
@@ -167,7 +192,7 @@ namespace LagFighter
         }
 
         // el stun arrastrado te come frames del turno: solo se planifica lo que entra
-        public int PlanFramesAvailable(int i) => SimConfig.TurnFrames - TurnStartStun[i];
+        public int PlanFramesAvailable(int i) => CurrentTurnFrames - TurnStartStun[i];
         public bool PlanFits(int moveIndex) => PlanFramesUsed(Picker) + MoveCatalog.All[moveIndex].Total <= PlanFramesAvailable(Picker);
 
         public void PlanAdd(int moveIndex)
@@ -199,7 +224,7 @@ namespace LagFighter
 
         void UpdateGhost()
         {
-            var g = PlanPreview.Build(Sim, Picker, _plans[Picker]);
+            var g = PlanPreview.Build(Sim, Picker, _plans[Picker], CurrentTurnFrames);
             _ghost.Show(g, Picker);
             _menu.SetPrediction(g, PlanFramesUsed(Picker), PlanFramesAvailable(Picker));
         }
@@ -281,7 +306,7 @@ namespace LagFighter
                     }
                 }
 
-                if (Sim.Tick - TurnStartTick >= SimConfig.TurnFrames)
+                if (Sim.Tick - TurnStartTick >= CurrentTurnFrames)
                 {
                     _acc = 0f;
                     EndTurn();
@@ -364,7 +389,7 @@ namespace LagFighter
                     return;
                 }
 
-                if (Sim.Tick - TurnStartTick >= SimConfig.TurnFrames)
+                if (Sim.Tick - TurnStartTick >= CurrentTurnFrames)
                 {
                     Sim.OnTurnEnd(0);
                     Sim.OnTurnEnd(1);

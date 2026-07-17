@@ -53,6 +53,7 @@ namespace LagFighter
     public struct WorldRect
     {
         public float X0, X1, Y0, Y1;
+        public bool Grab; // para que la viz pinte los agarres distinto
         public bool Overlaps(WorldRect o) => X0 <= o.X1 && o.X0 <= X1 && Y0 <= o.Y1 && o.Y0 <= Y1;
     }
 
@@ -139,8 +140,8 @@ namespace LagFighter
                 Desc = "12 frames quieto, bloqueando. No meter órdenes también bloquea." },
 
             new MoveDef { Id = "tatsu", Name = "Tatsumaki", Anim = AnimKind.Tatsu, Startup = 12, Active = 18, Recovery = 16,
-                Desc = "Giratoria que viaja y ATRAVIESA hadoukens (girando, 8..40). Dos hits; el segundo derriba.",
-                MoveDx = 1.25f, MotionStart = 10, MotionEnd = 30, ProjImmuneStart = 8, ProjImmuneEnd = 40,
+                Desc = "Giratoria que viaja lejos y ATRAVIESA hadoukens (girando, 8..40). Dos hits; el segundo derriba.",
+                MoveDx = 1.6f, MotionStart = 10, MotionEnd = 30, ProjImmuneStart = 8, ProjImmuneEnd = 40,
                 Hits = new[] {
                     new HitWindow { Start = 14, Duration = 5, Fwd0 = 0.3f, Fwd1 = 0.95f, Y0 = 0.9f, Y1 = 1.3f,
                         Damage = 1f, Hitstun = 22, Blockstun = 14, CounterStun = 32, Push = 0.3f },
@@ -312,7 +313,11 @@ namespace LagFighter
             {
                 var h = m.Hits[wi];
                 if (phase >= h.Start && phase < h.Start + h.Duration && !f.WindowHit[wi])
-                    result.Add(HitRectWorld(i, h));
+                {
+                    var r = HitRectWorld(i, h);
+                    r.Grab = h.IsGrab;
+                    result.Add(r);
+                }
             }
         }
 
@@ -589,14 +594,14 @@ namespace LagFighter
         public float DamageIfStill;
         public int BlockedCount;
 
-        public static PlanPreview Build(MatchSim src, int fighter, List<int> plan)
+        public static PlanPreview Build(MatchSim src, int fighter, List<int> plan, int turnFrames)
         {
             var sim = src.Clone();
             sim.SetQueue(fighter, plan);
             sim.SetQueue(1 - fighter, new List<int>());
             var g = new PlanPreview();
 
-            for (int t = 0; t < SimConfig.TurnFrames; t++)
+            for (int t = 0; t < turnFrames; t++)
             {
                 var snap = new Snap { X = sim.Fighters[fighter].X, HitRects = new List<WorldRect>() };
                 sim.GetActiveHitRects(fighter, snap.HitRects);

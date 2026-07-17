@@ -10,7 +10,7 @@ namespace LagFighter
     public class HudUI : MonoBehaviour
     {
         public const float RowW = 1440f;
-        const float PxPerFrame = RowW / SimConfig.TurnFrames;
+        float PxPerFrame => RowW / _mc.CurrentTurnFrames; // en Lag Mode la escala cambia por turno
 
         MatchController _mc;
         Font _font;
@@ -21,6 +21,10 @@ namespace LagFighter
         string _bannerOverride = "";
         Image _boxBtn;
         Text _boxBtnLabel;
+        Text _lagMsg;
+        float _lagMsgTimer;
+        readonly Image[] _wifiBars = new Image[4];
+        Text _wifiLabel;
         readonly Text[] _feedback = new Text[2];
         readonly Text[] _stateLabel = new Text[2];
         readonly float[] _fbTimer = new float[2];
@@ -72,6 +76,28 @@ namespace LagFighter
             _banner = MakeText(_canvasRt, "Banner", "", new Vector2(0.5f, 0.5f), new Vector2(0f, 150f), new Vector2(1200f, 160f),
                 64, Color.white, TextAnchor.MiddleCenter);
             _banner.fontStyle = FontStyle.Bold;
+
+            // cartel de "IT GETS LAGGIER"
+            _lagMsg = MakeText(_canvasRt, "LagMsg", "", new Vector2(0.5f, 0.5f), new Vector2(0f, 270f), new Vector2(1400f, 120f),
+                54, new Color(1f, 0.35f, 0.3f), TextAnchor.MiddleCenter);
+            _lagMsg.fontStyle = FontStyle.Bold;
+
+            // indicador de wifi agonizante (solo Lag Mode): 4 barras que se van muriendo
+            float wx = 220f;
+            for (int b = 0; b < 4; b++)
+            {
+                _wifiBars[b] = MakeImage(_canvasRt, "Wifi" + b, new Vector2(0.5f, 1f),
+                    new Vector2(wx + b * 13f, -128f), new Vector2(9f, 9f + b * 8f), Color.green);
+                _wifiBars[b].rectTransform.pivot = new Vector2(0.5f, 0f);
+            }
+            _wifiLabel = MakeText(_canvasRt, "WifiLabel", "", new Vector2(0.5f, 1f), new Vector2(wx + 20f, -142f), new Vector2(200f, 16f),
+                12, new Color(1f, 1f, 1f, 0.6f), TextAnchor.MiddleCenter);
+        }
+
+        public void ShowLagMessage(string msg)
+        {
+            _lagMsg.text = msg;
+            _lagMsgTimer = 2.6f;
         }
 
         void BuildSide(int i, bool left, string label, Color color)
@@ -223,6 +249,35 @@ namespace LagFighter
                     _winPips[i][w].color = c;
                 }
 
+            // cartel de lag con fade
+            if (_lagMsgTimer > 0f)
+            {
+                _lagMsgTimer -= Time.deltaTime;
+                var lc = _lagMsg.color;
+                lc.a = Mathf.Clamp01(_lagMsgTimer / 0.6f);
+                _lagMsg.color = lc;
+                if (_lagMsgTimer <= 0f) _lagMsg.text = "";
+            }
+
+            // wifi agonizante
+            bool wifi = _mc.LagMode;
+            int lvl = _mc.LagLevel;
+            int alive = Mathf.Max(4 - lvl, 1);
+            var barColor = lvl == 0 ? new Color(0.35f, 0.9f, 0.4f) :
+                           lvl == 1 ? new Color(0.85f, 0.85f, 0.3f) :
+                           lvl == 2 ? new Color(0.95f, 0.6f, 0.2f) : new Color(0.95f, 0.25f, 0.2f);
+            for (int b = 0; b < 4; b++)
+            {
+                _wifiBars[b].gameObject.SetActive(wifi);
+                if (!wifi) continue;
+                bool on = b < alive;
+                var c = on ? barColor : new Color(1f, 1f, 1f, 0.12f);
+                if (on && lvl >= 3) c.a = 0.45f + Mathf.PingPong(Time.time * 2.2f, 0.55f); // parpadeo agónico
+                _wifiBars[b].color = c;
+            }
+            _wifiLabel.gameObject.SetActive(wifi);
+            if (wifi) _wifiLabel.text = $"ping {_mc.CurrentTurnFrames * 16}ms";
+
             bool toggle = GameInput.BoxesPressed();
             if (!toggle && GameInput.ClickPressed() &&
                 RectTransformUtility.RectangleContainsScreenPoint(_boxBtn.rectTransform, GameInput.MousePos(), null))
@@ -338,10 +393,11 @@ namespace LagFighter
                 if (playX >= 0f) _playhead.rectTransform.anchoredPosition = new Vector2(playX, 0f);
 
                 // el stun arrastrado se marca al inicio de la fila (es info pública)
+                float px = _hud.PxPerFrame;
                 float offset = 0f;
                 if (stunFrames > 0)
                 {
-                    offset = stunFrames * PxPerFrame;
+                    offset = stunFrames * px;
                     _stunSeg.gameObject.SetActive(true);
                     _stunSeg.rectTransform.sizeDelta = new Vector2(offset - 2f, _height - 4f);
                     _stunSeg.color = stunKind == StunKind.Blockstun ? new Color(0.3f, 0.5f, 0.85f, 0.75f)
@@ -361,7 +417,7 @@ namespace LagFighter
                     foreach (var mi in queue)
                     {
                         var m = MoveCatalog.All[mi];
-                        float w = m.Total * PxPerFrame - 2f;
+                        float w = m.Total * px - 2f;
                         var chip = GetChip(used++);
                         chip.rectTransform.anchoredPosition = new Vector2(x, 0f);
                         chip.rectTransform.sizeDelta = new Vector2(w, _height - 8f);
@@ -369,7 +425,7 @@ namespace LagFighter
                         if (_dim) c = new Color(c.r, c.g, c.b, 0.8f);
                         chip.color = c;
                         _labels[used - 1].text = ChipLabel(mi);
-                        x += m.Total * PxPerFrame;
+                        x += m.Total * px;
                     }
                 }
                 for (int i = used; i < _chips.Count; i++)

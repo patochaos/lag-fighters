@@ -36,10 +36,19 @@ Balanceado contra la framedata real de ST Ryu (supercombo.gg, 2026-07-17):
 | 10 | Hadouken | 14/2/44 = **60f** | ocupa el turno ENTERO; el salto lo castiga (ST: 52-54f, acá nerf extra a pedido) |
 | 11 | Shoryuken | 4/8/32 = 44f | **invuln 1..10** (vulnerable subiendo, como N.Ryu), hard KD 60f, −17 block (ST jab DP: 44f, invuln 1-8, −18) |
 | 12 | Esperar | 12f | neutral, **bloquea** (no meter órdenes = bloquear) |
-| 13 | Tatsumaki | 12/18/16 = 46f | viaja +1.25, 2 hits, el 2° derriba; **atraviesa hadoukens** (girando 8..40); hitbox baja: los saltos la pasan |
+| 13 | Tatsumaki | 12/18/16 = 46f | viaja +1.6, 2 hits, el 2° derriba; **atraviesa hadoukens** (girando 8..40); hitbox baja: los saltos la pasan |
 | 14 | Agarre | 6/4/20 = 30f | **rompe guardia**, tira 1.2 + KD 45f; los saltos y caídos lo ignoran; **agarre vs agarre = TECH** |
 
 Golpe aéreo = hard KD 60f (un turno entero de okizeme — vigilar si es mucho).
+
+### Lag Mode
+
+Menú inicial en dos pasos: primero NORMAL o **LAG MODE**. En Lag Mode, cada 4
+turnos los frames del turno se DUPLICAN: 60 → 120 → 240 → 480 → 960 (cap).
+Al subir aparece el cartel ("IT GETS LAGGIER…", "EL WIFI ESTÁ LLORANDO",
+"MODO DIAL-UP", "PALOMA MENSAJERA") y un indicador de wifi arriba que pierde
+barras y termina parpadeando en rojo (con "ping" falso). La timeline re-escala
+(RowW / CurrentTurnFrames). El lag level se resetea por round.
 
 ### Presentación / testeo
 

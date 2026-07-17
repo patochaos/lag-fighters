@@ -172,10 +172,21 @@ namespace LagFighter
                         legBRot = Quaternion.Euler(-15f, 0f, 0f);
                         break;
                     case AnimKind.Grab:
-                        // las dos manos al frente buscando el agarre
-                        armF = Vector3.Lerp(ArmFPos, new Vector3(0.14f, 1.3f, 0.62f), pk);
-                        armB = Vector3.Lerp(ArmBPos, new Vector3(-0.14f, 1.3f, 0.6f), pk);
-                        rigZOff = pk * 0.12f;
+                        // agarre: los brazos se ABREN bien anchos en el startup
+                        // y se CIERRAN como pinza al frente en la ventana activa
+                        if (phase < m.Startup)
+                        {
+                            float open = m.Startup <= 0 ? 1f : phase / m.Startup;
+                            armF = Vector3.Lerp(ArmFPos, new Vector3(0.48f, 1.32f, 0.34f), open);
+                            armB = Vector3.Lerp(ArmBPos, new Vector3(-0.48f, 1.32f, 0.3f), open);
+                        }
+                        else
+                        {
+                            armF = new Vector3(0.07f, 1.28f, 0.66f);
+                            armB = new Vector3(-0.07f, 1.28f, 0.62f);
+                            rigZOff = 0.16f;
+                            rigPitch = 8f; // se tira hacia adelante a buscar el cuerpo
+                        }
                         break;
                 }
             }
