@@ -17,7 +17,7 @@ namespace LagFighter
     {
         public const int TicksPerSecond = 60;
         public const float TickDuration = 1f / TicksPerSecond;
-        public const int TurnFrames = 240;
+        public const int TurnFrames = 60; // 1 segundo por turno: denso, decisión a decisión
         public const int MaxHp = 6;
         public const float StageHalfWidth = 4.2f;
         public const float MinSeparation = 0.8f;
@@ -85,8 +85,8 @@ namespace LagFighter
                 MoveDx = 0.55f, MotionStart = 0, MotionEnd = 20 },
 
             new MoveDef { Id = "walkB", Name = "Caminar −", Anim = AnimKind.Walk, Startup = 2, Active = 16, Recovery = 2,
-                Desc = "Retrocede bloqueando: caminar para atrás es guardia.",
-                MoveDx = -0.5f, MotionStart = 0, MotionEnd = 20 },
+                Desc = "Retrocede bloqueando (más lento que avanzar, como en SF2).",
+                MoveDx = -0.38f, MotionStart = 0, MotionEnd = 20 },
 
             new MoveDef { Id = "dashF", Name = "Dash +", Anim = AnimKind.Dash, Startup = 2, Active = 10, Recovery = 4,
                 Desc = "Arremetida hacia adelante. NO bloquea: es puro compromiso.",
@@ -98,7 +98,7 @@ namespace LagFighter
 
             new MoveDef { Id = "jumpF", Name = "Salto +", Anim = AnimKind.Jump, Startup = 6, Active = 28, Recovery = 6,
                 Desc = "Salto adelante: pasa por arriba de los hadoukens. En el aire no bloqueás.",
-                MoveDx = 1.5f, MotionStart = 6, MotionEnd = 34, AirStart = 6, AirEnd = 34 },
+                MoveDx = 1.9f, MotionStart = 6, MotionEnd = 34, AirStart = 6, AirEnd = 34 },
 
             new MoveDef { Id = "jumpN", Name = "Salto N", Anim = AnimKind.Jump, Startup = 6, Active = 28, Recovery = 6,
                 Desc = "Salto vertical. Esquiva proyectiles sin regalar posición.",
@@ -106,27 +106,27 @@ namespace LagFighter
 
             new MoveDef { Id = "jumpB", Name = "Salto −", Anim = AnimKind.Jump, Startup = 6, Active = 28, Recovery = 6,
                 Desc = "Salto atrás. La retirada elegante sobre el hadouken.",
-                MoveDx = -1.5f, MotionStart = 6, MotionEnd = 34, AirStart = 6, AirEnd = 34 },
+                MoveDx = -1.9f, MotionStart = 6, MotionEnd = 34, AirStart = 6, AirEnd = 34 },
 
-            new MoveDef { Id = "atkA", Name = "Golpe A", Anim = AnimKind.AttackA, Startup = 8, Active = 4, Recovery = 18,
-                Desc = "Rápido y corto. Atrapa avances y pega al que salta cerca.",
-                Hits = new[] { new HitWindow { Start = 8, Duration = 4, Fwd0 = 0.45f, Fwd1 = 1.1f, Y0 = 1.0f, Y1 = 1.6f,
-                    Damage = 1f, Hitstun = 24, Blockstun = 14, CounterStun = 36, Push = 0.35f } } },
+            new MoveDef { Id = "atkA", Name = "Golpe A", Anim = AnimKind.AttackA, Startup = 6, Active = 4, Recovery = 14,
+                Desc = "El jab: rápido y corto (+2 on hit, −5 on block). Atrapa avances y saltos cercanos.",
+                Hits = new[] { new HitWindow { Start = 6, Duration = 4, Fwd0 = 0.45f, Fwd1 = 1.1f, Y0 = 1.0f, Y1 = 1.6f,
+                    Damage = 1f, Hitstun = 20, Blockstun = 13, CounterStun = 32, Push = 0.35f } } },
 
             new MoveDef { Id = "atkB", Name = "Patada B", Anim = AnimKind.AttackB, Startup = 16, Active = 6, Recovery = 30,
-                Desc = "Lenta, larga, 2 de daño y DERRIBA. El botón del footsies.",
+                Desc = "El sweep: lenta, larga, 2 de daño, DERRIBA (soft). −10 si la bloquean.",
                 Hits = new[] { new HitWindow { Start = 16, Duration = 6, Fwd0 = 0.5f, Fwd1 = 1.6f, Y0 = 0.5f, Y1 = 1.2f,
-                    Damage = 2f, Hitstun = 50, Blockstun = 20, CounterStun = 65, Push = 0.55f, Knockdown = true } } },
+                    Damage = 2f, Hitstun = 42, Blockstun = 26, CounterStun = 55, Push = 0.55f, Knockdown = true } } },
 
-            new MoveDef { Id = "hadouken", Name = "Hadouken", Anim = AnimKind.Fireball, Startup = 14, Active = 2, Recovery = 26,
-                Desc = "Proyectil que viaja solo. Controla el suelo… hasta que saltan. Uno por vez.",
+            new MoveDef { Id = "hadouken", Name = "Hadouken", Anim = AnimKind.Fireball, Startup = 14, Active = 2, Recovery = 44,
+                Desc = "Proyectil. 60f totales: tirarlo es comprometer EL TURNO ENTERO. Saltable y castigable.",
                 SpawnFrame = 14 },
 
             new MoveDef { Id = "shoryu", Name = "Shoryuken", Anim = AnimKind.Dragon, Startup = 4, Active = 8, Recovery = 32,
-                Desc = "INVULNERABLE al subir, pega altísimo (anti-aéreo), derriba. Si falla: 32f de caída.",
-                InvulnStart = 2, InvulnEnd = 16, AirStart = 6, AirEnd = 30, MoveDx = 0.4f, MotionStart = 2, MotionEnd = 12,
+                Desc = "Invuln frames 1-10 (después, vulnerable subiendo). Anti-aéreo, hard KD, −17 en block.",
+                InvulnStart = 1, InvulnEnd = 10, AirStart = 6, AirEnd = 30, MoveDx = 0.4f, MotionStart = 2, MotionEnd = 12,
                 Hits = new[] { new HitWindow { Start = 4, Duration = 8, Fwd0 = 0.15f, Fwd1 = 0.95f, Y0 = 0.7f, Y1 = 2.5f,
-                    Damage = 2f, Hitstun = 55, Blockstun = 22, CounterStun = 70, Push = 0.4f, Knockdown = true } } },
+                    Damage = 2f, Hitstun = 60, Blockstun = 22, CounterStun = 70, Push = 0.4f, Knockdown = true } } },
 
             new MoveDef { Id = "wait", Name = "Esperar", Anim = AnimKind.Wait, Startup = 0, Active = 12, Recovery = 0,
                 Desc = "12 frames quieto, bloqueando. El neutral también es una decisión." },
@@ -462,7 +462,7 @@ namespace LagFighter
             bool kd = knockdown || airHit; // pegarle a alguien en el aire lo derriba
             float dmg = damage + (counter ? 1f : 0f);
             int stun = counter ? counterStun : hitstun;
-            if (airHit) stun = Math.Max(stun, 45);
+            if (airHit) stun = Math.Max(stun, 60); // caída del aire = hard knockdown
 
             def.Hp = Math.Max(0f, def.Hp - dmg);
             def.X += face * push;

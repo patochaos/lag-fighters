@@ -3,10 +3,11 @@
 ## Concepto vigente (2026-07-17): Footsies por turnos programados
 
 2D de vista lateral (bloques 3D). Cada turno, **ambos jugadores arman en pausa
-una cola de comandos de hasta 240 frames (4s @ 60fps)** y después las dos colas
-se ejecutan **simultáneamente** en tiempo real. Inspiración: *Footsies* (pocos
-botones, todo es distancia, whiff punish y frame advantage) + *Your Only Move
-Is HUSTLE* (planificar viendo framedata, ghost, replay final).
+una cola de comandos de hasta 60 frames (1s @ 60fps)** y después las dos colas
+se ejecutan **simultáneamente** en tiempo real. Turno corto = 1-2 decisiones
+por turno, casi YOMIH puro (arrancó en 240f; se acortó el 2026-07-17).
+Inspiración: *Footsies* (pocos botones, distancia, whiff punish, frame
+advantage) + *Your Only Move Is HUSTLE* (framedata visible, ghost, replay).
 
 ### El mindgame central
 
@@ -19,20 +20,24 @@ Is HUSTLE* (planificar viendo framedata, ghost, replay final).
 
 ### Comandos (12) — `MoveCatalog` en `Sim.cs` (sabor Ryu vs Ken)
 
+Balanceado contra la framedata real de ST Ryu (supercombo.gg, 2026-07-17):
+
 | # | Comando | Frames (S/A/R) | Notas |
 |---|---------|------------|-------|
 | 1 | Caminar + | 20f | +0.55, NO bloquea |
-| 2 | Caminar − | 20f | −0.5, **bloquea** |
+| 2 | Caminar − | 20f | −0.38 (atrás más lento, como SF2), **bloquea** |
 | 3 | Dash + | 16f | +1.0, no bloquea |
 | 4 | Dash − | 16f | −1.0, el bait, no bloquea |
-| 5 | Salto + | 6/28/6 | +1.5, aéreo 6..34: pasa hadoukens, no bloquea |
+| 5 | Salto + | 6/28/6 | +1.9, aéreo 6..34: pasa hadoukens, no bloquea |
 | 6 | Salto N | 6/28/6 | vertical |
-| 7 | Salto − | 6/28/6 | −1.5 |
-| 8 | Golpe A | 8/4/18 | 1 dmg, hs24/bs14, pega alto (anti-aéreo pobre) |
-| 9 | Patada B | 16/6/30 | 2 dmg, hs50/bs20, **derriba** |
-| 10 | Hadouken | 14/2/26 | proyectil 3 u/s, 1 dmg, hs22/bs16, uno por vez |
-| 11 | Shoryuken | 4/8/32 | **invuln 2..16**, hitbox altísima (anti-aéreo), 2 dmg, derriba, 32f de caída |
+| 7 | Salto − | 6/28/6 | −1.9 |
+| 8 | Golpe A | 6/4/14 | 1 dmg, hs20/bs13 → **+2 on hit / −5 on block** (jab de ST: +4/+2) |
+| 9 | Patada B | 16/6/30 | 2 dmg, soft KD 42f, bs26 → **−10 on block** (sweep ST: −9) |
+| 10 | Hadouken | 14/2/44 = **60f** | ocupa el turno ENTERO; el salto lo castiga (ST: 52-54f, acá nerf extra a pedido) |
+| 11 | Shoryuken | 4/8/32 = 44f | **invuln 1..10** (vulnerable subiendo, como N.Ryu), hard KD 60f, −17 block (ST jab DP: 44f, invuln 1-8, −18) |
 | 12 | Esperar | 12f | neutral, **bloquea** |
+
+Golpe aéreo = hard KD 60f (un turno entero de okizeme — vigilar si es mucho).
 
 - **Guardia automática (sin botón)**: bloqueás en neutral, esperando o caminando
   atrás, en el piso. Bloquear = BLOCKSTUN (te come turno). En el aire y en
