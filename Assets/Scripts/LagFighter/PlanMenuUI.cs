@@ -75,7 +75,7 @@ namespace LagFighter
                 case MoveCatalog.Grab: return "ROMPE GUARDIA · TIRA";
                 case MoveCatalog.Shoryuken: return "INVULN 1-10 · DERRIBA";
                 case MoveCatalog.Hadouken: return "PROYECTIL · turno entero";
-                case MoveCatalog.Tatsu: return "2 HITS · VIAJA · DERRIBA";
+                case MoveCatalog.Tatsu: return "PASA HADOUKENS · DERRIBA";
                 case MoveCatalog.WalkB: return "BLOQUEA · retrocede";
                 case MoveCatalog.Wait: return "BLOQUEA · quieto";
                 case MoveCatalog.JumpF: return "PATADA AL CAER · +1.9";
@@ -190,14 +190,15 @@ namespace LagFighter
             if (_root != null) _root.SetActive(false);
         }
 
-        public void SetPrediction(PlanPreview g, int framesUsed)
+        public void SetPrediction(PlanPreview g, int framesUsed, int available)
         {
-            int left = SimConfig.TurnFrames - framesUsed;
+            int left = available - framesUsed;
+            string stunNote = available < SimConfig.TurnFrames ? $" (perdés {SimConfig.TurnFrames - available}f por el stun)" : "";
             string extra = "";
             if (g.DamageIfStill > 0f) extra += $"  ·  pegaría {g.DamageIfStill:0} si no reacciona";
             if (g.BlockedCount > 0) extra += $"  ·  {g.BlockedCount} bloqueado(s) si se queda en neutral";
-            _status.text = $"{framesUsed}/{SimConfig.TurnFrames} frames planificados — quedan {left}{extra}";
-            _status.color = left == 0 ? new Color(1f, 0.85f, 0.3f) : new Color(0.5f, 1f, 0.6f);
+            _status.text = $"{framesUsed}/{available} frames planificados{stunNote} — quedan {left}{extra}";
+            _status.color = left == 0 ? new Color(1f, 0.85f, 0.3f) : available < SimConfig.TurnFrames ? new Color(1f, 0.65f, 0.4f) : new Color(0.5f, 1f, 0.6f);
         }
 
         void Highlight(int pos)

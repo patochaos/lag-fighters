@@ -21,8 +21,9 @@ namespace LagFighter
             int face = oppX >= myX ? 1 : -1;
             bool oppDown = sim.StunRemaining(opp) > 20;
             bool threwFireball = false;
+            int budget = SimConfig.TurnFrames - sim.StunRemaining(me); // el stun arrastrado come turno
 
-            while (frames < SimConfig.TurnFrames)
+            while (frames < budget)
             {
                 float dist = System.Math.Abs(oppX - myX);
                 double r = _rng.NextDouble();
@@ -73,9 +74,9 @@ namespace LagFighter
                 }
 
                 var m = MoveCatalog.All[pick];
-                if (frames + m.Total > SimConfig.TurnFrames)
+                if (frames + m.Total > budget)
                 {
-                    if (frames + MoveCatalog.All[MoveCatalog.Wait].Total <= SimConfig.TurnFrames)
+                    if (frames + MoveCatalog.All[MoveCatalog.Wait].Total <= budget)
                     {
                         plan.Add(MoveCatalog.Wait);
                         frames += MoveCatalog.All[MoveCatalog.Wait].Total;

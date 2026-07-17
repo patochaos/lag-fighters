@@ -210,8 +210,8 @@ namespace LagFighter
 
             bool executing = _mc.State == MatchController.Flow.Executing || _mc.State == MatchController.Flow.Replay;
             float playX = executing ? Mathf.Clamp((_mc.TickFloat - _mc.TurnStartTick) * PxPerFrame, 0f, RowW) : -1f;
-            _row0.UpdateRow(_mc.GetPlan(0), _mc.RowRevealed(0), playX);
-            _row1.UpdateRow(_mc.GetPlan(1), _mc.RowRevealed(1), playX);
+            _row0.UpdateRow(_mc.GetPlan(0), _mc.RowRevealed(0), playX, _mc.TurnStartStun[0], _mc.TurnStartStunKind[0]);
+            _row1.UpdateRow(_mc.GetPlan(1), _mc.RowRevealed(1), playX, _mc.TurnStartStun[1], _mc.TurnStartStunKind[1]);
 
             // distancia, rounds ganados y toggle de cajas
             _dist.text = $"dist {Mathf.Abs(sim.Fighters[1].X - sim.Fighters[0].X):0.00}";
@@ -292,6 +292,8 @@ namespace LagFighter
             readonly RectTransform _area;
             readonly RectTransform _chipParent;
             readonly Image _playhead;
+            readonly Image _stunSeg;
+            readonly Text _stunLabel;
             readonly Text _hidden;
             readonly float _height;
             readonly bool _dim;
@@ -318,20 +320,44 @@ namespace LagFighter
                 _hidden = hud.MakeText(_area, "Hidden", "? ? ?", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(300f, 24f),
                     18, new Color(1f, 1f, 1f, 0.35f), TextAnchor.MiddleCenter);
 
+                // stun arrastrado del turno anterior: te come el arranque del turno
+                _stunSeg = hud.MakeImage(_area, "StunSeg", new Vector2(0f, 0.5f), Vector2.zero, new Vector2(0f, height - 4f), Color.white);
+                _stunSeg.rectTransform.pivot = new Vector2(0f, 0.5f);
+                _stunLabel = hud.MakeText(_stunSeg.rectTransform, "L", "", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(120f, 22f),
+                    14, Color.white, TextAnchor.MiddleCenter);
+                _stunLabel.fontStyle = FontStyle.Bold;
+
                 _playhead = hud.MakeImage(_area, "Playhead", new Vector2(0f, 0.5f), Vector2.zero, new Vector2(3f, height), Color.white);
                 _playhead.rectTransform.pivot = new Vector2(0.5f, 0.5f);
             }
 
-            public void UpdateRow(List<int> queue, bool revealed, float playX)
+            public void UpdateRow(List<int> queue, bool revealed, float playX, int stunFrames, StunKind stunKind)
             {
                 _hidden.gameObject.SetActive(!revealed);
                 _playhead.gameObject.SetActive(playX >= 0f);
                 if (playX >= 0f) _playhead.rectTransform.anchoredPosition = new Vector2(playX, 0f);
 
+                // el stun arrastrado se marca al inicio de la fila (es info pública)
+                float offset = 0f;
+                if (stunFrames > 0)
+                {
+                    offset = stunFrames * PxPerFrame;
+                    _stunSeg.gameObject.SetActive(true);
+                    _stunSeg.rectTransform.sizeDelta = new Vector2(offset - 2f, _height - 4f);
+                    _stunSeg.color = stunKind == StunKind.Blockstun ? new Color(0.3f, 0.5f, 0.85f, 0.75f)
+                                   : stunKind == StunKind.Knockdown ? new Color(0.9f, 0.45f, 0.15f, 0.8f)
+                                   : new Color(0.85f, 0.25f, 0.22f, 0.8f);
+                    _stunLabel.text = offset > 46f ? $"−{stunFrames}f" : "";
+                }
+                else
+                {
+                    _stunSeg.gameObject.SetActive(false);
+                }
+
                 int used = 0;
                 if (revealed && queue != null)
                 {
-                    float x = 0f;
+                    float x = offset; // las órdenes recién arrancan cuando termina el stun
                     foreach (var mi in queue)
                     {
                         var m = MoveCatalog.All[mi];

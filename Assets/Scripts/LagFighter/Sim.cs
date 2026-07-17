@@ -66,6 +66,7 @@ namespace LagFighter
         public int MotionStart, MotionEnd;
         public int AirStart = -1, AirEnd = -1;       // ventana en el aire (hurtbox alta, no bloquea)
         public int InvulnStart = -1, InvulnEnd = -1; // ventana invulnerable (Shoryuken)
+        public int ProjImmuneStart = -1, ProjImmuneEnd = -1; // inmune SOLO a proyectiles (Tatsumaki)
         public int SpawnFrame = -1;                  // frame en que larga el proyectil
         public int Total => Startup + Active + Recovery;
         public bool IsAttack => Hits.Length > 0 || SpawnFrame >= 0;
@@ -138,8 +139,8 @@ namespace LagFighter
                 Desc = "12 frames quieto, bloqueando. No meter órdenes también bloquea." },
 
             new MoveDef { Id = "tatsu", Name = "Tatsumaki", Anim = AnimKind.Tatsu, Startup = 12, Active = 18, Recovery = 16,
-                Desc = "Patada giratoria que viaja hacia adelante. Dos hits; el segundo derriba. Los saltos la pasan.",
-                MoveDx = 1.25f, MotionStart = 10, MotionEnd = 30,
+                Desc = "Giratoria que viaja y ATRAVIESA hadoukens (girando, 8..40). Dos hits; el segundo derriba.",
+                MoveDx = 1.25f, MotionStart = 10, MotionEnd = 30, ProjImmuneStart = 8, ProjImmuneEnd = 40,
                 Hits = new[] {
                     new HitWindow { Start = 14, Duration = 5, Fwd0 = 0.3f, Fwd1 = 0.95f, Y0 = 0.9f, Y1 = 1.3f,
                         Damage = 1f, Hitstun = 22, Blockstun = 14, CounterStun = 32, Push = 0.3f },
@@ -250,6 +251,14 @@ namespace LagFighter
             if (m == null || m.InvulnEnd <= m.InvulnStart) return false;
             int p = Phase(i);
             return p >= m.InvulnStart && p < m.InvulnEnd;
+        }
+
+        public bool IsProjImmune(int i)
+        {
+            var m = CurrentMove(i);
+            if (m == null || m.ProjImmuneEnd <= m.ProjImmuneStart) return false;
+            int p = Phase(i);
+            return p >= m.ProjImmuneStart && p < m.ProjImmuneEnd;
         }
 
         // Guardia automática: neutral, esperar o caminar hacia atrás — en el piso.
@@ -409,7 +418,8 @@ namespace LagFighter
                 var p = Projectiles[pi];
                 if (!p.Alive) continue;
                 int def = 1 - p.Owner;
-                if (IsInvulnerable(def) || !p.Rect.Overlaps(HurtRect(def))) continue;
+                if (IsInvulnerable(def) || IsProjImmune(def)) continue; // el tatsu los atraviesa: el proyectil sigue viajando
+                if (!p.Rect.Overlaps(HurtRect(def))) continue;
                 ApplyContact(BuildPending(p.Owner, MoveCatalog.Hadouken,
                     SimConfig.ProjDamage, SimConfig.ProjHitstun, SimConfig.ProjBlockstun, SimConfig.ProjHitstun + 8,
                     SimConfig.ProjPush, knockdown: false, attackerFreeTick: AttackerFreeTick(p.Owner)));

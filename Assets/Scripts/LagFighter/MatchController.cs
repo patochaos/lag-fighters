@@ -31,6 +31,8 @@ namespace LagFighter
         readonly List<(List<int> q0, List<int> q1)> _turnLog = new List<(List<int>, List<int>)>();
         int _replayTurn;
         readonly int[] _wins = new int[2];
+        public readonly int[] TurnStartStun = new int[2];        // stun arrastrado al arrancar el turno
+        public readonly StunKind[] TurnStartStunKind = new StunKind[2];
         float _roundTimer;
         float _hitstop;
         int _lastProjCount;
@@ -115,6 +117,7 @@ namespace LagFighter
         void StartPlanning()
         {
             TurnNumber++;
+            CaptureTurnStartStun();
             _plans[0].Clear();
             _plans[1].Clear();
             if (Mode != GameMode.PvP)
@@ -163,7 +166,9 @@ namespace LagFighter
             return f;
         }
 
-        public bool PlanFits(int moveIndex) => PlanFramesUsed(Picker) + MoveCatalog.All[moveIndex].Total <= SimConfig.TurnFrames;
+        // el stun arrastrado te come frames del turno: solo se planifica lo que entra
+        public int PlanFramesAvailable(int i) => SimConfig.TurnFrames - TurnStartStun[i];
+        public bool PlanFits(int moveIndex) => PlanFramesUsed(Picker) + MoveCatalog.All[moveIndex].Total <= PlanFramesAvailable(Picker);
 
         public void PlanAdd(int moveIndex)
         {
@@ -196,7 +201,7 @@ namespace LagFighter
         {
             var g = PlanPreview.Build(Sim, Picker, _plans[Picker]);
             _ghost.Show(g, Picker);
-            _menu.SetPrediction(g, PlanFramesUsed(Picker));
+            _menu.SetPrediction(g, PlanFramesUsed(Picker), PlanFramesAvailable(Picker));
         }
 
         // ---------- execution ----------
@@ -328,6 +333,16 @@ namespace LagFighter
             Sim.SetQueue(1, t.q1);
             TurnStartTick = Sim.Tick;
             TurnNumber = _replayTurn + 1;
+            CaptureTurnStartStun();
+        }
+
+        void CaptureTurnStartStun()
+        {
+            for (int i = 0; i < 2; i++)
+            {
+                TurnStartStun[i] = Sim.StunRemaining(i);
+                TurnStartStunKind[i] = Sim.Fighters[i].Stun;
+            }
         }
 
         void TickReplay()
