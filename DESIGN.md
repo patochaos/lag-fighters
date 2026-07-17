@@ -28,7 +28,7 @@ Balanceado contra la framedata real de ST Ryu (supercombo.gg, 2026-07-17):
 | 2 | Caminar − | 20f | −0.38 (atrás más lento, como SF2), **bloquea** |
 | 3 | Dash + | 16f | +1.0, no bloquea |
 | 4 | Dash − | 16f | −1.0, el bait, no bloquea |
-| 5 | Salto + | 6/28/6 | +1.9, aéreo 6..34: pasa hadoukens, no bloquea |
+| 5 | Salto + | 6/28/6 | +1.9, aéreo 6..34, **patada de jump-in** (hit 20..30, 1 dmg, ~+6 on hit) |
 | 6 | Salto N | 6/28/6 | vertical |
 | 7 | Salto − | 6/28/6 | −1.9 |
 | 8 | Golpe A | 6/4/14 | 1 dmg, hs20/bs13 → **+2 on hit / −5 on block** (jab de ST: +4/+2) |
@@ -38,6 +38,16 @@ Balanceado contra la framedata real de ST Ryu (supercombo.gg, 2026-07-17):
 | 12 | Esperar | 12f | neutral, **bloquea** |
 
 Golpe aéreo = hard KD 60f (un turno entero de okizeme — vigilar si es mucho).
+
+### Presentación / testeo
+
+- Rounds al mejor de 3 (marcadores dorados junto a los pips; V repite el
+  último round, R es revancha).
+- Juice: hitstop cosmético (pausa el avance de ticks, NO toca la sim),
+  screen shake (`CameraFX`) y sonidos sintetizados en runtime (`SfxLib`,
+  cero assets).
+- Botón CAJAS ON/OFF (o tecla H) para hurt/hitboxes; indicador de
+  distancia bajo el prompt.
 
 - **Guardia automática (sin botón)**: bloqueás en neutral, esperando o caminando
   atrás, en el piso. Bloquear = BLOCKSTUN (te come turno). En el aire y en
