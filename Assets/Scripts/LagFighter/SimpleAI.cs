@@ -30,10 +30,11 @@ namespace LagFighter
 
                 if (oppDown && plan.Count < 3)
                 {
-                    // okizeme: acercarse y plantar una patada o presión
+                    // okizeme: acercarse y elegir entre pegar o agarrar al levantarse
                     pick = dist > 1.8f ? MoveCatalog.DashF :
-                           r < 0.45 ? MoveCatalog.AttackB :
-                           r < 0.75 ? MoveCatalog.AttackA : MoveCatalog.Hadouken;
+                           r < 0.35 ? MoveCatalog.AttackB :
+                           r < 0.55 ? MoveCatalog.Grab :
+                           r < 0.80 ? MoveCatalog.AttackA : MoveCatalog.Tatsu;
                 }
                 else if (dist > 2.6f)
                 {
@@ -46,26 +47,29 @@ namespace LagFighter
                 }
                 else if (dist > 1.5f)
                 {
-                    if (r < 0.20) pick = MoveCatalog.WalkF;
-                    else if (r < 0.38) pick = MoveCatalog.AttackB;
-                    else if (r < 0.48) pick = MoveCatalog.AttackA;
-                    else if (r < 0.58) pick = MoveCatalog.WalkB;   // bloquea caminando atrás
-                    else if (r < 0.66) pick = MoveCatalog.Wait;    // neutral que bloquea
-                    else if (r < 0.74) pick = MoveCatalog.DashB;
-                    else if (r < 0.82) pick = MoveCatalog.JumpF;
-                    else if (r < 0.90 && !threwFireball) { pick = MoveCatalog.Hadouken; threwFireball = true; }
+                    if (r < 0.18) pick = MoveCatalog.WalkF;
+                    else if (r < 0.34) pick = MoveCatalog.AttackB;
+                    else if (r < 0.44) pick = MoveCatalog.AttackA;
+                    else if (r < 0.54) pick = MoveCatalog.WalkB;   // bloquea caminando atrás
+                    else if (r < 0.62) pick = MoveCatalog.Wait;    // neutral que bloquea
+                    else if (r < 0.70) pick = MoveCatalog.Tatsu;   // giratoria que viaja
+                    else if (r < 0.78) pick = MoveCatalog.DashB;
+                    else if (r < 0.86) pick = MoveCatalog.JumpF;
+                    else if (r < 0.94 && !threwFireball) { pick = MoveCatalog.Hadouken; threwFireball = true; }
                     else pick = MoveCatalog.AttackB;
                 }
                 else
                 {
-                    if (r < 0.26) pick = MoveCatalog.AttackA;
-                    else if (r < 0.40) pick = MoveCatalog.AttackB;
-                    else if (r < 0.52) pick = MoveCatalog.WalkB;
-                    else if (r < 0.62) pick = MoveCatalog.Wait;
-                    else if (r < 0.70) pick = MoveCatalog.DashB;
+                    if (r < 0.20) pick = MoveCatalog.AttackA;
+                    else if (r < 0.32) pick = MoveCatalog.AttackB;
+                    else if (r < 0.46) pick = MoveCatalog.Grab;    // rompe a los bloqueadores
+                    else if (r < 0.56) pick = MoveCatalog.WalkB;
+                    else if (r < 0.64) pick = MoveCatalog.Wait;
+                    else if (r < 0.72) pick = MoveCatalog.DashB;
                     else if (r < 0.78) pick = MoveCatalog.Shoryuken; // la apuesta
-                    else if (r < 0.88) pick = MoveCatalog.JumpB;
-                    else pick = MoveCatalog.AttackA;
+                    else if (r < 0.84) pick = MoveCatalog.Tatsu;
+                    else if (r < 0.92) pick = MoveCatalog.JumpB;
+                    else pick = MoveCatalog.JumpN;
                 }
 
                 var m = MoveCatalog.All[pick];

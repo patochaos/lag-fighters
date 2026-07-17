@@ -385,6 +385,10 @@ namespace LagFighter
                         SfxLib.Play(SfxLib.Kind.Block, 0.8f);
                         _hitstop = Mathf.Max(_hitstop, 0.04f);
                         break;
+                    case EvKind.Tech:
+                        SfxLib.Play(SfxLib.Kind.Block, 1f);
+                        _hitstop = Mathf.Max(_hitstop, 0.08f);
+                        break;
                 }
                 _hud.OnSimEvent(ev);
             }
@@ -430,6 +434,8 @@ namespace LagFighter
         static Keyboard K => Keyboard.current;
         public static bool LeftPressed() => K != null && (K.leftArrowKey.wasPressedThisFrame || K.aKey.wasPressedThisFrame);
         public static bool RightPressed() => K != null && (K.rightArrowKey.wasPressedThisFrame || K.dKey.wasPressedThisFrame);
+        public static bool UpPressed() => K != null && (K.upArrowKey.wasPressedThisFrame || K.wKey.wasPressedThisFrame);
+        public static bool DownPressed() => K != null && (K.downArrowKey.wasPressedThisFrame || K.sKey.wasPressedThisFrame);
         public static bool AddPressed() => K != null && (K.enterKey.wasPressedThisFrame || K.jKey.wasPressedThisFrame);
         public static bool UndoPressed() => K != null && K.backspaceKey.wasPressedThisFrame;
         public static bool EndTurnPressed() => K != null && (K.spaceKey.wasPressedThisFrame || K.fKey.wasPressedThisFrame);
@@ -451,6 +457,8 @@ namespace LagFighter
 #else
         public static bool LeftPressed() => Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A);
         public static bool RightPressed() => Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D);
+        public static bool UpPressed() => Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W);
+        public static bool DownPressed() => Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S);
         public static bool AddPressed() => Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.J);
         public static bool UndoPressed() => Input.GetKeyDown(KeyCode.Backspace);
         public static bool EndTurnPressed() => Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.F);

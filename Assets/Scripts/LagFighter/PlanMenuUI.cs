@@ -4,16 +4,31 @@ using UnityEngine.UI;
 
 namespace LagFighter
 {
-    // Menú de planificación del turno (tiempo pausado): 12 cartas con framedata.
-    // Click en carta agrega · 1-9/0 agrega directo · ←/→ + Enter/J agrega ·
-    // Backspace (o botón ⌫) borra la última · Espacio (o botón LISTO) cierra.
+    // Menú de planificación del turno (tiempo pausado). Grilla 7x2:
+    // fila de arriba = movimiento, fila de abajo = ataques y defensa.
+    // Cada carta lleva una franja de color por categoría y una mini-barra
+    // de framedata (startup amarillo / activo rojo / recovery azul), el
+    // mismo lenguaje visual que la barra de fases del HUD.
+    // Click o 1-9/0 agrega · ←→↑↓ + Enter/J agrega · Backspace borra ·
+    // Espacio (o botón ¡LISTO!) cierra el turno.
     public class PlanMenuUI : MonoBehaviour
     {
-        const float CardW = 148f, CardH = 100f, Gap = 4f;
+        const int Cols = 7;
+        const float CardW = 196f, CardH = 118f, Gap = 6f;
+
+        // orden de display: movimiento arriba, acción abajo
+        static readonly int[] Order =
+        {
+            MoveCatalog.WalkF, MoveCatalog.WalkB, MoveCatalog.DashF, MoveCatalog.DashB,
+            MoveCatalog.JumpF, MoveCatalog.JumpN, MoveCatalog.JumpB,
+            MoveCatalog.AttackA, MoveCatalog.AttackB, MoveCatalog.Tatsu, MoveCatalog.Hadouken,
+            MoveCatalog.Shoryuken, MoveCatalog.Grab, MoveCatalog.Wait,
+        };
 
         MatchController _mc;
+        Font _font;
         GameObject _root;
-        Image[] _cardBg;
+        Image[] _cardBg, _cardHeader;
         RectTransform[] _cardRt;
         Image _undoBtn, _doneBtn;
         Text _detail, _status;
@@ -38,9 +53,45 @@ namespace LagFighter
             return ui;
         }
 
+        static Color CategoryColor(int mi)
+        {
+            var m = MoveCatalog.All[mi];
+            if (mi == MoveCatalog.Grab) return new Color(0.85f, 0.3f, 0.75f);
+            if (mi == MoveCatalog.Shoryuken) return new Color(0.95f, 0.7f, 0.15f);
+            if (mi == MoveCatalog.Hadouken) return new Color(0.3f, 0.55f, 0.95f);
+            if (mi == MoveCatalog.Tatsu) return new Color(0.9f, 0.45f, 0.15f);
+            if (m.Hits.Length > 0 && m.HasAir) return new Color(0.55f, 0.8f, 0.35f);
+            if (m.IsAttack) return new Color(0.9f, 0.32f, 0.24f);
+            if (m.HasAir) return new Color(0.55f, 0.8f, 0.35f);
+            if (mi == MoveCatalog.Wait || mi == MoveCatalog.WalkB) return new Color(0.35f, 0.55f, 0.85f);
+            return new Color(0.3f, 0.7f, 0.45f);
+        }
+
+        static string CardTag(int mi)
+        {
+            var m = MoveCatalog.All[mi];
+            switch (mi)
+            {
+                case MoveCatalog.Grab: return "ROMPE GUARDIA · TIRA";
+                case MoveCatalog.Shoryuken: return "INVULN 1-10 · DERRIBA";
+                case MoveCatalog.Hadouken: return "PROYECTIL · turno entero";
+                case MoveCatalog.Tatsu: return "2 HITS · VIAJA · DERRIBA";
+                case MoveCatalog.WalkB: return "BLOQUEA · retrocede";
+                case MoveCatalog.Wait: return "BLOQUEA · quieto";
+                case MoveCatalog.JumpF: return "PATADA AL CAER · +1.9";
+                case MoveCatalog.JumpN: return "PATADA AL CAER · vertical";
+                case MoveCatalog.JumpB: return "sobre hadoukens · −1.9";
+                case MoveCatalog.AttackA: return "+2 hit / −5 block";
+                case MoveCatalog.AttackB: return "DERRIBA · −10 block";
+                case MoveCatalog.DashF: return "cierra distancia · no bloquea";
+                case MoveCatalog.DashB: return "el bait · no bloquea";
+                default: return "avanza · no bloquea";
+            }
+        }
+
         void Build(RectTransform canvasRt)
         {
-            var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
             _root = new GameObject("Root", typeof(RectTransform));
             var rootRt = _root.GetComponent<RectTransform>();
@@ -49,57 +100,81 @@ namespace LagFighter
             rootRt.anchorMax = Vector2.one;
             rootRt.offsetMin = rootRt.offsetMax = Vector2.zero;
 
-            var moves = MoveCatalog.All;
-            float totalW = moves.Length * (CardW + Gap) - Gap;
+            int rows = Mathf.CeilToInt(Order.Length / (float)Cols);
+            float totalW = Cols * (CardW + Gap) - Gap;
+            float totalH = rows * (CardH + Gap) - Gap;
 
-            var panel = MakeImage(rootRt, "Panel", new Vector2(0.5f, 0f), new Vector2(0f, 88f), new Vector2(totalW + 24f, CardH + 20f), new Color(0f, 0f, 0f, 0.65f), font);
+            var panel = MakeImage(rootRt, "Panel", new Vector2(0.5f, 0f), new Vector2(0f, 26f + totalH / 2f + 12f),
+                new Vector2(totalW + 28f, totalH + 28f), new Color(0.04f, 0.05f, 0.07f, 0.85f));
 
-            _cardBg = new Image[moves.Length];
-            _cardRt = new RectTransform[moves.Length];
-            for (int i = 0; i < moves.Length; i++)
+            _cardBg = new Image[Order.Length];
+            _cardHeader = new Image[Order.Length];
+            _cardRt = new RectTransform[Order.Length];
+
+            for (int pos = 0; pos < Order.Length; pos++)
             {
-                var m = moves[i];
-                float x = -totalW / 2f + CardW / 2f + i * (CardW + Gap);
-                var card = MakeImage(panel.rectTransform, "Card" + i, new Vector2(0.5f, 0.5f), new Vector2(x, 0f), new Vector2(CardW, CardH), new Color(0.13f, 0.14f, 0.18f, 0.95f), font);
-                _cardBg[i] = card;
-                _cardRt[i] = card.rectTransform;
+                int mi = Order[pos];
+                var m = MoveCatalog.All[mi];
+                int col = pos % Cols, row = pos / Cols;
+                float x = -totalW / 2f + CardW / 2f + col * (CardW + Gap);
+                float y = totalH / 2f - CardH / 2f - row * (CardH + Gap);
+                var cat = CategoryColor(mi);
 
-                string key = i < 9 ? (i + 1).ToString() : i == 9 ? "0" : "";
-                MakeText(card.rectTransform, "Key", key, new Vector2(0f, 1f), new Vector2(8f, -3f), new Vector2(30f, 16f), 12, new Color(1f, 1f, 1f, 0.4f), TextAnchor.UpperLeft, font);
-                MakeText(card.rectTransform, "Name", m.Name, new Vector2(0.5f, 1f), new Vector2(0f, -14f), new Vector2(CardW - 6f, 24f), 15, Color.white, TextAnchor.UpperCenter, font);
-                MakeText(card.rectTransform, "Frames", $"{m.Startup}/{m.Active}/{m.Recovery} · {m.Total}f", new Vector2(0.5f, 0f), new Vector2(0f, 32f), new Vector2(CardW - 6f, 18f), 12, new Color(0.95f, 0.85f, 0.4f), TextAnchor.MiddleCenter, font);
-                MakeText(card.rectTransform, "Extra", CardTag(m, i), new Vector2(0.5f, 0f), new Vector2(0f, 12f), new Vector2(CardW - 4f, 16f), 11, TagColor(m, i), TextAnchor.MiddleCenter, font);
+                var card = MakeImage(panel.rectTransform, "Card" + pos, new Vector2(0.5f, 0.5f), new Vector2(x, y),
+                    new Vector2(CardW, CardH), new Color(0.12f, 0.13f, 0.17f, 0.98f));
+                _cardBg[pos] = card;
+                _cardRt[pos] = card.rectTransform;
+
+                // franja superior de categoría con el nombre
+                var header = MakeImage(card.rectTransform, "Header", new Vector2(0.5f, 1f), new Vector2(0f, -13f),
+                    new Vector2(CardW, 26f), new Color(cat.r, cat.g, cat.b, 0.85f));
+                _cardHeader[pos] = header;
+                var name = MakeText(header.rectTransform, "Name", m.Name, new Vector2(0.5f, 0.5f), Vector2.zero,
+                    new Vector2(CardW - 30f, 22f), 15, Color.white, TextAnchor.MiddleCenter);
+                name.fontStyle = FontStyle.Bold;
+
+                string key = pos < 9 ? (pos + 1).ToString() : pos == 9 ? "0" : "";
+                MakeText(header.rectTransform, "Key", key, new Vector2(0f, 0.5f), new Vector2(10f, 0f),
+                    new Vector2(20f, 20f), 13, new Color(1f, 1f, 1f, 0.65f), TextAnchor.MiddleLeft);
+
+                // mini-barra de framedata: startup/activo/recovery a escala
+                float barY = -34f, barW = CardW - 22f;
+                MakeImage(card.rectTransform, "BarBg", new Vector2(0.5f, 1f), new Vector2(0f, barY), new Vector2(barW, 9f), new Color(0f, 0f, 0f, 0.55f));
+                float px = barW / m.Total;
+                float sx = -barW / 2f;
+                MakeSeg(card.rectTransform, sx, barY, m.Startup * px, new Color(0.95f, 0.85f, 0.25f, 0.95f));
+                MakeSeg(card.rectTransform, sx + m.Startup * px, barY, m.Active * px, new Color(0.95f, 0.3f, 0.22f, 0.95f));
+                MakeSeg(card.rectTransform, sx + (m.Startup + m.Active) * px, barY, m.Recovery * px, new Color(0.3f, 0.55f, 0.95f, 0.95f));
+
+                MakeText(card.rectTransform, "Frames", $"{m.Startup} / {m.Active} / {m.Recovery}   ·   {m.Total}f",
+                    new Vector2(0.5f, 1f), new Vector2(0f, -52f), new Vector2(CardW - 10f, 18f), 13,
+                    new Color(0.95f, 0.88f, 0.55f), TextAnchor.MiddleCenter);
+
+                string dmg = m.TotalDamage > 0f ? $"{m.TotalDamage:0} DMG" + (m.Hits.Length > 1 ? $" ({m.Hits.Length} hits)" : "") : " ";
+                MakeText(card.rectTransform, "Dmg", dmg, new Vector2(0.5f, 1f), new Vector2(0f, -72f),
+                    new Vector2(CardW - 10f, 18f), 14, Color.white, TextAnchor.MiddleCenter).fontStyle = FontStyle.Bold;
+
+                MakeText(card.rectTransform, "Tag", CardTag(mi), new Vector2(0.5f, 0f), new Vector2(0f, 13f),
+                    new Vector2(CardW - 8f, 16f), 11, new Color(cat.r * 0.6f + 0.4f, cat.g * 0.6f + 0.4f, cat.b * 0.6f + 0.4f), TextAnchor.MiddleCenter);
             }
 
-            // botones clickeables
-            _undoBtn = MakeImage(rootRt, "UndoBtn", new Vector2(0.5f, 0f), new Vector2(-totalW / 2f - 70f, 88f + (CardH + 20f) / 2f), new Vector2(100f, 46f), new Color(0.35f, 0.18f, 0.18f, 0.95f), font);
-            MakeText(_undoBtn.rectTransform, "T", "← BORRAR", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(96f, 30f), 14, Color.white, TextAnchor.MiddleCenter, font);
-            _doneBtn = MakeImage(rootRt, "DoneBtn", new Vector2(0.5f, 0f), new Vector2(totalW / 2f + 70f, 88f + (CardH + 20f) / 2f), new Vector2(100f, 46f), new Color(0.16f, 0.4f, 0.2f, 0.95f), font);
-            MakeText(_doneBtn.rectTransform, "T", "¡LISTO!", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(96f, 30f), 14, Color.white, TextAnchor.MiddleCenter, font);
+            float sideX = totalW / 2f + 84f;
+            float sideY = 26f + totalH / 2f + 12f;
+            _undoBtn = MakeImage(rootRt, "UndoBtn", new Vector2(0.5f, 0f), new Vector2(-sideX, sideY + 32f), new Vector2(120f, 48f), new Color(0.4f, 0.2f, 0.2f, 0.95f));
+            MakeText(_undoBtn.rectTransform, "T", "← BORRAR", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(116f, 30f), 15, Color.white, TextAnchor.MiddleCenter).fontStyle = FontStyle.Bold;
+            _doneBtn = MakeImage(rootRt, "DoneBtn", new Vector2(0.5f, 0f), new Vector2(sideX, sideY + 32f), new Vector2(120f, 48f), new Color(0.18f, 0.45f, 0.22f, 0.95f));
+            MakeText(_doneBtn.rectTransform, "T", "¡LISTO!", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(116f, 30f), 15, Color.white, TextAnchor.MiddleCenter).fontStyle = FontStyle.Bold;
 
-            _detail = MakeText(rootRt, "Detail", "", new Vector2(0.5f, 0f), new Vector2(0f, 226f), new Vector2(1700f, 24f), 16, Color.white, TextAnchor.MiddleCenter, font);
-            _status = MakeText(rootRt, "Status", "", new Vector2(0.5f, 0f), new Vector2(0f, 202f), new Vector2(1700f, 22f), 16, new Color(0.5f, 1f, 0.6f), TextAnchor.MiddleCenter, font);
-            MakeText(rootRt, "Help", "click o 1-9/0 agrega · ←/→ + Enter agrega · Backspace borra · ESPACIO cierra el turno", new Vector2(0.5f, 0f), new Vector2(0f, 40f), new Vector2(1300f, 22f), 14, new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleCenter, font);
+            float topY = 26f + totalH + 40f;
+            _detail = MakeText(rootRt, "Detail", "", new Vector2(0.5f, 0f), new Vector2(0f, topY + 26f), new Vector2(1700f, 24f), 16, Color.white, TextAnchor.MiddleCenter);
+            _status = MakeText(rootRt, "Status", "", new Vector2(0.5f, 0f), new Vector2(0f, topY), new Vector2(1700f, 22f), 16, new Color(0.5f, 1f, 0.6f), TextAnchor.MiddleCenter);
+            MakeText(rootRt, "Help", "click o 1-9/0 agrega · flechas + Enter agrega · Backspace borra · ESPACIO cierra el turno",
+                new Vector2(0.5f, 0f), new Vector2(0f, 6f), new Vector2(1300f, 20f), 13, new Color(1f, 1f, 1f, 0.45f), TextAnchor.MiddleCenter);
         }
 
-        static string CardTag(MoveDef m, int i)
+        void MakeSeg(RectTransform parent, float x, float y, float w, Color c)
         {
-            if (i == MoveCatalog.Shoryuken) return "INVULN · DERRIBA";
-            if (i == MoveCatalog.Hadouken) return "PROYECTIL";
-            if (m.HasAir) return "AÉREO · no bloquea";
-            if (i == MoveCatalog.WalkB || i == MoveCatalog.Wait) return "BLOQUEA";
-            if (m.Hits.Length > 0)
-                return $"{m.TotalDamage:0} DMG" + (m.Hits[0].Knockdown ? " · DERRIBA" : "") + $" · hs{m.Hits[0].Hitstun}/bs{m.Hits[0].Blockstun}";
-            return m.MoveDx > 0f ? "AVANZA · no bloquea" : m.MoveDx < 0f ? "RETROCEDE" : "—";
-        }
-
-        static Color TagColor(MoveDef m, int i)
-        {
-            if (i == MoveCatalog.Shoryuken) return new Color(1f, 0.75f, 0.25f);
-            if (i == MoveCatalog.Hadouken) return new Color(0.45f, 0.75f, 1f);
-            if (i == MoveCatalog.WalkB || i == MoveCatalog.Wait) return new Color(0.5f, 0.75f, 1f);
-            if (m.Hits.Length > 0) return new Color(1f, 0.55f, 0.45f);
-            return new Color(0.6f, 0.9f, 0.65f);
+            MakeImage(parent, "Seg", new Vector2(0.5f, 1f), new Vector2(x + w / 2f, y), new Vector2(Mathf.Max(0f, w - 1f), 9f), c);
         }
 
         public void Open(int picker)
@@ -125,17 +200,21 @@ namespace LagFighter
             _status.color = left == 0 ? new Color(1f, 0.85f, 0.3f) : new Color(0.5f, 1f, 0.6f);
         }
 
-        void Highlight(int idx)
+        void Highlight(int pos)
         {
-            int n = MoveCatalog.All.Length;
-            _sel = ((idx % n) + n) % n;
-            for (int i = 0; i < _cardBg.Length; i++)
+            int n = Order.Length;
+            _sel = ((pos % n) + n) % n;
+            for (int i = 0; i < n; i++)
             {
-                bool fits = _mc.PlanFits(i);
-                _cardBg[i].color = i == _sel ? new Color(0.25f, 0.42f, 0.62f, 1f) :
-                    fits ? new Color(0.13f, 0.14f, 0.18f, 0.95f) : new Color(0.1f, 0.1f, 0.12f, 0.6f);
+                bool fits = _mc.PlanFits(Order[i]);
+                bool sel = i == _sel;
+                _cardBg[i].color = sel ? new Color(0.22f, 0.3f, 0.42f, 1f) :
+                    fits ? new Color(0.12f, 0.13f, 0.17f, 0.98f) : new Color(0.08f, 0.08f, 0.1f, 0.6f);
+                var hc = _cardHeader[i].color;
+                hc.a = sel ? 1f : fits ? 0.85f : 0.3f;
+                _cardHeader[i].color = hc;
             }
-            var m = MoveCatalog.All[_sel];
+            var m = MoveCatalog.All[Order[_sel]];
             _detail.text = $"{m.Name} — {m.Desc}";
         }
 
@@ -149,7 +228,7 @@ namespace LagFighter
                 for (int i = 0; i < _cardRt.Length; i++)
                 {
                     if (!RectTransformUtility.RectangleContainsScreenPoint(_cardRt[i], pos, null)) continue;
-                    _mc.PlanAdd(i);
+                    _mc.PlanAdd(Order[i]);
                     Highlight(i);
                     return;
                 }
@@ -168,14 +247,16 @@ namespace LagFighter
 
             if (GameInput.LeftPressed()) Highlight(_sel - 1);
             if (GameInput.RightPressed()) Highlight(_sel + 1);
+            if (GameInput.UpPressed()) Highlight(_sel - Cols);
+            if (GameInput.DownPressed()) Highlight(_sel + Cols);
             int num = GameInput.NumberPressed();
-            if (num > 0 && num <= MoveCatalog.All.Length) { _mc.PlanAdd(num - 1); Highlight(num - 1); }
-            else if (GameInput.AddPressed()) { _mc.PlanAdd(_sel); Highlight(_sel); }
+            if (num > 0 && num <= Order.Length) { _mc.PlanAdd(Order[num - 1]); Highlight(num - 1); }
+            else if (GameInput.AddPressed()) { _mc.PlanAdd(Order[_sel]); Highlight(_sel); }
             if (GameInput.UndoPressed()) { _mc.PlanUndo(); Highlight(_sel); }
             if (GameInput.EndTurnPressed()) _mc.PlanConfirm();
         }
 
-        Image MakeImage(RectTransform parent, string name, Vector2 anchor, Vector2 pos, Vector2 size, Color color, Font font)
+        Image MakeImage(RectTransform parent, string name, Vector2 anchor, Vector2 pos, Vector2 size, Color color)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(Image));
             var rt = go.GetComponent<RectTransform>();
@@ -189,7 +270,7 @@ namespace LagFighter
             return img;
         }
 
-        Text MakeText(RectTransform parent, string name, string content, Vector2 anchor, Vector2 pos, Vector2 size, int fontSize, Color color, TextAnchor align, Font font)
+        Text MakeText(RectTransform parent, string name, string content, Vector2 anchor, Vector2 pos, Vector2 size, int fontSize, Color color, TextAnchor align)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(Text));
             var rt = go.GetComponent<RectTransform>();
@@ -198,7 +279,7 @@ namespace LagFighter
             rt.anchoredPosition = pos;
             rt.sizeDelta = size;
             var t = go.GetComponent<Text>();
-            t.font = font;
+            t.font = _font;
             t.text = content;
             t.fontSize = fontSize;
             t.color = color;

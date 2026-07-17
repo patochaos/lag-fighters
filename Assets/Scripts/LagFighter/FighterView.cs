@@ -112,7 +112,7 @@ namespace LagFighter
             float breathe = Mathf.Sin(Time.time * 2.5f + _index) * 0.015f;
             var armF = ArmFPos; var armB = ArmBPos; var legF = LegFPos; var legB = LegBPos;
             var legFRot = Quaternion.identity; var legBRot = Quaternion.identity;
-            float rigPitch = 0f, rigZOff = 0f;
+            float rigPitch = 0f, rigZOff = 0f, spinYaw = 0f;
 
             if (m != null && !stunned)
             {
@@ -164,14 +164,27 @@ namespace LagFighter
                         legFRot = Quaternion.Euler(45f, 0f, 0f);
                         rigPitch = -6f;
                         break;
+                    case AnimKind.Tatsu:
+                        // patada giratoria: el cuerpo gira 720° con la pierna extendida
+                        spinYaw = (phase / m.Total) * 720f;
+                        legF = new Vector3(0.08f, 1.05f, 0.45f);
+                        legFRot = Quaternion.Euler(80f, 0f, 0f);
+                        legBRot = Quaternion.Euler(-15f, 0f, 0f);
+                        break;
+                    case AnimKind.Grab:
+                        // las dos manos al frente buscando el agarre
+                        armF = Vector3.Lerp(ArmFPos, new Vector3(0.14f, 1.3f, 0.62f), pk);
+                        armB = Vector3.Lerp(ArmBPos, new Vector3(-0.14f, 1.3f, 0.6f), pk);
+                        rigZOff = pk * 0.12f;
+                        break;
                 }
             }
 
             if (stunned && !down) rigPitch = f.Stun == StunKind.Blockstun ? -6f : -16f;
 
             float lieAngle = down || loser ? -85f : rigPitch;
-            var wantRot = Quaternion.Euler(lieAngle, _faceYaw, 0f);
-            _rig.localRotation = Quaternion.Slerp(_rig.localRotation, wantRot, 1f - Mathf.Exp(-9f * dt));
+            var wantRot = Quaternion.Euler(lieAngle, _faceYaw + spinYaw, 0f);
+            _rig.localRotation = spinYaw > 0.01f ? wantRot : Quaternion.Slerp(_rig.localRotation, wantRot, 1f - Mathf.Exp(-9f * dt));
             _rig.localPosition = new Vector3(0f, (down || loser) ? 0.25f : airY + breathe, 0f);
 
             if (winner) armF = new Vector3(0.12f, 1.7f, 0.1f);

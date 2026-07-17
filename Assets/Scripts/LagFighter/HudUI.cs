@@ -127,7 +127,13 @@ namespace LagFighter
         public void OnSimEvent(SimEvent ev)
         {
             // los saltos son movimiento: no avisar cuando la patada aérea no conecta
-            if (ev.Kind == EvKind.Whiff && ev.MoveIndex == MoveCatalog.JumpF) return;
+            if (ev.Kind == EvKind.Whiff && (ev.MoveIndex == MoveCatalog.JumpF || ev.MoveIndex == MoveCatalog.JumpN)) return;
+            if (ev.Kind == EvKind.Tech)
+            {
+                Feedback(0, "¡TECH!", new Color(0.5f, 0.95f, 1f));
+                Feedback(1, "¡TECH!", new Color(0.5f, 0.95f, 1f));
+                return;
+            }
             int atk = ev.Attacker;
             string mv = MoveCatalog.All[ev.MoveIndex].Name.ToUpperInvariant();
             string adv = ev.FrameAdv >= 0 ? $"+{ev.FrameAdv}f" : $"−{-ev.FrameAdv}f";
@@ -251,6 +257,8 @@ namespace LagFighter
                 case MoveCatalog.JumpB: return new Color(0.55f, 0.8f, 0.35f);
                 case MoveCatalog.DashF:
                 case MoveCatalog.DashB: return new Color(0.2f, 0.72f, 0.72f);
+                case MoveCatalog.Tatsu: return new Color(0.9f, 0.45f, 0.15f);
+                case MoveCatalog.Grab: return new Color(0.85f, 0.3f, 0.75f);
                 case MoveCatalog.Wait: return new Color(0.45f, 0.47f, 0.52f);
                 default: return new Color(0.25f, 0.72f, 0.45f); // caminar
             }
@@ -271,6 +279,8 @@ namespace LagFighter
                 case MoveCatalog.WalkB: return "←";
                 case MoveCatalog.DashF: return "»";
                 case MoveCatalog.DashB: return "«";
+                case MoveCatalog.Tatsu: return "T";
+                case MoveCatalog.Grab: return "G";
                 default: return "·";
             }
         }

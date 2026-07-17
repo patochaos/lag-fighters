@@ -36,7 +36,7 @@ namespace LagFighter
         public const float ProjPush = 0.3f;
     }
 
-    public enum AnimKind { Walk, Dash, Jump, AttackA, AttackB, Fireball, Dragon, Wait }
+    public enum AnimKind { Walk, Dash, Jump, AttackA, AttackB, Fireball, Dragon, Tatsu, Grab, Wait }
     public enum StunKind { None, Hitstun, Blockstun, Knockdown }
 
     public struct HitWindow
@@ -47,6 +47,7 @@ namespace LagFighter
         public int Hitstun, Blockstun, CounterStun;
         public float Push;
         public bool Knockdown;
+        public bool IsGrab; // ignora la guardia; pierde contra aéreos/caídos; grab vs grab = tech
     }
 
     public struct WorldRect
@@ -76,7 +77,8 @@ namespace LagFighter
     {
         public const int WalkF = 0, WalkB = 1, DashF = 2, DashB = 3,
                          JumpF = 4, JumpN = 5, JumpB = 6,
-                         AttackA = 7, AttackB = 8, Hadouken = 9, Shoryuken = 10, Wait = 11;
+                         AttackA = 7, AttackB = 8, Hadouken = 9, Shoryuken = 10, Wait = 11,
+                         Tatsu = 12, Grab = 13;
 
         public static readonly MoveDef[] All =
         {
@@ -102,9 +104,11 @@ namespace LagFighter
                 Hits = new[] { new HitWindow { Start = 20, Duration = 10, Fwd0 = 0.2f, Fwd1 = 0.95f, Y0 = 0.85f, Y1 = 1.65f,
                     Damage = 1f, Hitstun = 26, Blockstun = 15, CounterStun = 36, Push = 0.2f } } },
 
-            new MoveDef { Id = "jumpN", Name = "Salto N", Anim = AnimKind.Jump, Startup = 6, Active = 28, Recovery = 6,
-                Desc = "Salto vertical. Esquiva proyectiles sin regalar posición.",
-                AirStart = 6, AirEnd = 34 },
+            new MoveDef { Id = "jumpN", Name = "Salto N (patada)", Anim = AnimKind.Jump, Startup = 6, Active = 28, Recovery = 6,
+                Desc = "Salto vertical con patada en la bajada: el wakeup que igual pega. Esquiva proyectiles.",
+                AirStart = 6, AirEnd = 34,
+                Hits = new[] { new HitWindow { Start = 18, Duration = 12, Fwd0 = 0.05f, Fwd1 = 0.7f, Y0 = 0.8f, Y1 = 1.6f,
+                    Damage = 1f, Hitstun = 24, Blockstun = 14, CounterStun = 34, Push = 0.15f } } },
 
             new MoveDef { Id = "jumpB", Name = "Salto −", Anim = AnimKind.Jump, Startup = 6, Active = 28, Recovery = 6,
                 Desc = "Salto atrás. La retirada elegante sobre el hadouken.",
@@ -131,7 +135,21 @@ namespace LagFighter
                     Damage = 2f, Hitstun = 60, Blockstun = 22, CounterStun = 70, Push = 0.4f, Knockdown = true } } },
 
             new MoveDef { Id = "wait", Name = "Esperar", Anim = AnimKind.Wait, Startup = 0, Active = 12, Recovery = 0,
-                Desc = "12 frames quieto, bloqueando. El neutral también es una decisión." },
+                Desc = "12 frames quieto, bloqueando. No meter órdenes también bloquea." },
+
+            new MoveDef { Id = "tatsu", Name = "Tatsumaki", Anim = AnimKind.Tatsu, Startup = 12, Active = 18, Recovery = 16,
+                Desc = "Patada giratoria que viaja hacia adelante. Dos hits; el segundo derriba. Los saltos la pasan.",
+                MoveDx = 1.25f, MotionStart = 10, MotionEnd = 30,
+                Hits = new[] {
+                    new HitWindow { Start = 14, Duration = 5, Fwd0 = 0.3f, Fwd1 = 0.95f, Y0 = 0.9f, Y1 = 1.3f,
+                        Damage = 1f, Hitstun = 22, Blockstun = 14, CounterStun = 32, Push = 0.3f },
+                    new HitWindow { Start = 24, Duration = 5, Fwd0 = 0.3f, Fwd1 = 0.95f, Y0 = 0.9f, Y1 = 1.3f,
+                        Damage = 1f, Hitstun = 45, Blockstun = 16, CounterStun = 55, Push = 0.5f, Knockdown = true } } },
+
+            new MoveDef { Id = "grab", Name = "Agarre", Anim = AnimKind.Grab, Startup = 6, Active = 4, Recovery = 20,
+                Desc = "Rompe la guardia y tira corto (KD). Los saltos lo ignoran; agarre vs agarre = TECH.",
+                Hits = new[] { new HitWindow { Start = 6, Duration = 4, Fwd0 = 0.15f, Fwd1 = 0.9f, Y0 = 0.5f, Y1 = 1.6f,
+                    Damage = 1f, Hitstun = 45, Blockstun = 0, CounterStun = 45, Push = 1.2f, Knockdown = true, IsGrab = true } } },
         };
     }
 
@@ -172,7 +190,7 @@ namespace LagFighter
         }
     }
 
-    public enum EvKind { Hit, Blocked, Whiff }
+    public enum EvKind { Hit, Blocked, Whiff, Tech }
 
     public struct SimEvent
     {
@@ -417,13 +435,33 @@ namespace LagFighter
                     var h = m.Hits[wi];
                     if (phase < h.Start || phase >= h.Start + h.Duration || atk.WindowHit[wi]) continue;
                     if (IsInvulnerable(1 - i)) continue; // pasa de largo, la ventana sigue viva
+                    if (h.IsGrab && (IsAirborne(1 - i) || (Fighters[1 - i].Stun == StunKind.Knockdown && IsStunned(1 - i))))
+                        continue; // no se agarra al que salta ni al caído; la ventana sigue viva
                     if (!HitRectWorld(i, h).Overlaps(HurtRect(1 - i))) continue;
 
                     atk.WindowHit[wi] = true;
-                    _pending.Add(BuildPending(i, atk.MoveIndex, h.Damage, h.Hitstun, h.Blockstun, h.CounterStun,
-                        h.Push, h.Knockdown, attackerFreeTick: atk.MoveStartTick + m.Total));
+                    var pending = BuildPending(i, atk.MoveIndex, h.Damage, h.Hitstun, h.Blockstun, h.CounterStun,
+                        h.Push, h.Knockdown, attackerFreeTick: atk.MoveStartTick + m.Total);
+                    pending.IsGrab = h.IsGrab;
+                    _pending.Add(pending);
                 }
             }
+
+            // agarre vs agarre en el mismo frame = TECH: se separan, nadie come
+            bool grab0 = false, grab1 = false;
+            foreach (var pending in _pending)
+                if (pending.IsGrab) { if (pending.Attacker == 0) grab0 = true; else grab1 = true; }
+            if (grab0 && grab1)
+            {
+                _pending.RemoveAll(x => x.IsGrab);
+                for (int i = 0; i < 2; i++)
+                {
+                    Fighters[i].MoveIndex = -1;
+                    Fighters[i].X -= Fighters[i].Face * 0.55f;
+                }
+                LastEvents.Add(new SimEvent { Attacker = 0, Kind = EvKind.Tech, MoveIndex = MoveCatalog.Grab });
+            }
+
             foreach (var pending in _pending)
                 ApplyContact(pending);
 
@@ -452,7 +490,7 @@ namespace LagFighter
             public int Attacker, MoveIndex;
             public float Damage, Push;
             public int Hitstun, Blockstun, CounterStun, AttackerFree;
-            public bool Knockdown, Guarded, Counter, AirHit;
+            public bool Knockdown, Guarded, Counter, AirHit, IsGrab;
         }
 
         readonly List<PendingHit> _pending = new List<PendingHit>();
@@ -485,7 +523,7 @@ namespace LagFighter
             var def = Fighters[d];
             int face = Fighters[p.Attacker].Face;
 
-            if (p.Guarded)
+            if (p.Guarded && !p.IsGrab) // el agarre rompe la guardia
             {
                 def.MoveIndex = -1; // el paso atrás / espera se corta en blockstun
                 def.Stun = StunKind.Blockstun;

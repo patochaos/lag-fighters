@@ -28,14 +28,16 @@ Balanceado contra la framedata real de ST Ryu (supercombo.gg, 2026-07-17):
 | 2 | Caminar − | 20f | −0.38 (atrás más lento, como SF2), **bloquea** |
 | 3 | Dash + | 16f | +1.0, no bloquea |
 | 4 | Dash − | 16f | −1.0, el bait, no bloquea |
-| 5 | Salto + | 6/28/6 | +1.9, aéreo 6..34, **patada de jump-in** (hit 20..30, 1 dmg, ~+6 on hit) |
-| 6 | Salto N | 6/28/6 | vertical |
+| 5 | Salto + | 6/28/10 | +1.9, aéreo 6..34, **patada de jump-in** (hit 20..30, ~+3 hit / −8 block) |
+| 6 | Salto N | 6/28/6 | vertical, **patada al caer** (hit 18..30, corta: el wakeup que pega) |
 | 7 | Salto − | 6/28/6 | −1.9 |
 | 8 | Golpe A | 6/4/14 | 1 dmg, hs20/bs13 → **+2 on hit / −5 on block** (jab de ST: +4/+2) |
 | 9 | Patada B | 16/6/30 | 2 dmg, soft KD 42f, bs26 → **−10 on block** (sweep ST: −9) |
 | 10 | Hadouken | 14/2/44 = **60f** | ocupa el turno ENTERO; el salto lo castiga (ST: 52-54f, acá nerf extra a pedido) |
 | 11 | Shoryuken | 4/8/32 = 44f | **invuln 1..10** (vulnerable subiendo, como N.Ryu), hard KD 60f, −17 block (ST jab DP: 44f, invuln 1-8, −18) |
-| 12 | Esperar | 12f | neutral, **bloquea** |
+| 12 | Esperar | 12f | neutral, **bloquea** (no meter órdenes = bloquear) |
+| 13 | Tatsumaki | 12/18/16 = 46f | viaja +1.25, 2 hits (14 y 24), el 2° derriba; hitbox baja: los saltos la pasan. Nerfeada 2x por el lab AI vs AI |
+| 14 | Agarre | 6/4/20 = 30f | **rompe guardia**, tira 1.2 + KD 45f; los saltos y caídos lo ignoran; **agarre vs agarre = TECH** |
 
 Golpe aéreo = hard KD 60f (un turno entero de okizeme — vigilar si es mucho).
 
@@ -48,6 +50,12 @@ Golpe aéreo = hard KD 60f (un turno entero de okizeme — vigilar si es mucho).
   cero assets).
 - Botón CAJAS ON/OFF (o tecla H) para hurt/hitboxes; indicador de
   distancia bajo el prompt.
+- Menú de planificación: grilla 7x2 (movimiento arriba, acción abajo) con
+  franja de color por categoría y mini-barra S/A/R por carta.
+- **Lab de balance**: harness AI vs AI headless en el scratchpad
+  (`simharness/`) — compila Sim.cs+SimpleAI.cs sin Unity y corre miles de
+  peleas con stats por movimiento (usos, conecta%, dmg/uso, KOs, trades,
+  techs). Usarlo tras cada cambio de framedata.
 
 - **Guardia automática (sin botón)**: bloqueás en neutral, esperando o caminando
   atrás, en el piso. Bloquear = BLOCKSTUN (te come turno). En el aire y en
