@@ -28,6 +28,7 @@ namespace LagFighter
         Image[] _cards;
         Text[] _cardLabels;
         Text _desc, _stepTitle;
+        AudioSource _announcer;
         int _sel;
         int _step; // 0 = lag mode, 1 = modo de juego
         bool _lagChoice;
@@ -64,9 +65,50 @@ namespace LagFighter
             _root.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.65f);
             _root.GetComponent<Image>().raycastTarget = false;
 
-            Txt(rootRt, "Title", "LAG FIGHTERS", new Vector2(0f, 230f), 78, Color.white, FontStyle.Bold);
-            Txt(rootRt, "Sub", "programá tu turno · ejecución simultánea · footsies puro", new Vector2(0f, 166f), 21, new Color(1f, 0.9f, 0.4f), FontStyle.Normal);
-            _stepTitle = Txt(rootRt, "Step", "", new Vector2(0f, 110f), 24, new Color(1f, 1f, 1f, 0.8f), FontStyle.Bold);
+            // splash art de fondo (si está importada) + announcer
+            var splash = Resources.Load<Texture2D>("LagFighter/splash");
+            if (splash != null)
+            {
+                var bgGo = new GameObject("Splash", typeof(RectTransform), typeof(RawImage), typeof(AspectRatioFitter));
+                var bgRt = bgGo.GetComponent<RectTransform>();
+                bgRt.SetParent(rootRt, false);
+                bgRt.anchorMin = bgRt.anchorMax = new Vector2(0.5f, 0.5f);
+                var raw = bgGo.GetComponent<RawImage>();
+                raw.texture = splash;
+                raw.raycastTarget = false;
+                var fitter = bgGo.GetComponent<AspectRatioFitter>();
+                fitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+                fitter.aspectRatio = splash.width / (float)splash.height;
+                bgGo.transform.SetAsFirstSibling(); // detrás de todo lo demás… pero delante del velo oscuro
+                _root.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);
+            }
+            var clip = Resources.Load<AudioClip>("LagFighter/announcer");
+            if (clip != null)
+            {
+                _announcer = gameObject.AddComponent<AudioSource>();
+                _announcer.clip = clip;
+                _announcer.spatialBlend = 0f;
+                _announcer.playOnAwake = false;
+            }
+
+            bool hasSplash = splash != null;
+            if (!hasSplash)
+            {
+                Txt(rootRt, "Title", "LAG FIGHTERS", new Vector2(0f, 230f), 78, Color.white, FontStyle.Bold);
+                Txt(rootRt, "Sub", "programá tu turno · ejecución simultánea · footsies puro", new Vector2(0f, 166f), 21, new Color(1f, 0.9f, 0.4f), FontStyle.Normal);
+            }
+
+            // banda oscura detrás de la parte interactiva (la splash es clara)
+            var band = new GameObject("Band", typeof(RectTransform), typeof(Image));
+            var bandRt = band.GetComponent<RectTransform>();
+            bandRt.SetParent(rootRt, false);
+            bandRt.anchorMin = bandRt.anchorMax = new Vector2(0.5f, 0.5f);
+            bandRt.anchoredPosition = new Vector2(0f, -10f);
+            bandRt.sizeDelta = new Vector2(1160f, 380f);
+            band.GetComponent<Image>().color = new Color(0f, 0f, 0f, hasSplash ? 0.62f : 0.25f);
+            band.GetComponent<Image>().raycastTarget = false;
+
+            _stepTitle = Txt(rootRt, "Step", "", new Vector2(0f, 128f), 24, new Color(1f, 1f, 1f, 0.85f), FontStyle.Bold);
 
             // hasta 3 cartas (el paso 1 usa 2, el paso 2 usa 3)
             _cards = new Image[3];
@@ -120,6 +162,7 @@ namespace LagFighter
             _step = 0;
             _sel = 0;
             Layout();
+            if (_announcer != null && !_announcer.isPlaying) _announcer.Play(); // "¡LAG FIGHTERS!"
         }
 
         public void Close()

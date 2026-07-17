@@ -146,9 +146,12 @@ namespace LagFighter
 
         void Update()
         {
-            // el toggle CAJAS también apaga las hitboxes del ghost (no las siluetas)
+            // CAJAS OFF apaga TODO el ghost: hitboxes y también las siluetas
+            // (la silueta parada sobre el personaje parecía una hurtbox pegada)
             for (int i = 0; i < _rectUsed; i++)
                 _rectPool[i].SetActive(VizPrefs.ShowBoxes);
+            for (int i = 0; i < _bodyUsed; i++)
+                _bodyPool[i].SetActive(VizPrefs.ShowBoxes);
         }
 
         public void Show(PlanPreview g, int fighter)
