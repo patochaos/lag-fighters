@@ -630,6 +630,48 @@ namespace LagFighter
         }
     }
 
+    // Código de turno para el online asincrónico: serializa (lado, turno,
+    // wakeup, cola) en base64 corto. La sim determinista hace el resto:
+    // ambos jugadores aplican los dos códigos y ven exactamente la misma pelea.
+    public static class TurnCode
+    {
+        const byte Version = 1;
+
+        public static string Encode(int side, int turn, bool wakeQuick, List<int> moves)
+        {
+            var bytes = new byte[4 + moves.Count];
+            bytes[0] = Version;
+            bytes[1] = (byte)side;
+            bytes[2] = (byte)turn;
+            bytes[3] = (byte)(wakeQuick ? 1 : 0);
+            for (int i = 0; i < moves.Count; i++) bytes[4 + i] = (byte)moves[i];
+            return "LF" + Convert.ToBase64String(bytes);
+        }
+
+        public static bool TryDecode(string code, out int side, out int turn, out bool wakeQuick, out List<int> moves)
+        {
+            side = turn = 0;
+            wakeQuick = true;
+            moves = null;
+            if (string.IsNullOrEmpty(code) || !code.StartsWith("LF")) return false;
+            byte[] bytes;
+            try { bytes = Convert.FromBase64String(code.Substring(2)); }
+            catch (FormatException) { return false; }
+            if (bytes.Length < 4 || bytes[0] != Version) return false;
+            side = bytes[1];
+            turn = bytes[2];
+            wakeQuick = bytes[3] != 0;
+            if (side < 0 || side > 1) return false;
+            moves = new List<int>(bytes.Length - 4);
+            for (int i = 4; i < bytes.Length; i++)
+            {
+                if (bytes[i] >= MoveCatalog.All.Length) return false;
+                moves.Add(bytes[i]);
+            }
+            return true;
+        }
+    }
+
     // Preview del plan: tu cola contra un rival que no mete inputs nuevos
     // (conserva su stun arrastrado; en neutral bloquea, como en el juego real).
     public class PlanPreview

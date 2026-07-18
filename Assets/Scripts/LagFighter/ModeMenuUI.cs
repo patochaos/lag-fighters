@@ -19,7 +19,14 @@ namespace LagFighter
         {
             ("PRÁCTICA", "Solo vos y un dummy quieto. Probá comandos, distancias y framedata.", GameMode.Practice),
             ("VS IA", "La CPU planifica su turno en secreto, igual que vos.", GameMode.VsAI),
-            ("1v1 LOCAL", "Misma PC: planifica J1, después J2 (que no mire), y se ejecuta junto.", GameMode.PvP),
+            ("1v1 LOCAL", "Misma PC: planifica J1, pantalla de 'pasá el teclado', planifica J2.", GameMode.PvP),
+            ("POR CÓDIGO", "Pelea por chat: cada turno intercambian un código corto y ambos ven la misma pelea. Sin servidores.", GameMode.Async),
+        };
+
+        static readonly (string label, string desc)[] Sides =
+        {
+            ("SOY JUGADOR 1", "El de la izquierda (azul). Arreglen quién es quién antes de empezar."),
+            ("SOY JUGADOR 2", "El de la derecha (naranja)."),
         };
 
         MatchController _mc;
@@ -29,7 +36,7 @@ namespace LagFighter
         Text[] _cardLabels;
         Text _desc, _stepTitle;
         int _sel;
-        int _step; // 0 = lag mode, 1 = modo de juego
+        int _step; // 0 = lag mode, 1 = modo de juego, 2 = lado (solo async)
         bool _lagChoice;
         bool _active;
         Vector2 _lastMouse;
@@ -101,10 +108,10 @@ namespace LagFighter
 
             _stepTitle = Txt(rootRt, "Step", "", new Vector2(0f, 128f), 24, new Color(1f, 1f, 1f, 0.85f), FontStyle.Bold);
 
-            // hasta 3 cartas (el paso 1 usa 2, el paso 2 usa 3)
-            _cards = new Image[3];
-            _cardLabels = new Text[3];
-            for (int i = 0; i < 3; i++)
+            // hasta 4 cartas (paso 0 usa 2, paso 1 usa 4, paso 2 usa 2)
+            _cards = new Image[4];
+            _cardLabels = new Text[4];
+            for (int i = 0; i < 4; i++)
             {
                 var card = new GameObject("Card" + i, typeof(RectTransform), typeof(Image));
                 var rt = card.GetComponent<RectTransform>();
@@ -119,7 +126,7 @@ namespace LagFighter
             }
 
             _desc = Txt(rootRt, "Desc", "", new Vector2(0f, -86f), 20, new Color(1f, 1f, 1f, 0.85f), FontStyle.Normal);
-            Txt(rootRt, "Help", "1-3 o ←/→ + Enter · click también funciona · en partida: R reinicia, M vuelve acá",
+            Txt(rootRt, "Help", "1-4 o ←/→ + Enter · click también funciona · en partida: R reinicia, M vuelve acá",
                 new Vector2(0f, -146f), 16, new Color(1f, 1f, 1f, 0.5f), FontStyle.Normal);
         }
 
@@ -144,7 +151,7 @@ namespace LagFighter
             return t;
         }
 
-        int OptionCount => _step == 0 ? LagOptions.Length : Modes.Length;
+        int OptionCount => _step == 0 ? LagOptions.Length : _step == 1 ? Modes.Length : Sides.Length;
 
         public void Open()
         {
@@ -164,15 +171,19 @@ namespace LagFighter
         void Layout()
         {
             int count = OptionCount;
-            _stepTitle.text = _step == 0 ? "¿CUÁNTO LAG QUERÉS?" : (_lagChoice ? "LAG MODE — elegí rival" : "NORMAL — elegí rival");
+            _stepTitle.text = _step == 0 ? "¿CUÁNTO LAG QUERÉS?" :
+                              _step == 1 ? (_lagChoice ? "LAG MODE — elegí rival" : "NORMAL — elegí rival") :
+                              "POR CÓDIGO — ¿de qué lado jugás?";
+            float cardW = count >= 4 ? 300f : 330f;
             for (int i = 0; i < _cards.Length; i++)
             {
                 bool on = i < count;
                 _cards[i].gameObject.SetActive(on);
                 if (!on) continue;
-                float x = (i - (count - 1) * 0.5f) * 330f;
+                float x = (i - (count - 1) * 0.5f) * cardW;
                 _cards[i].rectTransform.anchoredPosition = new Vector2(x, 10f);
-                _cardLabels[i].text = _step == 0 ? LagOptions[i].label : Modes[i].label;
+                _cardLabels[i].text = _step == 0 ? LagOptions[i].label : _step == 1 ? Modes[i].label : Sides[i].label;
+                _cardLabels[i].fontSize = _step == 1 && count >= 4 ? 24 : 28;
             }
             Highlight(_sel);
         }
@@ -187,7 +198,7 @@ namespace LagFighter
                     ? (lagCard ? new Color(0.6f, 0.25f, 0.15f, 0.98f) : new Color(0.25f, 0.42f, 0.62f, 0.98f))
                     : new Color(0.12f, 0.13f, 0.17f, 0.9f);
             }
-            _desc.text = _step == 0 ? LagOptions[_sel].desc : Modes[_sel].desc;
+            _desc.text = _step == 0 ? LagOptions[_sel].desc : _step == 1 ? Modes[_sel].desc : Sides[_sel].desc;
         }
 
         void Confirm(int idx)
@@ -200,7 +211,19 @@ namespace LagFighter
                 Layout();
                 return;
             }
-            _mc.StartMatch(Modes[idx].mode, _lagChoice);
+            if (_step == 1)
+            {
+                if (Modes[idx].mode == GameMode.Async)
+                {
+                    _step = 2;
+                    _sel = 0;
+                    Layout();
+                    return;
+                }
+                _mc.StartMatch(Modes[idx].mode, _lagChoice);
+                return;
+            }
+            _mc.StartMatch(GameMode.Async, _lagChoice, idx);
         }
 
         void Update()

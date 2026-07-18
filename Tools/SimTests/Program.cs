@@ -52,6 +52,7 @@ class Tests
         LaEsquinaEmpujaAlAtacante();
         AgarreVsAgarreEsTech();
         WakeupAjustaElKnockdown();
+        CodigoDeTurnoIdaYVuelta();
         MismaEntradaMismaPelea();
 
         Console.WriteLine($"\n{_passed} ok, {_failed} fallos");
@@ -169,6 +170,22 @@ class Tests
         int stay = s.StunRemaining(1);
         Check(before > 0 && quick == before - 16 && stay == quick + 32,
             "wakeup ajusta el knockdown arrastrado", $"{before} → {quick} → {stay}");
+    }
+
+    // Online asincrónico: el código de turno serializa y deserializa exacto,
+    // y rechaza basura.
+    static void CodigoDeTurnoIdaYVuelta()
+    {
+        var plan = new List<int> { MoveCatalog.WalkF, MoveCatalog.AttackA, MoveCatalog.Shoryuken };
+        string code = TurnCode.Encode(1, 7, wakeQuick: false, plan);
+        bool ok = TurnCode.TryDecode(code, out int side, out int turn, out bool quick, out var moves);
+        bool roundtrip = ok && side == 1 && turn == 7 && !quick &&
+                         moves.Count == 3 && moves[0] == MoveCatalog.WalkF &&
+                         moves[1] == MoveCatalog.AttackA && moves[2] == MoveCatalog.Shoryuken;
+        bool rejects = !TurnCode.TryDecode("hola", out _, out _, out _, out _) &&
+                       !TurnCode.TryDecode("LF!!!!", out _, out _, out _, out _) &&
+                       !TurnCode.TryDecode("", out _, out _, out _, out _);
+        Check(roundtrip && rejects, "código de turno: ida y vuelta exacta, rechaza basura", code);
     }
 
     // La base de todo: misma entrada, misma pelea, bit a bit.

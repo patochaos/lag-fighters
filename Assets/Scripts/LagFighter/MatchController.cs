@@ -6,7 +6,7 @@ using UnityEngine.InputSystem;
 
 namespace LagFighter
 {
-    public enum GameMode { Practice, VsAI, PvP }
+    public enum GameMode { Practice, VsAI, PvP, Async }
 
     // Flujo por turnos programados:
     //  - Planning: en pausa, cada jugador arma su cola de hasta 240 frames
@@ -25,6 +25,16 @@ namespace LagFighter
         public bool LagMode { get; private set; }
         public Flow State { get; private set; } = Flow.ModeSelect;
         public int Picker { get; private set; }
+        public int LocalSide { get; private set; } // en Async: qué lado soy yo
+
+        // 1v1 local con picks secretos: pantalla "pasá el teclado" entre pickers
+        bool _handoff;
+        int _pendingPicker;
+        int _guardFrame; // evita que el mismo Espacio confirme dos cosas
+
+        // Async: después de planificar, espero el código del rival
+        bool _awaitingCode;
+        string _myCode = "";
         public int TurnNumber { get; private set; }
         public int TurnStartTick { get; private set; }
 
@@ -97,6 +107,8 @@ namespace LagFighter
         {
             Time.timeScale = 1f;
             _koTimer = 0f;
+            _handoff = false;
+            _awaitingCode = false;
             State = Flow.ModeSelect;
             _menu.Close();
             _ghost.Clear();
@@ -104,10 +116,11 @@ namespace LagFighter
             _hud.SetPrompt("");
         }
 
-        public void StartMatch(GameMode mode, bool lagMode)
+        public void StartMatch(GameMode mode, bool lagMode, int localSide = 0)
         {
             Mode = mode;
             LagMode = lagMode;
+            LocalSide = localSide;
             _modeMenu.Close();
             ResetMatch();
         }
@@ -160,16 +173,34 @@ namespace LagFighter
             _wakeQuick[0] = _wakeQuick[1] = true;
             _plans[0].Clear();
             _plans[1].Clear();
-            if (Mode != GameMode.PvP)
+            _awaitingCode = false;
+            _myCode = "";
+            if (Mode == GameMode.Practice || Mode == GameMode.VsAI)
             {
                 if (Mode == GameMode.VsAI && WakeupAvailable(1)) _wakeQuick[1] = _ai.QuickRise();
                 _plans[1] = Mode == GameMode.Practice ? new List<int>() : _ai.Plan(Sim, 1, CurrentTurnFrames - WakeDelta(1));
             }
-            Picker = 0;
+            Picker = Mode == GameMode.Async ? LocalSide : 0;
             State = Flow.Planning;
+            if (Mode == GameMode.PvP)
+            {
+                BeginHandoff(0); // nadie planifica hasta que el jugador tome el teclado
+                return;
+            }
             _menu.Open(Picker);
             UpdatePlanPrompt();
             UpdateGhost();
+        }
+
+        void BeginHandoff(int who)
+        {
+            _handoff = true;
+            _pendingPicker = who;
+            _guardFrame = Time.frameCount;
+            _menu.Close();
+            _ghost.Clear();
+            _hud.SetBanner($"PASÁ EL TECLADO\n<size=30>JUGADOR {who + 1}: ESPACIO cuando lo tengas (que el otro no mire)</size>");
+            _hud.SetPrompt($"TURNO {TurnNumber} — picks secretos");
         }
 
         void UpdatePlanPrompt()
@@ -220,6 +251,7 @@ namespace LagFighter
         public bool RowRevealed(int i)
         {
             if (Mode == GameMode.Practice || State == Flow.Executing || State == Flow.Replay || State == Flow.GameOver) return true;
+            if (_handoff) return false; // pantalla "pasá el teclado": no se ve nada
             return State == Flow.Planning && i == Picker;
         }
 
@@ -271,12 +303,46 @@ namespace LagFighter
         {
             if (Mode == GameMode.PvP && Picker == 0)
             {
-                Picker = 1;
-                _menu.Open(Picker);
-                UpdatePlanPrompt();
-                UpdateGhost();
+                BeginHandoff(1);
                 return;
             }
+            if (Mode == GameMode.Async)
+            {
+                BeginAwaitCode();
+                return;
+            }
+            BeginExecution();
+        }
+
+        // ---------- online asincrónico por código ----------
+
+        void BeginAwaitCode()
+        {
+            _awaitingCode = true;
+            _guardFrame = Time.frameCount;
+            _myCode = TurnCode.Encode(LocalSide, TurnNumber, _wakeQuick[LocalSide], _plans[LocalSide]);
+            GUIUtility.systemCopyBuffer = _myCode;
+            _menu.Close();
+            _ghost.Clear();
+            _hud.SetBanner($"TU CÓDIGO (ya copiado al portapapeles):\n<size=26>{_myCode}</size>\n<size=24>mandáselo al rival · copiá el suyo del chat · ESPACIO lo pega y ejecuta</size>");
+            _hud.SetPrompt($"TURNO {TurnNumber} — esperando el código rival");
+        }
+
+        void TryPasteRivalCode()
+        {
+            string clip = (GUIUtility.systemCopyBuffer ?? "").Trim();
+            int remote = 1 - LocalSide;
+            if (!TurnCode.TryDecode(clip, out int side, out int turn, out bool quick, out var moves))
+            {
+                _hud.Feedback(LocalSide, "CÓDIGO INVÁLIDO (¿copiaste el del rival?)", new Color(1f, 0.5f, 0.4f));
+                return;
+            }
+            if (side != remote) { _hud.Feedback(LocalSide, "ESE CÓDIGO ES TUYO, falta el del rival", new Color(1f, 0.5f, 0.4f)); return; }
+            if (turn != (TurnNumber & 0xFF)) { _hud.Feedback(LocalSide, $"CÓDIGO DEL TURNO {turn}, va el {TurnNumber}", new Color(1f, 0.5f, 0.4f)); return; }
+            _plans[remote] = moves;
+            _wakeQuick[remote] = quick;
+            _awaitingCode = false;
+            _hud.SetBanner("");
             BeginExecution();
         }
 
@@ -364,6 +430,26 @@ namespace LagFighter
             if (GameInput.MenuPressed()) { GoToModeSelect(); return; }
             if (State == Flow.GameOver && GameInput.ReplayPressed()) { StartReplay(); return; }
             if (GameInput.RestartPressed()) { ResetMatch(); return; }
+
+            // pantalla "pasá el teclado" (1v1) y espera de código (async)
+            if (State == Flow.Planning && Time.frameCount > _guardFrame)
+            {
+                if (_handoff && GameInput.ConfirmPressed())
+                {
+                    _handoff = false;
+                    Picker = _pendingPicker;
+                    _hud.SetBanner("");
+                    _menu.Open(Picker);
+                    UpdatePlanPrompt();
+                    UpdateGhost();
+                    return;
+                }
+                if (_awaitingCode && GameInput.EndTurnPressed())
+                {
+                    TryPasteRivalCode();
+                    return;
+                }
+            }
 
             if (State == Flow.RoundOver)
             {
