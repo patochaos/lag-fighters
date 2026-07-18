@@ -138,8 +138,9 @@ namespace LagFighter
             var opr = _optPanel.rectTransform;
 
             _boxBtn = MakeImage(opr, "BoxBtn", new Vector2(0.5f, 1f), new Vector2(0f, -24f), new Vector2(186f, 30f), new Color(0.1f, 0.12f, 0.16f, 0.95f));
-            _boxBtnLabel = MakeTextP(_boxBtn.rectTransform, "T", "CAJAS: ON", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(182f, 20f),
-                9, Palette.Ok, TextAnchor.MiddleCenter);
+            _boxBtnLabel = MakeTextP(_boxBtn.rectTransform, "T", VizPrefs.ShowBoxes ? "CAJAS: ON" : "CAJAS: OFF",
+                new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(182f, 20f),
+                9, VizPrefs.ShowBoxes ? Palette.Ok : new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleCenter);
 
             _voiceBtn = MakeImage(opr, "VoiceBtn", new Vector2(0.5f, 1f), new Vector2(0f, -60f), new Vector2(186f, 30f), new Color(0.1f, 0.12f, 0.16f, 0.95f));
             _voiceBtnLabel = MakeTextP(_voiceBtn.rectTransform, "T", "VOZ: ON", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(182f, 20f),

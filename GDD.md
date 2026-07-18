@@ -156,8 +156,8 @@ caído 0.55.
 
 ### 3.6 LAG MODE
 
-Modo espejo de cualquier modo base. Cada 4 turnos, los frames del turno se
-**duplican**: 60 → 120 → 240 → 480 → 960 (cap). Cada salto trae su cartel
+Modo espejo de cualquier modo base. Cada 3 turnos, los frames del turno
+suben **50%**: 60 → 90 → 135 → 202 → 303 (cap). Cada salto trae su cartel
 ("IT GETS LAGGIER…", "EL WIFI ESTÁ LLORANDO", "MODO DIAL-UP", "PALOMA
 MENSAJERA") y un indicador de wifi que pierde barras hasta parpadear en rojo
 con ping falso. Más lag = colas más largas = más plan y menos reacción.

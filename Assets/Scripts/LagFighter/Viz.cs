@@ -6,7 +6,7 @@ namespace LagFighter
     // Preferencias de visualización (toggle del botón CAJAS en el HUD).
     public static class VizPrefs
     {
-        public static bool ShowBoxes = true;
+        public static bool ShowBoxes = false; // OFF por defecto; H o el botón CAJAS las prende
     }
 
     // Materiales base cargados desde Resources: al ser assets referenciados,

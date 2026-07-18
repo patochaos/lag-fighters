@@ -70,8 +70,9 @@ vulnerable por off-by-one; lo pescó el test de framedata).
 
 ### Lag Mode
 
-Menú inicial en dos pasos: primero NORMAL o **LAG MODE**. En Lag Mode, cada 4
-turnos los frames del turno se DUPLICAN: 60 → 120 → 240 → 480 → 960 (cap).
+Menú inicial en dos pasos: primero NORMAL o **LAG MODE**. En Lag Mode, cada 3
+turnos los frames del turno suben 50%: 60 → 90 → 135 → 202 → 303 (cap; se
+suavizó el 2026-07-17: duplicar cada 4 era demasiado brusco).
 Al subir aparece el cartel ("IT GETS LAGGIER…", "EL WIFI ESTÁ LLORANDO",
 "MODO DIAL-UP", "PALOMA MENSAJERA") y un indicador de wifi arriba que pierde
 barras y termina parpadeando en rojo (con "ping" falso). La timeline re-escala

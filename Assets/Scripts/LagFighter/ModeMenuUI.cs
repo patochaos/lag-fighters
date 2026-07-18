@@ -4,15 +4,15 @@ using UnityEngine.UI;
 namespace LagFighter
 {
     // Menú inicial en dos pasos:
-    //  1) NORMAL o LAG MODE (cada 4 turnos se duplican los frames del turno)
-    //  2) Práctica / VS IA / 1v1 local
+    //  1) NORMAL o LAG MODE (cada 3 turnos el lag sube 50%)
+    //  2) Práctica / VS IA / 1v1 local / POR CÓDIGO
     // Teclas 1-3, flechas+Enter, o click.
     public class ModeMenuUI : MonoBehaviour
     {
         static readonly (string label, string desc)[] LagOptions =
         {
             ("NORMAL", "Turnos de 60 frames, parejos toda la pelea."),
-            ("LAG MODE", "Cada 4 turnos el lag SE DUPLICA: 60 → 120 → 240 → 480 → 960 frames. It gets laggier."),
+            ("LAG MODE", "Cada 3 turnos el lag sube 50%: 60 → 90 → 135 → 202 → 303 frames. It gets laggier."),
         };
 
         static readonly (string label, string desc, GameMode mode)[] Modes =

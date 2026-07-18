@@ -34,7 +34,7 @@ namespace LagFighter
         RectTransform[] _cardRt;
         Image _undoBtn, _doneBtn, _wakeBtn;
         Text _wakeLabel;
-        Text _detail, _status;
+        Text _detailTitle, _detail, _status;
         int _sel;
         bool _active;
         Vector2 _lastMouse;
@@ -184,9 +184,25 @@ namespace LagFighter
             _wakeLabel.fontStyle = FontStyle.Bold;
             _wakeBtn.gameObject.SetActive(false);
 
-            float topY = 26f + totalH + 40f;
-            _detail = MakeText(rootRt, "Detail", "", new Vector2(0.5f, 0f), new Vector2(0f, topY + 26f), new Vector2(1700f, 24f), 16, Color.white, TextAnchor.MiddleCenter);
-            _status = MakeText(rootRt, "Status", "", new Vector2(0.5f, 0f), new Vector2(0f, topY), new Vector2(1700f, 22f), 16, new Color(0.5f, 1f, 0.6f), TextAnchor.MiddleCenter);
+            // panel de detalle: qué hace la carta seleccionada, legible de verdad
+            // (título con el color de la categoría + descripción grande, fondo propio)
+            float detailY = 26f + totalH + 34f;
+            var detailBg = MakeImage(rootRt, "DetailBg", new Vector2(0.5f, 0f), new Vector2(0f, detailY + 46f),
+                new Vector2(totalW + 28f, 92f), new Color(0.04f, 0.05f, 0.07f, 0.92f));
+            var dbr = detailBg.rectTransform;
+
+            _detailTitle = MakeText(dbr, "Title", "", new Vector2(0f, 1f), new Vector2(18f, -22f),
+                new Vector2(620f, 24f), 12, Color.white, TextAnchor.MiddleLeft);
+            _detailTitle.font = UIFonts.Pixel;
+            _detailTitle.rectTransform.pivot = new Vector2(0f, 0.5f);
+
+            _detail = MakeText(dbr, "Detail", "", new Vector2(0f, 1f), new Vector2(18f, -58f),
+                new Vector2(totalW - 20f, 30f), 19, new Color(1f, 1f, 1f, 0.95f), TextAnchor.MiddleLeft);
+            _detail.rectTransform.pivot = new Vector2(0f, 0.5f);
+
+            _status = MakeText(dbr, "Status", "", new Vector2(1f, 1f), new Vector2(-18f, -22f),
+                new Vector2(900f, 22f), 14, new Color(0.5f, 1f, 0.6f), TextAnchor.MiddleRight);
+            _status.rectTransform.pivot = new Vector2(1f, 0.5f);
             MakeText(rootRt, "Help", "click/1-9 agrega · Backspace borra · arrastrá tu timeline = scrub del ghost · click derecho en ficha = borrarla · ESPACIO cierra",
                 new Vector2(0.5f, 0f), new Vector2(0f, 6f), new Vector2(1300f, 20f), 13, new Color(1f, 1f, 1f, 0.45f), TextAnchor.MiddleCenter);
         }
@@ -224,7 +240,8 @@ namespace LagFighter
         public void SetPrediction(PlanPreview g, int framesUsed, int available)
         {
             int left = available - framesUsed;
-            string stunNote = available < SimConfig.TurnFrames ? $" (perdés {SimConfig.TurnFrames - available}f por el stun)" : "";
+            int turnFrames = _mc.CurrentTurnFrames; // en Lag Mode el turno crece
+            string stunNote = available < turnFrames ? $" (perdés {turnFrames - available}f por el stun)" : "";
             string extra = "";
             if (g.DamageIfStill > 0f) extra += $"  ·  pegaría {g.DamageIfStill:0} si no reacciona";
             if (g.BlockedCount > 0) extra += $"  ·  {g.BlockedCount} bloqueado(s) si se queda en neutral";
@@ -247,7 +264,10 @@ namespace LagFighter
                 _cardOverlay[i].gameObject.SetActive(!fits);
             }
             var m = MoveCatalog.All[Order[_sel]];
-            _detail.text = $"{m.Name} — {m.Desc}";
+            var cat = CategoryColor(Order[_sel]);
+            _detailTitle.text = $"{m.Name.ToUpperInvariant()}  ·  {CardTag(Order[_sel]).ToUpperInvariant()}";
+            _detailTitle.color = new Color(cat.r * 0.5f + 0.5f, cat.g * 0.5f + 0.5f, cat.b * 0.5f + 0.5f);
+            _detail.text = m.Desc;
 
             // el rango del movimiento se dibuja EN el escenario (Into the Breach)
             RangePreview.Show(_mc.Sim, _mc.Picker, Order[_sel]);

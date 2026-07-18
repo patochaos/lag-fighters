@@ -38,9 +38,10 @@ namespace LagFighter
         public int TurnNumber { get; private set; }
         public int TurnStartTick { get; private set; }
 
-        // Lag Mode: cada 4 turnos se duplican los frames del turno. IT GETS LAGGIER.
-        public int LagLevel => LagMode ? Mathf.Min((Mathf.Max(TurnNumber, 1) - 1) / 4, 4) : 0;
-        public int CurrentTurnFrames => SimConfig.TurnFrames << LagLevel;
+        // Lag Mode: cada 3 turnos el lag sube 50%. IT GETS LAGGIER (despacio).
+        static readonly int[] LagFrames = { 60, 90, 135, 202, 303 };
+        public int LagLevel => LagMode ? Mathf.Min((Mathf.Max(TurnNumber, 1) - 1) / 3, LagFrames.Length - 1) : 0;
+        public int CurrentTurnFrames => LagFrames[LagLevel];
         int _prevLagLevel;
 
         // Wakeup options: al planificar derribado elegís levantarte rápido
@@ -58,6 +59,7 @@ namespace LagFighter
         float _roundTimer;
         float _hitstop;
         float _koTimer; // KO en cámara lenta (cosmético: timeScale, la sim ya terminó)
+        bool _autoReplay; // el replay del round que corre SIEMPRE después del KO
         int _lastProjCount;
 
         // velocidad de playback (solo presentación, la sim no cambia)
@@ -107,6 +109,7 @@ namespace LagFighter
         {
             Time.timeScale = 1f;
             _koTimer = 0f;
+            _autoReplay = false;
             _handoff = false;
             _awaitingCode = false;
             State = Flow.ModeSelect;
@@ -138,6 +141,7 @@ namespace LagFighter
             if (Mode == GameMode.Practice) Sim.Fighters[1].BlockEnabled = false; // el dummy no bloquea
             Time.timeScale = 1f;
             _koTimer = 0f;
+            _autoReplay = false;
             _acc = 0f;
             _hitstop = 0f;
             _lastProjCount = 0;
@@ -229,10 +233,10 @@ namespace LagFighter
         {
             switch (level)
             {
-                case 1: return "IT GETS LAGGIER…\n<size=14>120 frames por turno</size>";
-                case 2: return "EL WIFI ESTÁ LLORANDO\n<size=14>240 frames por turno</size>";
-                case 3: return "MODO DIAL-UP\n<size=14>480 frames por turno</size>";
-                default: return "PALOMA MENSAJERA\n<size=14>960 frames por turno</size>";
+                case 1: return "IT GETS LAGGIER…\n<size=14>90 frames por turno</size>";
+                case 2: return "EL WIFI ESTÁ LLORANDO\n<size=14>135 frames por turno</size>";
+                case 3: return "MODO DIAL-UP\n<size=14>202 frames por turno</size>";
+                default: return "PALOMA MENSAJERA\n<size=14>303 frames por turno</size>";
             }
         }
 
@@ -441,7 +445,7 @@ namespace LagFighter
                 if (_koTimer <= 0f)
                 {
                     Time.timeScale = 1f;
-                    OnRoundEnd();
+                    BeginRoundReplay();
                 }
                 return;
             }
@@ -546,6 +550,16 @@ namespace LagFighter
 
         // ---------- replay ----------
 
+        // Terminó el round: SIEMPRE se repite la pelea entera de corrido antes
+        // del banner, gane quien gane. No es opcional: acá se lee qué pasó.
+        void BeginRoundReplay()
+        {
+            if (_turnLog.Count == 0) { OnRoundEnd(); return; }
+            _autoReplay = true;
+            StartReplay();
+            _hud.SetPrompt("REPETICIÓN DEL ROUND — la pelea entera, de corrido");
+        }
+
         void StartReplay()
         {
             Sim = new MatchSim();
@@ -595,9 +609,9 @@ namespace LagFighter
 
                 if (Sim.Over)
                 {
-                    State = Flow.GameOver;
                     _acc = 0f;
-                    _hud.SetPrompt("");
+                    if (_autoReplay) { _autoReplay = false; OnRoundEnd(); }
+                    else { State = Flow.GameOver; _hud.SetPrompt(""); }
                     return;
                 }
 
@@ -608,9 +622,9 @@ namespace LagFighter
                     _replayTurn++;
                     if (_replayTurn >= _turnLog.Count)
                     {
-                        State = Flow.GameOver;
                         _acc = 0f;
-                        _hud.SetPrompt("");
+                        if (_autoReplay) { _autoReplay = false; OnRoundEnd(); }
+                        else { State = Flow.GameOver; _hud.SetPrompt(""); }
                         return;
                     }
                     LoadReplayTurn();
