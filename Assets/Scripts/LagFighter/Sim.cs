@@ -41,6 +41,13 @@ namespace LagFighter
         public const float GuardRegen = 0.1f;       // ~6/seg, solo fuera de guardia/blockstun
         public const int GuardCrushStun = 50;
         public const float GuardCrushRespawn = 50f; // la barra renace al 50%
+
+        // pérdida de miembros: daño localizado por altura del golpe.
+        // Bajo LimbSplitY pega a la pierna, arriba al brazo. Cada parte tiene
+        // su HP; en 0 el miembro VUELA (y con él, sus movimientos).
+        public const float LimbHp = 3f;
+        public const float LimbSplitY = 1.0f;
+        public const float LeglessSpeedFactor = 0.65f;
     }
 
     public enum AnimKind { Walk, Dash, Jump, AttackA, AttackB, Fireball, Dragon, Tatsu, Grab, Wait }
@@ -181,6 +188,8 @@ namespace LagFighter
     {
         public float Hp = SimConfig.MaxHp;
         public float Guard = SimConfig.GuardMax;
+        public float ArmHp = SimConfig.LimbHp;
+        public float LegHp = SimConfig.LimbHp;
         public float X;
         public int Face = 1;
         public List<int> Queue = new List<int>();
@@ -201,7 +210,9 @@ namespace LagFighter
         }
     }
 
-    public enum EvKind { Hit, Blocked, Whiff, Tech, GuardCrush }
+    public enum EvKind { Hit, Blocked, Whiff, Tech, GuardCrush, LimbLost }
+
+    public enum Limb { Arm, Leg }
 
     public struct SimEvent
     {
@@ -211,6 +222,7 @@ namespace LagFighter
         public bool Counter;
         public int MoveIndex;
         public int FrameAdv; // ventaja del atacante tras el intercambio (+ = a favor)
+        public Limb Limb;    // solo para LimbLost
     }
 
     public class MatchSim
@@ -269,6 +281,18 @@ namespace LagFighter
             if (m == null || m.ProjImmuneEnd <= m.ProjImmuneStart) return false;
             int p = Phase(i);
             return p >= m.ProjImmuneStart && p < m.ProjImmuneEnd;
+        }
+
+        // Pérdida de miembros: sin brazo no hay A ni Hadouken; sin pierna no
+        // hay B ni Tatsumaki (y las patadas aéreas no salen: saltás igual).
+        public bool MoveAllowed(int i, int moveIndex)
+        {
+            var f = Fighters[i];
+            if (f.ArmHp <= 0f && (moveIndex == MoveCatalog.AttackA || moveIndex == MoveCatalog.Hadouken))
+                return false;
+            if (f.LegHp <= 0f && (moveIndex == MoveCatalog.AttackB || moveIndex == MoveCatalog.Tatsu))
+                return false;
+            return true;
         }
 
         // Guardia automática: neutral, esperar o caminar hacia atrás — en el piso.
@@ -355,7 +379,10 @@ namespace LagFighter
         void StartQueuedMove(int i)
         {
             var f = Fighters[i];
-            f.MoveIndex = f.Queue[f.QueueIndex++];
+            int mi = f.Queue[f.QueueIndex++];
+            // si el miembro voló después de planificar, la orden degrada a Esperar
+            if (!MoveAllowed(i, mi)) mi = MoveCatalog.Wait;
+            f.MoveIndex = mi;
             f.MoveStartTick = Tick;
             f.WindowHit = new bool[MoveCatalog.All[f.MoveIndex].Hits.Length];
             f.Face = Fighters[1 - i].X >= f.X ? 1 : -1;
@@ -399,7 +426,7 @@ namespace LagFighter
                     f.Guard = Math.Min(SimConfig.GuardMax, f.Guard + SimConfig.GuardRegen);
             }
 
-            // desplazamiento
+            // desplazamiento (sin pierna: caminar y dashear rinde menos)
             for (int i = 0; i < 2; i++)
             {
                 var f = Fighters[i];
@@ -407,7 +434,9 @@ namespace LagFighter
                 if (m == null || m.MotionEnd <= m.MotionStart) continue;
                 int phase = Phase(i);
                 if (phase < m.MotionStart || phase >= m.MotionEnd) continue;
-                f.X += f.Face * m.MoveDx / (m.MotionEnd - m.MotionStart);
+                float speed = f.LegHp <= 0f && (m.Anim == AnimKind.Walk || m.Anim == AnimKind.Dash)
+                    ? SimConfig.LeglessSpeedFactor : 1f;
+                f.X += f.Face * m.MoveDx * speed / (m.MotionEnd - m.MotionStart);
             }
 
             SeparateAndClamp();
@@ -450,7 +479,7 @@ namespace LagFighter
                 ApplyContact(BuildPending(p.Owner, MoveCatalog.Hadouken,
                     SimConfig.ProjDamage, SimConfig.ProjHitstun, SimConfig.ProjBlockstun, SimConfig.ProjHitstun + 8,
                     SimConfig.ProjPush, knockdown: false, attackerFreeTick: AttackerFreeTick(p.Owner),
-                    guardDamage: SimConfig.ProjGuardDamage));
+                    guardDamage: SimConfig.ProjGuardDamage, hitY: (SimConfig.ProjY0 + SimConfig.ProjY1) * 0.5f));
                 p.Alive = false;
                 Projectiles[pi] = p;
             }
@@ -472,6 +501,7 @@ namespace LagFighter
                 {
                     var h = m.Hits[wi];
                     if (phase < h.Start || phase >= h.Start + h.Duration || atk.WindowHit[wi]) continue;
+                    if (m.Anim == AnimKind.Jump && atk.LegHp <= 0f) continue; // sin pierna la patada aérea no sale
                     if (IsInvulnerable(1 - i)) continue; // pasa de largo, la ventana sigue viva
                     if (h.IsGrab && (IsAirborne(1 - i) || (Fighters[1 - i].Stun == StunKind.Knockdown && IsStunned(1 - i))))
                         continue; // no se agarra al que salta ni al caído; la ventana sigue viva
@@ -479,7 +509,8 @@ namespace LagFighter
 
                     atk.WindowHit[wi] = true;
                     var pending = BuildPending(i, atk.MoveIndex, h.Damage, h.Hitstun, h.Blockstun, h.CounterStun,
-                        h.Push, h.Knockdown, attackerFreeTick: atk.MoveStartTick + m.Total, guardDamage: h.GuardDamage);
+                        h.Push, h.Knockdown, attackerFreeTick: atk.MoveStartTick + m.Total, guardDamage: h.GuardDamage,
+                        hitY: (h.Y0 + h.Y1) * 0.5f);
                     pending.IsGrab = h.IsGrab;
                     _pending.Add(pending);
                 }
@@ -526,7 +557,7 @@ namespace LagFighter
         struct PendingHit
         {
             public int Attacker, MoveIndex;
-            public float Damage, Push, GuardDamage;
+            public float Damage, Push, GuardDamage, HitY;
             public int Hitstun, Blockstun, CounterStun, AttackerFree;
             public bool Knockdown, Guarded, Counter, AirHit, IsGrab;
         }
@@ -534,7 +565,7 @@ namespace LagFighter
         readonly List<PendingHit> _pending = new List<PendingHit>();
 
         PendingHit BuildPending(int attacker, int moveIndex, float damage, int hitstun, int blockstun, int counterStun,
-            float push, bool knockdown, int attackerFreeTick, float guardDamage)
+            float push, bool knockdown, int attackerFreeTick, float guardDamage, float hitY = 1.2f)
         {
             int d = 1 - attacker;
             var defMove = CurrentMove(d);
@@ -549,6 +580,7 @@ namespace LagFighter
                 CounterStun = counterStun,
                 AttackerFree = attackerFreeTick,
                 GuardDamage = guardDamage,
+                HitY = hitY,
                 Knockdown = knockdown,
                 Guarded = IsBlockingState(d),
                 Counter = defMove != null && defMove.IsAttack && Phase(d) < defMove.Startup,
@@ -612,6 +644,23 @@ namespace LagFighter
 
             LastEvents.Add(new SimEvent { Attacker = p.Attacker, Kind = EvKind.Hit, Damage = dmg, Counter = p.Counter,
                 MoveIndex = p.MoveIndex, FrameAdv = def.StunEndTick - p.AttackerFree });
+
+            // daño localizado: bajo la cintura come pierna, arriba come brazo
+            if (p.HitY < SimConfig.LimbSplitY)
+            {
+                if (def.LegHp > 0f)
+                {
+                    def.LegHp = Math.Max(0f, def.LegHp - dmg);
+                    if (def.LegHp <= 0f)
+                        LastEvents.Add(new SimEvent { Attacker = p.Attacker, Kind = EvKind.LimbLost, Limb = Limb.Leg, MoveIndex = p.MoveIndex });
+                }
+            }
+            else if (def.ArmHp > 0f)
+            {
+                def.ArmHp = Math.Max(0f, def.ArmHp - dmg);
+                if (def.ArmHp <= 0f)
+                    LastEvents.Add(new SimEvent { Attacker = p.Attacker, Kind = EvKind.LimbLost, Limb = Limb.Arm, MoveIndex = p.MoveIndex });
+            }
         }
 
         void SeparateAndClamp()

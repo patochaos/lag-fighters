@@ -283,7 +283,9 @@ namespace LagFighter
 
         // el stun arrastrado te come frames del turno: solo se planifica lo que entra
         public int PlanFramesAvailable(int i) => CurrentTurnFrames - EffectiveStartStun(i);
-        public bool PlanFits(int moveIndex) => PlanFramesUsed(Picker) + MoveCatalog.All[moveIndex].Total <= PlanFramesAvailable(Picker);
+        public bool PlanFits(int moveIndex) =>
+            Sim.MoveAllowed(Picker, moveIndex) &&
+            PlanFramesUsed(Picker) + MoveCatalog.All[moveIndex].Total <= PlanFramesAvailable(Picker);
 
         public void PlanAdd(int moveIndex)
         {
@@ -638,6 +640,14 @@ namespace LagFighter
                         CamFx()?.Shake(0.11f);
                         _hud.ShowBigMessage("¡GUARDIA ROTA!", new Color(1f, 0.85f, 0.2f));
                         Announcer.Play(0.7f);
+                        break;
+                    case EvKind.LimbLost:
+                        SparkFX.Burst(ContactPos(def) + new Vector3(0f, ev.Limb == Limb.Leg ? -0.6f : 0.1f, 0f),
+                            new Color(0.95f, 0.25f, 0.2f), 20, 4.2f);
+                        SfxLib.Play(SfxLib.Kind.Ko, 0.7f);
+                        _hitstop = Mathf.Max(_hitstop, 0.16f);
+                        CamFx()?.Shake(0.13f);
+                        _hud.ShowBigMessage(ev.Limb == Limb.Arm ? "¡BRAZO FUERA!" : "¡PIERNA FUERA!", new Color(1f, 0.35f, 0.3f));
                         break;
                 }
                 _hud.OnSimEvent(ev);

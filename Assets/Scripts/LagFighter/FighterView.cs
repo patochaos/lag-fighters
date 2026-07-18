@@ -133,6 +133,10 @@ namespace LagFighter
         {
             var f = sim.Fighters[_index];
 
+            // pérdida de miembros: el bloque desaparece del rig
+            if (_armF.gameObject.activeSelf != f.ArmHp > 0f) _armF.gameObject.SetActive(f.ArmHp > 0f);
+            if (_legF.gameObject.activeSelf != f.LegHp > 0f) _legF.gameObject.SetActive(f.LegHp > 0f);
+
             var target = new Vector3(f.X, 0f, 0f);
             if ((target - transform.position).sqrMagnitude > 4f)
                 transform.position = target; // salto grande (loop del ghost / reset): sin smear

@@ -40,6 +40,7 @@ namespace LagFighter
         Text _wifiLabel;
         readonly Text[] _feedback = new Text[2];
         readonly Text[] _stateLabel = new Text[2];
+        readonly Text[] _limbLabel = new Text[2];
         readonly float[] _fbTimer = new float[2];
         TimelineRow _row0, _row1;
 
@@ -206,6 +207,11 @@ namespace LagFighter
                 18, Color.white, left ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight);
             _stateLabel[i].rectTransform.pivot = anchor;
             _stateLabel[i].fontStyle = FontStyle.Bold;
+
+            _limbLabel[i] = MakeText(_canvasRt, label + "Limbs", "", anchor, new Vector2(sign * 40f, -176f), new Vector2(400f, 22f),
+                15, new Color(1f, 0.45f, 0.35f), left ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight);
+            _limbLabel[i].rectTransform.pivot = anchor;
+            _limbLabel[i].fontStyle = FontStyle.Bold;
         }
 
         public void SetPrompt(string s) => _prompt.text = s;
@@ -227,6 +233,13 @@ namespace LagFighter
             {
                 Feedback(0, "¡TECH!", new Color(0.5f, 0.95f, 1f));
                 Feedback(1, "¡TECH!", new Color(0.5f, 0.95f, 1f));
+                return;
+            }
+            if (ev.Kind == EvKind.LimbLost)
+            {
+                string limb = ev.Limb == Limb.Arm ? "EL BRAZO" : "LA PIERNA";
+                Feedback(1 - ev.Attacker, $"¡PERDISTE {limb}!", new Color(1f, 0.35f, 0.3f));
+                Feedback(ev.Attacker, $"¡LE ARRANCASTE {limb}!", new Color(1f, 0.6f, 0.2f));
                 return;
             }
             int atk = ev.Attacker;
@@ -270,6 +283,12 @@ namespace LagFighter
                     c.a = p < sim.Fighters[i].Hp ? 1f : 0.15f;
                     _pips[i][p].color = c;
                 }
+
+                // miembros perdidos, siempre a la vista
+                var lf = sim.Fighters[i];
+                _limbLabel[i].text = lf.ArmHp <= 0f && lf.LegHp <= 0f ? "SIN BRAZO · SIN PIERNA"
+                                   : lf.ArmHp <= 0f ? "SIN BRAZO (ni A ni hadouken)"
+                                   : lf.LegHp <= 0f ? "SIN PIERNA (sin patadas, lento)" : "";
 
                 // guardia: se encoge y por debajo del 25% parpadea en rojo
                 float g = sim.Fighters[i].Guard / SimConfig.GuardMax;

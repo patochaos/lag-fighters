@@ -52,6 +52,8 @@ class Tests
         LaEsquinaEmpujaAlAtacante();
         AgarreVsAgarreEsTech();
         WakeupAjustaElKnockdown();
+        TresJabsArrancanElBrazo();
+        GolpesBajosArrancanLaPierna();
         CodigoDeTurnoIdaYVuelta();
         MismaEntradaMismaPelea();
 
@@ -170,6 +172,57 @@ class Tests
         int stay = s.StunRemaining(1);
         Check(before > 0 && quick == before - 16 && stay == quick + 32,
             "wakeup ajusta el knockdown arrastrado", $"{before} → {quick} → {stay}");
+    }
+
+    // Pérdida de miembros: 3 de daño arriba de la cintura vuelan el brazo,
+    // y sin brazo no hay ni A ni Hadouken.
+    static void TresJabsArrancanElBrazo()
+    {
+        var s = NewSim(-0.5f, 0.5f, p1Blocks: false);
+        SimEvent? lost = null;
+        for (int turn = 0; turn < 4 && lost == null; turn++)
+        {
+            s.SetQueue(0, new List<int> { MoveCatalog.WalkF, MoveCatalog.AttackA, MoveCatalog.AttackA });
+            s.SetQueue(1, new List<int>());
+            for (int t = 0; t < SimConfig.TurnFrames && lost == null; t++)
+            {
+                s.Step();
+                var e = Find(s.LastEvents, EvKind.LimbLost, 0);
+                if (e.HasValue) lost = e;
+            }
+            s.OnTurnEnd(0);
+            s.OnTurnEnd(1);
+        }
+        Check(lost.HasValue && lost.Value.Limb == Limb.Arm && s.Fighters[1].ArmHp == 0f &&
+              !s.MoveAllowed(1, MoveCatalog.AttackA) && !s.MoveAllowed(1, MoveCatalog.Hadouken) &&
+              s.MoveAllowed(1, MoveCatalog.AttackB),
+            "3 de daño arriba vuelan el brazo (chau A y hadouken)",
+            $"armHp {s.Fighters[1].ArmHp}");
+    }
+
+    // Golpes bajos (sweep, Y bajo la cintura) comen la pierna: chau B/tatsu.
+    static void GolpesBajosArrancanLaPierna()
+    {
+        var s = NewSim(-0.5f, 0.6f, p1Blocks: false);
+        SimEvent? lost = null;
+        for (int turn = 0; turn < 5 && lost == null; turn++)
+        {
+            s.SetQueue(0, new List<int> { MoveCatalog.WalkF, MoveCatalog.AttackB });
+            s.SetQueue(1, new List<int>());
+            for (int t = 0; t < SimConfig.TurnFrames && lost == null; t++)
+            {
+                s.Step();
+                var e = Find(s.LastEvents, EvKind.LimbLost, 0);
+                if (e.HasValue) lost = e;
+            }
+            s.OnTurnEnd(0);
+            s.OnTurnEnd(1);
+        }
+        Check(lost.HasValue && lost.Value.Limb == Limb.Leg && s.Fighters[1].LegHp == 0f &&
+              !s.MoveAllowed(1, MoveCatalog.AttackB) && !s.MoveAllowed(1, MoveCatalog.Tatsu) &&
+              s.MoveAllowed(1, MoveCatalog.AttackA),
+            "golpes bajos vuelan la pierna (chau B y tatsu)",
+            $"legHp {s.Fighters[1].LegHp}");
     }
 
     // Online asincrónico: el código de turno serializa y deserializa exacto,

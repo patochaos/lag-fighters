@@ -77,6 +77,10 @@ namespace LagFighter
                     else pick = MoveCatalog.JumpN;
                 }
 
+                // sin miembro no hay movimiento: degradar a algo legal
+                if (!sim.MoveAllowed(me, pick))
+                    pick = dist > 1.5f ? MoveCatalog.WalkF : MoveCatalog.Wait;
+
                 var m = MoveCatalog.All[pick];
                 if (frames + m.Total > budget)
                 {
