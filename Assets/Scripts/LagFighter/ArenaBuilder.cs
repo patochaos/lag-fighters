@@ -1,4 +1,6 @@
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace LagFighter
 {
@@ -6,6 +8,25 @@ namespace LagFighter
     // marcas de límites y centro, cámara fija de costado.
     public static class ArenaBuilder
     {
+        // WebGL corre en un solo hilo y sin FSR: pipeline a lo esencial.
+        // (El renderScale 0.8 del asset Mobile activaba FSR → warning por
+        // frame y camino de upscaling roto en WebGL.)
+        static void TuneForWebGL(Camera cam)
+        {
+            if (Application.platform != RuntimePlatform.WebGLPlayer) return;
+            if (GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset rp)
+            {
+                rp.renderScale = 1f;
+                rp.upscalingFilter = UpscalingFilterSelection.Linear; // FSR no existe acá
+                rp.msaaSampleCount = 1;
+                rp.supportsHDR = false;
+                rp.shadowDistance = 0f;
+            }
+            var camData = cam.GetUniversalAdditionalCameraData();
+            camData.renderPostProcessing = false;
+            camData.antialiasing = AntialiasingMode.None;
+        }
+
         public static void Build()
         {
             var root = new GameObject("LagFighter.Arena");
@@ -105,6 +126,7 @@ namespace LagFighter
             cam.fieldOfView = 45f;
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0.05f, 0.06f, 0.09f);
+            TuneForWebGL(cam);
 
             if (Object.FindAnyObjectByType<Light>() == null)
             {

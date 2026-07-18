@@ -59,7 +59,27 @@ public static class BuildScript
 
         var report = BuildPipeline.BuildPlayer(opts);
         Debug.Log($"BuildScript WebGL: {report.summary.result} · {report.summary.totalSize / (1024 * 1024)} MB · {report.summary.totalTime}");
+        if (report.summary.result == BuildResult.Succeeded)
+            PatchWebIndex();
         return report;
+    }
+
+    // devicePixelRatio fijo en 1: en pantallas retina el canvas renderizaba
+    // 4x los píxeles (lento) y el Input System recibía los clicks en px CSS
+    // mientras la UI mide en px del buffer (clicks corridos).
+    static void PatchWebIndex()
+    {
+        string index = WebOutputPath + "/index.html";
+        if (!System.IO.File.Exists(index)) { Debug.LogWarning("BuildScript: no encontré index.html para parchear"); return; }
+        string html = System.IO.File.ReadAllText(index);
+        // el template trae la línea comentada: descomentarla
+        string patched = html.Replace("// config.devicePixelRatio = 1;", "config.devicePixelRatio = 1;");
+        if (patched == html)
+            patched = html.Replace("var config = {",
+                "var config = {\n        devicePixelRatio: 1, // 1:1 con CSS: menos fill-rate y clicks alineados");
+        if (patched == html) { Debug.LogWarning("BuildScript: el template cambió, no pude inyectar devicePixelRatio"); return; }
+        System.IO.File.WriteAllText(index, patched);
+        Debug.Log("BuildScript: index.html parcheado con devicePixelRatio = 1");
     }
 
     static BuildReport DoBuild()
