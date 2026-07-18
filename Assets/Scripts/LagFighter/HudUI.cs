@@ -65,7 +65,6 @@ namespace LagFighter
         // FX de subida de lag: glitch de pantalla + highlight del espacio nuevo
         int _prevLagLevel;
         float _lagFxTimer;          // glitch fuerte los primeros ~0.7s
-        int _lagOldFrames = SimConfig.TurnFrames; // cuántos frames había ANTES del salto
         readonly Image[] _glitchBars = new Image[6];
 
         // botones de fin de partida
@@ -359,7 +358,6 @@ namespace LagFighter
             {
                 if (lagLvl > _prevLagLevel && _mc.LagMode)
                 {
-                    _lagOldFrames = SimConfig.TurnFrames << _prevLagLevel;
                     _lagFxTimer = 0.7f;
                     SfxLib.Play(SfxLib.Kind.Glitch, 0.9f);
                 }
@@ -391,9 +389,10 @@ namespace LagFighter
 
             // el espacio NUEVO de la barra se destaca durante toda la
             // planificación del primer turno de cada nivel de lag
-            int prevTurnLvl = _mc.LagMode ? Mathf.Min((Mathf.Max(_mc.TurnNumber - 1, 1) - 1) / 4, 4) : 0;
+            // (la fórmula vive en el controller: +50% cada 3 turnos)
+            int prevTurnLvl = _mc.LagLevelForTurn(_mc.TurnNumber - 1);
             bool newLagTurn = _mc.LagMode && flow == MatchController.Flow.Planning && lagLvl > prevTurnLvl;
-            int oldFrames = SimConfig.TurnFrames << prevTurnLvl;
+            int oldFrames = _mc.FramesForLevel(prevTurnLvl);
             float lagFromX = oldFrames * PxPerFrame;
             string lagLabel = $"+{_mc.CurrentTurnFrames - oldFrames}F NUEVOS";
             _row0.SetLagHighlight(newLagTurn, lagFromX, lagLabel);

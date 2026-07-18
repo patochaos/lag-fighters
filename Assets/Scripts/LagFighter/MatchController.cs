@@ -40,7 +40,10 @@ namespace LagFighter
 
         // Lag Mode: cada 3 turnos el lag sube 50%. IT GETS LAGGIER (despacio).
         static readonly int[] LagFrames = { 60, 90, 135, 202, 303 };
-        public int LagLevel => LagMode ? Mathf.Min((Mathf.Max(TurnNumber, 1) - 1) / 3, LagFrames.Length - 1) : 0;
+        // LA fórmula del lag vive solo acá: +50% cada 3 turnos, con cap.
+        public int LagLevelForTurn(int turn) => LagMode ? Mathf.Min((Mathf.Max(turn, 1) - 1) / 3, LagFrames.Length - 1) : 0;
+        public int FramesForLevel(int level) => LagFrames[Mathf.Clamp(level, 0, LagFrames.Length - 1)];
+        public int LagLevel => LagLevelForTurn(TurnNumber);
         public int CurrentTurnFrames => LagFrames[LagLevel];
         int _prevLagLevel;
 
@@ -217,11 +220,8 @@ namespace LagFighter
             if (myStun > 0) adv = $"  ·  arrancás −{myStun}f ({StunName(Picker)})";
             else if (oppStun > 0) adv = $"  ·  VENTAJA +{oppStun}f (rival en {StunName(1 - Picker)})";
             string lag = "";
-            if (LagMode)
-            {
-                int prevLvl = Mathf.Min((Mathf.Max(TurnNumber - 1, 1) - 1) / 4, 4);
-                if (LagLevel > prevLvl) lag = $"  ·  ¡AHORA {CurrentTurnFrames}F POR TURNO!";
-            }
+            if (LagMode && LagLevel > LagLevelForTurn(TurnNumber - 1))
+                lag = $"  ·  ¡AHORA {CurrentTurnFrames}F POR TURNO!";
             _hud.SetPrompt($"TURNO {TurnNumber} — {who}{adv}{lag}");
 
             // resumen de lo que pasó en el turno anterior, desde la silla del picker
