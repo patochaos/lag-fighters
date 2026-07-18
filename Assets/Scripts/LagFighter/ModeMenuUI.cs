@@ -162,7 +162,7 @@ namespace LagFighter
             _bigCode.gameObject.SetActive(false);
 
             _desc = Txt(rootRt, "Desc", "", new Vector2(0f, -86f), 20, new Color(1f, 1f, 1f, 0.85f), FontStyle.Normal);
-            Txt(rootRt, "Help", "1-6 o flechas + Enter · click también funciona · en partida: R reinicia, M vuelve acá",
+            Txt(rootRt, "Help", "1-6 o flechas + Enter · click también funciona · ESC vuelve atrás · en partida: R reinicia, M vuelve acá",
                 new Vector2(0f, -210f), 16, new Color(1f, 1f, 1f, 0.5f), FontStyle.Normal);
         }
 
@@ -243,7 +243,8 @@ namespace LagFighter
                 _cards[i].rectTransform.sizeDelta = grid ? new Vector2(280f, 100f) : new Vector2(300f, 110f);
                 _cards[i].rectTransform.anchoredPosition = new Vector2(x, y);
                 _cardLabels[i].text = _step == 0 ? LagOptions[i].label : _step == 1 ? Modes[i].label :
-                    _step == 2 ? Sides[i].label : _step == 3 ? AIProfiles[i].label : AIDifficulties[i].label;
+                    _step == 2 ? Sides[i].label : _step == 3 ? AIProfiles[i].label :
+                    _step == 5 ? OnlineOptions[i].label : AIDifficulties[i].label;
                 _cardLabels[i].fontSize = count >= 4 ? 16 : 24;
             }
             _desc.rectTransform.anchoredPosition = new Vector2(0f, count > 4 ? -145f : -86f);
@@ -261,7 +262,8 @@ namespace LagFighter
                     : new Color(0.12f, 0.13f, 0.17f, 0.9f);
             }
             _desc.text = _step == 0 ? LagOptions[_sel].desc : _step == 1 ? Modes[_sel].desc :
-                _step == 2 ? Sides[_sel].desc : _step == 3 ? AIProfiles[_sel].desc : AIDifficulties[_sel].desc;
+                _step == 2 ? Sides[_sel].desc : _step == 3 ? AIProfiles[_sel].desc :
+                _step == 5 ? OnlineOptions[_sel].desc : AIDifficulties[_sel].desc;
         }
 
         void Confirm(int idx)
@@ -382,6 +384,29 @@ namespace LagFighter
                     _sel = 0;
                     Layout();
                 }
+                return;
+            }
+
+            // ESC siempre vuelve un paso atrás (en el paso 0 no hay adónde)
+            if (GameInput.CancelPressed() && _step > 0)
+            {
+                SfxLib.Play(SfxLib.Kind.UiCancel, 0.6f);
+                if (_step == 4) // dificultad → perfil
+                {
+                    _step = 3;
+                    _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_profile", 0), 0, AIProfiles.Length - 1);
+                }
+                else if (_step >= 2) // lado async / perfil / online → elegir rival
+                {
+                    _step = 1;
+                    _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_mode", 1), 0, Modes.Length - 1);
+                }
+                else // modo → lag
+                {
+                    _step = 0;
+                    _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_lag", 0), 0, LagOptions.Length - 1);
+                }
+                Layout();
                 return;
             }
 
