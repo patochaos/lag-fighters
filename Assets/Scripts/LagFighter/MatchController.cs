@@ -6,7 +6,7 @@ using UnityEngine.InputSystem;
 
 namespace LagFighter
 {
-    public enum GameMode { Practice, VsAI, PvP, Async }
+    public enum GameMode { Practice, VsAI, PvP, Async, Online }
 
     // Flujo por turnos programados:
     //  - Planning: en pausa, cada jugador arma su cola de hasta 240 frames
@@ -38,6 +38,16 @@ namespace LagFighter
         // Async: después de planificar, espero el código del rival
         bool _awaitingCode;
         string _myCode = "";
+
+        // Online (sala Supabase): contador global de intercambios (cruza rounds)
+        int _netSeq;
+
+        // Timer de planificación (ONLINE y 1v1 local): al agotarse se manda lo
+        // que haya; sin órdenes = quieto bloqueando. Que nadie eternice el turno.
+        public const float PlanSeconds = 30f;
+        float _planTimer;
+        bool TimedPlanning => State == Flow.Planning && !_handoff && !_awaitingCode &&
+                              (Mode == GameMode.PvP || Mode == GameMode.Online);
         public int TurnNumber { get; private set; }
         public int TurnStartTick { get; private set; }
 
@@ -118,6 +128,7 @@ namespace LagFighter
             _autoReplay = false;
             _handoff = false;
             _awaitingCode = false;
+            if (Mode == GameMode.Online) NetLobby.I.Leave(); // suelta la sala y corta polls
             State = Flow.ModeSelect;
             _menu.Close();
             _ghost.Clear();
@@ -140,6 +151,7 @@ namespace LagFighter
         void ResetMatch()
         {
             _wins[0] = _wins[1] = 0;
+            _netSeq = 0;
             _ai = new SimpleAI(_seed++, SelectedAIProfile, SelectedAIDifficulty);
             StartRound();
         }
@@ -193,8 +205,9 @@ namespace LagFighter
                 if (Mode == GameMode.VsAI && WakeupAvailable(1)) _wakeQuick[1] = _ai.QuickRise();
                 _plans[1] = Mode == GameMode.Practice ? new List<int>() : _ai.Plan(Sim, 1, CurrentTurnFrames - WakeDelta(1));
             }
-            Picker = Mode == GameMode.Async ? LocalSide : 0;
+            Picker = (Mode == GameMode.Async || Mode == GameMode.Online) ? LocalSide : 0;
             State = Flow.Planning;
+            _planTimer = PlanSeconds;
             if (Mode == GameMode.PvP)
             {
                 BeginHandoff(0); // nadie planifica hasta que el jugador tome el teclado
@@ -327,7 +340,7 @@ namespace LagFighter
         public void GhostScrub(float frame) => _ghost.SetScrub(frame);
 
         // wrappers para los botones de fin de partida
-        public void RequestRematch() { if (State == Flow.GameOver) ResetMatch(); }
+        public void RequestRematch() { if (State == Flow.GameOver && Mode != GameMode.Online) ResetMatch(); }
         public void RequestReplay() { if (State == Flow.GameOver && HasReplay) StartReplay(); }
         public bool HasReplay => _turnLog.Count > 0;
 
@@ -350,6 +363,41 @@ namespace LagFighter
                 BeginAwaitCode();
                 return;
             }
+            if (Mode == GameMode.Online)
+            {
+                BeginAwaitOnline();
+                return;
+            }
+            BeginExecution();
+        }
+
+        // ---------- online por sala (Supabase relay) ----------
+
+        void BeginAwaitOnline()
+        {
+            _awaitingCode = true;
+            _guardFrame = Time.frameCount;
+            _menu.Close();
+            _ghost.Clear();
+            _netSeq++;
+            string myCode = TurnCode.Encode(LocalSide, TurnNumber, _wakeQuick[LocalSide], _plans[LocalSide]);
+            NetLobby.I.PushTurn(_netSeq, LocalSide, myCode);
+            int seq = _netSeq;
+            NetLobby.I.PollTurn(seq, 1 - LocalSide, payload => OnRemoteTurn(seq, payload));
+            _hud.SetBanner($"SALA {NetLobby.I.Room}\n<size=26>esperando el turno del rival…</size>\n<size=22>M abandona la pelea</size>");
+            _hud.SetPrompt($"TURNO {TurnNumber}/{TurnsPerRound} — online");
+        }
+
+        void OnRemoteTurn(int seq, string payload)
+        {
+            if (Mode != GameMode.Online || State != Flow.Planning || !_awaitingCode || seq != _netSeq) return;
+            if (!TurnCode.TryDecode(payload, out int side, out int turn, out bool quick, out var moves)) return;
+            if (side != 1 - LocalSide || turn != (TurnNumber & 0xFF)) return;
+            int remote = 1 - LocalSide;
+            _plans[remote] = moves;
+            _wakeQuick[remote] = quick;
+            _awaitingCode = false;
+            _hud.SetBanner("");
             BeginExecution();
         }
 
@@ -491,7 +539,26 @@ namespace LagFighter
             if (GameInput.MenuPressed()) { GoToModeSelect(); return; }
             if (State == Flow.GameOver && GameInput.ReplayPressed()) { StartReplay(); return; }
             if (State == Flow.Replay && GameInput.EndTurnPressed()) { SkipReplay(); return; }
-            if (GameInput.RestartPressed()) { ResetMatch(); return; }
+            if (GameInput.RestartPressed())
+            {
+                // online no hay revancha local: desincronizaría la sala
+                if (Mode == GameMode.Online) _hud.Feedback(LocalSide, "ONLINE: no hay revancha — M para salir", new Color(1f, 0.7f, 0.4f));
+                else { ResetMatch(); return; }
+            }
+
+            // timer de planificación: al agotarse se manda lo que haya
+            if (TimedPlanning)
+            {
+                _planTimer -= Time.deltaTime;
+                _hud.SetPlanTimer(Mathf.CeilToInt(Mathf.Max(0f, _planTimer)));
+                if (_planTimer <= 0f)
+                {
+                    _hud.SetPlanTimer(-1);
+                    PlanConfirm();
+                    return;
+                }
+            }
+            else _hud.SetPlanTimer(-1);
 
             // pantalla "pasá el teclado" (1v1) y espera de código (async)
             if (State == Flow.Planning && Time.frameCount > _guardFrame)
@@ -500,13 +567,14 @@ namespace LagFighter
                 {
                     _handoff = false;
                     Picker = _pendingPicker;
+                    _planTimer = PlanSeconds; // el timer arranca cuando tomás el teclado
                     _hud.SetBanner("");
                     _menu.Open(Picker);
                     UpdatePlanPrompt();
                     UpdateGhost();
                     return;
                 }
-                if (_awaitingCode && GameInput.EndTurnPressed())
+                if (_awaitingCode && Mode == GameMode.Async && GameInput.EndTurnPressed())
                 {
                     TryPasteRivalCode();
                     return;
@@ -814,6 +882,14 @@ namespace LagFighter
         public static Vector2 MousePos() => Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero;
         public static bool BoxesPressed() => K != null && K.hKey.wasPressedThisFrame;
         public static bool LogPressed() => K != null && K.lKey.wasPressedThisFrame;
+        public static char LetterPressed()
+        {
+            if (K == null) return '\0';
+            for (int k = (int)Key.A; k <= (int)Key.Z; k++)
+                if (K[(Key)k].wasPressedThisFrame) return (char)('A' + k - (int)Key.A);
+            return '\0';
+        }
+        public static bool CancelPressed() => K != null && K.escapeKey.wasPressedThisFrame;
         public static int NumberPressed()
         {
             if (K == null) return -1;
@@ -840,6 +916,13 @@ namespace LagFighter
         public static Vector2 MousePos() => Input.mousePosition;
         public static bool BoxesPressed() => Input.GetKeyDown(KeyCode.H);
         public static bool LogPressed() => Input.GetKeyDown(KeyCode.L);
+        public static char LetterPressed()
+        {
+            for (var k = KeyCode.A; k <= KeyCode.Z; k++)
+                if (Input.GetKeyDown(k)) return (char)('A' + k - KeyCode.A);
+            return '\0';
+        }
+        public static bool CancelPressed() => Input.GetKeyDown(KeyCode.Escape);
         public static int NumberPressed()
         {
             for (int n = 1; n <= 9; n++)

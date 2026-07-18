@@ -21,6 +21,13 @@ namespace LagFighter
             ("VS IA", "La CPU planifica su turno en secreto, igual que vos.", GameMode.VsAI),
             ("1v1 LOCAL", "Misma PC: planifica J1, pantalla de 'pasá el teclado', planifica J2.", GameMode.PvP),
             ("POR CÓDIGO", "Pelea por chat: cada turno intercambian un código corto y ambos ven la misma pelea. Sin servidores.", GameMode.Async),
+            ("ONLINE", "Sala con código de invitación: uno crea, el otro se une. Turnos con timer de 30s.", GameMode.Online),
+        };
+
+        static readonly (string label, string desc)[] OnlineOptions =
+        {
+            ("CREAR SALA", "Te da un código de 4 letras para pasarle a tu rival por donde sea."),
+            ("UNIRSE", "Escribí el código que te pasaron y a pelear."),
         };
 
         static readonly (string label, string desc)[] Sides =
@@ -53,11 +60,14 @@ namespace LagFighter
         Text[] _cardLabels;
         Text _desc, _stepTitle;
         int _sel;
-        int _step; // 0 lag, 1 modo, 2 lado async, 3 perfil IA, 4 dificultad IA
+        int _step; // 0 lag, 1 modo, 2 lado async, 3 perfil IA, 4 dificultad IA,
+                   // 5 online (crear/unirse), 6 escribir código, 7 esperando rival
         bool _lagChoice;
         AIProfile _aiProfileChoice = AIProfile.Random;
         bool _active;
         Vector2 _lastMouse;
+        string _codeInput = "";
+        Text _bigCode;
 
         public static ModeMenuUI Create(MatchController mc)
         {
@@ -146,6 +156,11 @@ namespace LagFighter
                 _cardLabels[i].font = UIFonts.Pixel;
             }
 
+            // código de sala grande (escribirlo / mostrarlo mientras esperás)
+            _bigCode = Txt(rootRt, "BigCode", "", new Vector2(0f, 30f), 40, new Color(0.5f, 0.95f, 1f), FontStyle.Normal);
+            _bigCode.font = UIFonts.Pixel;
+            _bigCode.gameObject.SetActive(false);
+
             _desc = Txt(rootRt, "Desc", "", new Vector2(0f, -86f), 20, new Color(1f, 1f, 1f, 0.85f), FontStyle.Normal);
             Txt(rootRt, "Help", "1-6 o flechas + Enter · click también funciona · en partida: R reinicia, M vuelve acá",
                 new Vector2(0f, -210f), 16, new Color(1f, 1f, 1f, 0.5f), FontStyle.Normal);
@@ -173,7 +188,8 @@ namespace LagFighter
         }
 
         int OptionCount => _step == 0 ? LagOptions.Length : _step == 1 ? Modes.Length :
-            _step == 2 ? Sides.Length : _step == 3 ? AIProfiles.Length : AIDifficulties.Length;
+            _step == 2 ? Sides.Length : _step == 3 ? AIProfiles.Length :
+            _step == 4 ? AIDifficulties.Length : _step == 5 ? OnlineOptions.Length : 0;
 
         public void Open()
         {
@@ -196,7 +212,23 @@ namespace LagFighter
             _stepTitle.text = _step == 0 ? "¿CUÁNTO LAG QUERÉS?" :
                               _step == 1 ? (_lagChoice ? "LAG MODE — elegí rival" : "NORMAL — elegí rival") :
                               _step == 2 ? "POR CÓDIGO — ¿de qué lado jugás?" :
-                              _step == 3 ? "VS IA — ELEGÍ UN PERFIL" : "VS IA — ELEGÍ DIFICULTAD";
+                              _step == 3 ? "VS IA — ELEGÍ UN PERFIL" :
+                              _step == 4 ? "VS IA — ELEGÍ DIFICULTAD" :
+                              _step == 5 ? "ONLINE — SALA CON CÓDIGO" :
+                              _step == 6 ? "ESCRIBÍ EL CÓDIGO DE LA SALA" :
+                              "ESPERANDO AL RIVAL…";
+
+            _bigCode.gameObject.SetActive(_step >= 6);
+            if (_step == 6)
+            {
+                _bigCode.text = _codeInput.PadRight(4, '_');
+                _desc.text = "letras A-Z · Enter confirma · Escape vuelve";
+            }
+            else if (_step == 7)
+            {
+                _bigCode.text = NetLobby.I.Room;
+                _desc.text = "pasale este código a tu rival · la sala espera hasta que se una · Escape cancela";
+            }
             float cardW = count >= 4 ? 300f : 330f;
             for (int i = 0; i < _cards.Length; i++)
             {
@@ -215,7 +247,7 @@ namespace LagFighter
                 _cardLabels[i].fontSize = count >= 4 ? 23 : 28;
             }
             _desc.rectTransform.anchoredPosition = new Vector2(0f, count > 4 ? -145f : -86f);
-            Highlight(_sel);
+            if (count > 0) Highlight(_sel);
         }
 
         void Highlight(int idx)
@@ -258,12 +290,46 @@ namespace LagFighter
                     Layout();
                     return;
                 }
+                if (Modes[idx].mode == GameMode.Online)
+                {
+                    _step = 5;
+                    _sel = 0;
+                    Layout();
+                    return;
+                }
                 _mc.StartMatch(Modes[idx].mode, _lagChoice);
                 return;
             }
             if (_step == 2)
             {
                 _mc.StartMatch(GameMode.Async, _lagChoice, idx);
+                return;
+            }
+            if (_step == 5)
+            {
+                if (idx == 0) // crear sala
+                {
+                    _desc.text = "creando sala…";
+                    NetLobby.I.CreateRoom(_lagChoice,
+                        code =>
+                        {
+                            if (!_active) return;
+                            _step = 7;
+                            Layout();
+                            NetLobby.I.WaitForGuest(() =>
+                            {
+                                if (_active && _step == 7)
+                                    _mc.StartMatch(GameMode.Online, _lagChoice, 0);
+                            });
+                        },
+                        err => { if (_active) _desc.text = err; });
+                }
+                else // unirse
+                {
+                    _codeInput = "";
+                    _step = 6;
+                    Layout();
+                }
                 return;
             }
             if (_step == 3)
@@ -280,6 +346,38 @@ namespace LagFighter
         void Update()
         {
             if (!_active) return;
+
+            // pasos online sin cartas: escribir código / esperar rival
+            if (_step == 6)
+            {
+                char c = GameInput.LetterPressed();
+                if (c != '\0' && _codeInput.Length < 4) { _codeInput += c; Layout(); }
+                if (GameInput.UndoPressed() && _codeInput.Length > 0)
+                {
+                    _codeInput = _codeInput.Substring(0, _codeInput.Length - 1);
+                    Layout();
+                }
+                if (GameInput.CancelPressed()) { _step = 5; _sel = 1; Layout(); return; }
+                if (_codeInput.Length == 4 && c == '\0' && (GameInput.ConfirmPressed() || GameInput.EndTurnPressed()))
+                {
+                    _desc.text = $"uniéndome a {_codeInput}…";
+                    NetLobby.I.JoinRoom(_codeInput,
+                        lagMode => { if (_active) _mc.StartMatch(GameMode.Online, lagMode, 1); },
+                        err => { if (_active && _step == 6) _desc.text = err; });
+                }
+                return;
+            }
+            if (_step == 7)
+            {
+                if (GameInput.CancelPressed())
+                {
+                    NetLobby.I.Leave();
+                    _step = 5;
+                    _sel = 0;
+                    Layout();
+                }
+                return;
+            }
 
             // hover muestra la descripción de cada opción; click la confirma
             var mp = GameInput.MousePos();

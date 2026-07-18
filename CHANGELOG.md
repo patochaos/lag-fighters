@@ -2,8 +2,14 @@
 
 Cada subida a GitHub agrega acá sus change notes.
 
-## 0.4.1 — 2026-07-18 (timer de round + parry anti-chip)
+## 0.4.1 — 2026-07-18 (ONLINE + timers + parry anti-chip)
 
+- **Modo ONLINE**: sala con código de invitación de 4 letras (sin cuentas,
+  sin matchmaking). Relay tonto sobre Supabase (`lf_rooms`/`lf_turns`):
+  cada turno sube tu `TurnCode` y baja el del rival por polling; la sim
+  determinista hace el resto. La sala persiste (partida retomable).
+- **Timer de planificación de 30s** en ONLINE y 1v1 local: al agotarse se
+  manda lo planificado; sin órdenes = quieto bloqueando.
 - **20 turnos por round**: al agotarse, TIME OVER y gana el que tiene más
   vida (empate posible). Prompt con TURNO X/20 y aviso en los últimos.
   La repetición y el marcador usan el ganador efectivo (KO o por vida).

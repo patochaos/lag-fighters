@@ -135,7 +135,15 @@ planes ya revelados y aplica lo observado a partir del turno siguiente.
   local hotseat con **picks secretos** (pantalla "pasá el teclado") / **POR
   CÓDIGO**: online asincrónico sin servidores — cada turno se intercambia un
   código corto (`TurnCode`: LF+base64 de lado/turno/wakeup/cola) por chat y
-  la sim determinista garantiza que ambos ven la misma pelea.
+  la sim determinista garantiza que ambos ven la misma pelea / **ONLINE**
+  (2026-07-18): sala con código de invitación de 4 letras sobre un relay
+  Supabase tonto (`NetLobby.cs`, tablas `lf_rooms`/`lf_turns` en el proyecto
+  compartido arrow-game) — el mismo `TurnCode` del modo manual, pero subido y
+  bajado por HTTP con polling de 1.5s. Sin cuentas ni matchmaking; la sala
+  persiste (retomable). Sin revancha local (desincronizaría): sala nueva.
+- **Timer de planificación de 30s** en ONLINE y 1v1 local: al agotarse se
+  manda lo que haya (sin órdenes = quieto bloqueando). Práctica/VS IA sin
+  timer. El HUD muestra la cuenta y se pone rojo a los 10s.
 - UI: cartas con framedata (PlanMenuUI), timelines de 60f con fichas por
   comando y bloque de stun arrastrado al inicio (HudUI) — la fila rival se
   revela al ejecutar. Hurt/hitboxes con toggle (Viz.cs). Blockman procedural

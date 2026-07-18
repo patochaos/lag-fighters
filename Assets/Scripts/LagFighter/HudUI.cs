@@ -30,8 +30,9 @@ namespace LagFighter
         readonly Image[] _guardFill = new Image[2];
         const float PipW = 42f, PipGap = 46f;
         const float GuardBarW = SimConfig.MaxHp * PipGap - (PipGap - PipW);
-        Text _banner, _prompt, _turnSummary;
+        Text _banner, _prompt, _turnSummary, _planTimerText;
         string _bannerOverride = "";
+        int _lastPlanTimerShown = -2;
 
         // tira de conexión
         Text _connText;
@@ -123,6 +124,11 @@ namespace LagFighter
 
             _prompt = MakeTextP(_canvasRt, "Prompt", "", new Vector2(0.5f, 1f), new Vector2(0f, -76f), new Vector2(1500f, 30f),
                 13, Palette.Startup, TextAnchor.MiddleCenter);
+
+            // timer de planificación (online / 1v1): cuenta regresiva al lado del prompt
+            _planTimerText = MakeTextP(_canvasRt, "PlanTimer", "", new Vector2(0.5f, 1f), new Vector2(700f, -76f), new Vector2(160f, 30f),
+                14, Palette.Guard, TextAnchor.MiddleRight);
+            _planTimerText.rectTransform.pivot = new Vector2(1f, 0.5f);
 
             _turnSummary = MakeText(_canvasRt, "TurnSummary", "", new Vector2(0.5f, 1f), new Vector2(0f, -102f), new Vector2(1400f, 22f),
                 16, new Color(0.85f, 0.9f, 1f, 0.8f), TextAnchor.MiddleCenter);
@@ -227,6 +233,15 @@ namespace LagFighter
         }
 
         public void SetTurnSummary(string s) => _turnSummary.text = s;
+
+        // -1 = ocultar; <=10s se pone rojo y grita
+        public void SetPlanTimer(int seconds)
+        {
+            if (seconds == _lastPlanTimerShown) return;
+            _lastPlanTimerShown = seconds;
+            _planTimerText.text = seconds < 0 ? "" : $"{seconds}s";
+            _planTimerText.color = seconds >= 0 && seconds <= 10 ? Palette.Damage : Palette.Guard;
+        }
 
         public void AddTurnLog(string line)
         {

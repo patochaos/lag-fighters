@@ -183,6 +183,11 @@ el game over y `R` es revancha. Práctica no tiene límite de turnos.
   base64 de lado/turno/wakeup/cola). Se lo mandás al rival por WhatsApp/
   Discord, pegás el suyo con ESPACIO y la sim determinista garantiza que
   ambos ven exactamente la misma pelea. Valida lado, turno y movimientos.
+- **ONLINE** (sala con código de invitación): uno crea sala → código de 4
+  letras → el otro se une. Mismo `TurnCode`, pero un relay tonto (Supabase
+  REST + polling 1.5s) hace el intercambio solo. Timer de 30s por turno: al
+  agotarse se manda lo que haya (nada = quieto bloqueando). Sin cuentas ni
+  matchmaking; el servidor no entiende el juego — solo guarda strings.
 
 Menú inicial: NORMAL o LAG MODE → modo (→ lado, si es POR CÓDIGO).
 
