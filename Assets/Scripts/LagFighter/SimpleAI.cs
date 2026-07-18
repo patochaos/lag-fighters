@@ -46,8 +46,9 @@ namespace LagFighter
                     if (!threwFireball && r < 0.35) { pick = MoveCatalog.Hadouken; threwFireball = true; }
                     else if (r < 0.60) pick = MoveCatalog.WalkF;
                     else if (r < 0.72) pick = MoveCatalog.DashF;
-                    else if (r < 0.82) pick = MoveCatalog.JumpF; // por si viene hadouken de vuelta
-                    else if (r < 0.92) pick = MoveCatalog.Wait;
+                    else if (r < 0.82) pick = MoveCatalog.JumpF;   // por si viene hadouken de vuelta
+                    else if (r < 0.89) pick = MoveCatalog.Crouch;  // agachado, el hadouken pasa de largo
+                    else if (r < 0.95) pick = MoveCatalog.Wait;
                     else pick = MoveCatalog.WalkB;
                 }
                 else if (dist > 1.5f)
@@ -65,11 +66,13 @@ namespace LagFighter
                 }
                 else
                 {
-                    if (r < 0.20) pick = MoveCatalog.AttackA;
-                    else if (r < 0.32) pick = MoveCatalog.AttackB;
-                    else if (r < 0.46) pick = MoveCatalog.Grab;    // rompe a los bloqueadores
+                    if (r < 0.16) pick = MoveCatalog.AttackA;
+                    else if (r < 0.26) pick = MoveCatalog.LowKick; // pega bajo, esquiva altos
+                    else if (r < 0.36) pick = MoveCatalog.AttackB;
+                    else if (r < 0.48) pick = MoveCatalog.Grab;    // rompe a los bloqueadores
                     else if (r < 0.56) pick = MoveCatalog.WalkB;
-                    else if (r < 0.64) pick = MoveCatalog.Wait;
+                    else if (r < 0.62) pick = MoveCatalog.Wait;
+                    else if (r < 0.66) pick = MoveCatalog.Crouch;
                     else if (r < 0.72) pick = MoveCatalog.DashB;
                     else if (r < 0.78) pick = MoveCatalog.Shoryuken; // la apuesta
                     else if (r < 0.84) pick = MoveCatalog.Tatsu;

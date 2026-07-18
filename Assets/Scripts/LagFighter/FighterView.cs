@@ -171,7 +171,7 @@ namespace LagFighter
             float breathe = Mathf.Sin(Time.time * 2.5f + _index) * 0.015f;
             var armF = ArmFPos; var armB = ArmBPos; var legF = LegFPos; var legB = LegBPos;
             var legFRot = Quaternion.identity; var legBRot = Quaternion.identity;
-            float rigPitch = 0f, rigZOff = 0f, spinYaw = 0f;
+            float rigPitch = 0f, rigZOff = 0f, spinYaw = 0f, crouchY = 0f;
 
             if (m != null && !stunned)
             {
@@ -230,6 +230,22 @@ namespace LagFighter
                         legFRot = Quaternion.Euler(80f, 0f, 0f);
                         legBRot = Quaternion.Euler(-15f, 0f, 0f);
                         break;
+                    case AnimKind.Crouch:
+                        // en cuclillas: el rig baja y las piernas se pliegan
+                        crouchY = -0.5f;
+                        legFRot = Quaternion.Euler(75f, 0f, 0f);
+                        legBRot = Quaternion.Euler(75f, 0f, 0f);
+                        armF = new Vector3(0.1f, 1.15f, 0.38f);
+                        armB = new Vector3(-0.1f, 1.28f, 0.34f);
+                        break;
+                    case AnimKind.LowKick:
+                        // rastrera: agachado con la pierna estirada al ras del piso
+                        crouchY = -0.5f;
+                        legBRot = Quaternion.Euler(75f, 0f, 0f);
+                        legF = Vector3.Lerp(LegFPos, new Vector3(0.08f, 0.62f, 0.55f), pk);
+                        legFRot = Quaternion.Euler(Mathf.Lerp(20f, 95f, pk), 0f, 0f);
+                        rigPitch = pk * 6f;
+                        break;
                     case AnimKind.Grab:
                         // agarre: los brazos se ABREN bien anchos en el startup
                         // y se CIERRAN como pinza al frente en la ventana activa
@@ -255,7 +271,7 @@ namespace LagFighter
             float lieAngle = down || loser ? -85f : rigPitch;
             var wantRot = Quaternion.Euler(lieAngle, _faceYaw + spinYaw, 0f);
             _rig.localRotation = spinYaw > 0.01f ? wantRot : Quaternion.Slerp(_rig.localRotation, wantRot, 1f - Mathf.Exp(-9f * dt));
-            _rig.localPosition = new Vector3(0f, (down || loser) ? 0.25f : airY + breathe, 0f);
+            _rig.localPosition = new Vector3(0f, (down || loser) ? 0.25f : airY + breathe + crouchY, 0f);
 
             if (winner) armF = new Vector3(0.12f, 1.7f, 0.1f);
 

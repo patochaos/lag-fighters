@@ -48,9 +48,13 @@ namespace LagFighter
         public const float LimbHp = 3f;
         public const float LimbSplitY = 1.0f;
         public const float LeglessSpeedFactor = 0.65f;
+
+        // agachado: hurtbox de 0.9 — el jab (Y0 1.0) y el hadouken (Y0 0.95)
+        // pasan por arriba; el sweep, la patada baja y el agarre no.
+        public const float CrouchHeight = 0.9f;
     }
 
-    public enum AnimKind { Walk, Dash, Jump, AttackA, AttackB, Fireball, Dragon, Tatsu, Grab, Wait }
+    public enum AnimKind { Walk, Dash, Jump, AttackA, AttackB, Fireball, Dragon, Tatsu, Grab, Wait, Crouch, LowKick }
     public enum StunKind { None, Hitstun, Blockstun, Knockdown }
 
     public struct HitWindow
@@ -81,6 +85,7 @@ namespace LagFighter
         public float MoveDx;
         public int MotionStart, MotionEnd;
         public int AirStart = -1, AirEnd = -1;       // ventana en el aire (hurtbox alta, no bloquea)
+        public int CrouchStart = -1, CrouchEnd = -1; // ventana agachado (hurtbox baja: los altos pasan de largo)
         public int InvulnStart = -1, InvulnEnd = -1; // ventana invulnerable (Shoryuken)
         public int ProjImmuneStart = -1, ProjImmuneEnd = -1; // inmune SOLO a proyectiles (Tatsumaki)
         public int SpawnFrame = -1;                  // frame en que larga el proyectil
@@ -95,7 +100,7 @@ namespace LagFighter
         public const int WalkF = 0, WalkB = 1, DashF = 2, DashB = 3,
                          JumpF = 4, JumpN = 5, JumpB = 6,
                          AttackA = 7, AttackB = 8, Hadouken = 9, Shoryuken = 10, Wait = 11,
-                         Tatsu = 12, Grab = 13;
+                         Tatsu = 12, Grab = 13, Crouch = 14, LowKick = 15;
 
         public static readonly MoveDef[] All =
         {
@@ -167,6 +172,16 @@ namespace LagFighter
                 Desc = "Rompe la guardia y tira corto (KD). Los saltos lo ignoran; agarre vs agarre = TECH.",
                 Hits = new[] { new HitWindow { Start = 6, Duration = 4, Fwd0 = 0.15f, Fwd1 = 0.9f, Y0 = 0.5f, Y1 = 1.6f,
                     Damage = 1f, Hitstun = 45, Blockstun = 0, CounterStun = 45, Push = 1.2f, Knockdown = true, IsGrab = true } } },
+
+            new MoveDef { Id = "crouch", Name = "Agacharse", Anim = AnimKind.Crouch, Startup = 0, Active = 14, Recovery = 0,
+                Desc = "Bloquea agachado: los golpes ALTOS y los hadoukens pasan por arriba. El sweep, la patada baja y el agarre no.",
+                CrouchStart = 0, CrouchEnd = 14 },
+
+            new MoveDef { Id = "lowKick", Name = "Patada baja", Anim = AnimKind.LowKick, Startup = 8, Active = 4, Recovery = 16,
+                Desc = "Rastrera desde abajo: pega BAJO (+2 hit / −3 block), agachado mientras dura. Guardia −15.",
+                CrouchStart = 0, CrouchEnd = 28,
+                Hits = new[] { new HitWindow { Start = 8, Duration = 4, Fwd0 = 0.4f, Fwd1 = 1.15f, Y0 = 0.25f, Y1 = 0.8f,
+                    Damage = 1f, Hitstun = 22, Blockstun = 13, CounterStun = 32, Push = 0.3f, GuardDamage = 15f } } },
         };
     }
 
@@ -275,6 +290,14 @@ namespace LagFighter
             return p >= m.InvulnStart && p < m.InvulnEnd;
         }
 
+        public bool IsCrouching(int i)
+        {
+            var m = CurrentMove(i);
+            if (m == null || m.CrouchEnd <= m.CrouchStart) return false;
+            int p = Phase(i);
+            return p >= m.CrouchStart && p < m.CrouchEnd;
+        }
+
         public bool IsProjImmune(int i)
         {
             var m = CurrentMove(i);
@@ -290,7 +313,7 @@ namespace LagFighter
             var f = Fighters[i];
             if (f.ArmHp <= 0f && (moveIndex == MoveCatalog.AttackA || moveIndex == MoveCatalog.Hadouken))
                 return false;
-            if (f.LegHp <= 0f && (moveIndex == MoveCatalog.AttackB || moveIndex == MoveCatalog.Tatsu))
+            if (f.LegHp <= 0f && (moveIndex == MoveCatalog.AttackB || moveIndex == MoveCatalog.Tatsu || moveIndex == MoveCatalog.LowKick))
                 return false;
             return true;
         }
@@ -301,7 +324,7 @@ namespace LagFighter
             var f = Fighters[i];
             if (!f.BlockEnabled || IsStunned(i) || IsAirborne(i)) return false;
             if (f.MoveIndex < 0) return true;
-            return f.MoveIndex == MoveCatalog.WalkB || f.MoveIndex == MoveCatalog.Wait;
+            return f.MoveIndex == MoveCatalog.WalkB || f.MoveIndex == MoveCatalog.Wait || f.MoveIndex == MoveCatalog.Crouch;
         }
 
         public void SetQueue(int i, IEnumerable<int> moves)
@@ -334,7 +357,9 @@ namespace LagFighter
             var f = Fighters[i];
             if (IsAirborne(i))
                 return new WorldRect { X0 = f.X - SimConfig.HurtHalfWidth, X1 = f.X + SimConfig.HurtHalfWidth, Y0 = SimConfig.AirHurtY0, Y1 = SimConfig.AirHurtY1 };
-            float h = f.Stun == StunKind.Knockdown && IsStunned(i) ? 0.55f : SimConfig.HurtHeight;
+            float h = f.Stun == StunKind.Knockdown && IsStunned(i) ? 0.55f
+                    : IsCrouching(i) ? SimConfig.CrouchHeight
+                    : SimConfig.HurtHeight;
             return new WorldRect { X0 = f.X - SimConfig.HurtHalfWidth, X1 = f.X + SimConfig.HurtHalfWidth, Y0 = 0f, Y1 = h };
         }
 

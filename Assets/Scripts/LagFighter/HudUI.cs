@@ -445,6 +445,8 @@ namespace LagFighter
                 case MoveCatalog.Tatsu: return new Color(0.9f, 0.45f, 0.15f);
                 case MoveCatalog.Grab: return new Color(0.85f, 0.3f, 0.75f);
                 case MoveCatalog.Wait: return new Color(0.45f, 0.47f, 0.52f);
+                case MoveCatalog.Crouch: return new Color(0.35f, 0.55f, 0.85f);
+                case MoveCatalog.LowKick: return new Color(0.75f, 0.28f, 0.3f);
                 default: return new Color(0.25f, 0.72f, 0.45f); // caminar
             }
         }
@@ -466,6 +468,8 @@ namespace LagFighter
                 case MoveCatalog.DashB: return "«";
                 case MoveCatalog.Tatsu: return "T";
                 case MoveCatalog.Grab: return "G";
+                case MoveCatalog.Crouch: return "▼";
+                case MoveCatalog.LowKick: return "b";
                 default: return "·";
             }
         }

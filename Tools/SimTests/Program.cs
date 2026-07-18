@@ -54,6 +54,9 @@ class Tests
         WakeupAjustaElKnockdown();
         TresJabsArrancanElBrazo();
         GolpesBajosArrancanLaPierna();
+        ElJabPasaSobreElAgachado();
+        ElHadoukenPasaSobreElAgachado();
+        LaPatadaBajaPegaAlAgachado();
         CodigoDeTurnoIdaYVuelta();
         MismaEntradaMismaPelea();
 
@@ -223,6 +226,40 @@ class Tests
               s.MoveAllowed(1, MoveCatalog.AttackA),
             "golpes bajos vuelan la pierna (chau B y tatsu)",
             $"legHp {s.Fighters[1].LegHp}");
+    }
+
+    // Agacharse: hurtbox de 0.9 → el jab (Y0 1.0) pasa por arriba.
+    static void ElJabPasaSobreElAgachado()
+    {
+        var s = NewSim(-0.5f, 0.5f, p1Blocks: true);
+        s.SetQueue(0, new List<int> { MoveCatalog.AttackA });
+        s.SetQueue(1, new List<int> { MoveCatalog.Crouch, MoveCatalog.Crouch, MoveCatalog.Crouch });
+        var evs = Run(s, 30);
+        Check(Find(evs, EvKind.Hit, 0) == null && Find(evs, EvKind.Blocked, 0) == null &&
+              Find(evs, EvKind.Whiff, 0) != null && s.Fighters[1].Guard == SimConfig.GuardMax,
+            "el jab pasa por arriba del agachado (ni guardia gasta)");
+    }
+
+    static void ElHadoukenPasaSobreElAgachado()
+    {
+        var s = NewSim(-1.5f, 1.5f, p1Blocks: true);
+        s.SetQueue(0, new List<int> { MoveCatalog.Hadouken });
+        s.SetQueue(1, new List<int> { MoveCatalog.Crouch, MoveCatalog.Crouch, MoveCatalog.Crouch,
+                                      MoveCatalog.Crouch, MoveCatalog.Crouch, MoveCatalog.Crouch });
+        var evs = Run(s, 70);
+        Check(Find(evs, EvKind.Hit, 0) == null && Find(evs, EvKind.Blocked, 0) == null &&
+              s.Fighters[1].Hp == SimConfig.MaxHp,
+            "el hadouken pasa por arriba del agachado");
+    }
+
+    static void LaPatadaBajaPegaAlAgachado()
+    {
+        var s = NewSim(-0.5f, 0.5f, p1Blocks: false);
+        s.SetQueue(0, new List<int> { MoveCatalog.LowKick });
+        s.SetQueue(1, new List<int> { MoveCatalog.Crouch, MoveCatalog.Crouch, MoveCatalog.Crouch });
+        var ev = Find(Run(s, 30), EvKind.Hit, 0);
+        Check(ev.HasValue && ev.Value.FrameAdv == 2,
+            "la patada baja pega al agachado y es +2", ev.HasValue ? $"adv {ev.Value.FrameAdv}" : "no pegó");
     }
 
     // Online asincrónico: el código de turno serializa y deserializa exacto,
