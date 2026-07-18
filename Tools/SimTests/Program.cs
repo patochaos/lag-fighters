@@ -1,0 +1,197 @@
+using System;
+using System.Collections.Generic;
+using LagFighter;
+
+// Tests de framedata sobre la sim pura y determinista. Sin frameworks:
+// cada test es un escenario armado a mano con el resultado esperado.
+class Tests
+{
+    static int _passed, _failed;
+
+    static void Check(bool cond, string name, string detail = "")
+    {
+        if (cond) { _passed++; Console.WriteLine($"  ok  {name}"); }
+        else { _failed++; Console.WriteLine($"FALLO {name}{(detail == "" ? "" : $" — {detail}")}"); }
+    }
+
+    static MatchSim NewSim(float x0, float x1, bool p1Blocks)
+    {
+        var s = new MatchSim();
+        s.Fighters[0].X = x0;
+        s.Fighters[1].X = x1;
+        s.Fighters[1].BlockEnabled = p1Blocks;
+        return s;
+    }
+
+    static List<SimEvent> Run(MatchSim s, int frames)
+    {
+        var evs = new List<SimEvent>();
+        for (int t = 0; t < frames && !s.Over; t++)
+        {
+            s.Step();
+            evs.AddRange(s.LastEvents);
+        }
+        return evs;
+    }
+
+    static SimEvent? Find(List<SimEvent> evs, EvKind kind, int attacker = -1)
+    {
+        foreach (var e in evs)
+            if (e.Kind == kind && (attacker < 0 || e.Attacker == attacker)) return e;
+        return null;
+    }
+
+    static void Main()
+    {
+        JabOnHitEsMasDos();
+        JabOnBlockEsMenosCinco();
+        SweepDerriba();
+        TatsuAtraviesaHadouken();
+        ShoryuInvulnerableAlArranque();
+        SieteJabsBloqueadosRompenLaGuardia();
+        LaEsquinaEmpujaAlAtacante();
+        AgarreVsAgarreEsTech();
+        WakeupAjustaElKnockdown();
+        MismaEntradaMismaPelea();
+
+        Console.WriteLine($"\n{_passed} ok, {_failed} fallos");
+        Environment.Exit(_failed > 0 ? 1 : 0);
+    }
+
+    // "A on hit = +2": la ventaja del jab conectado es exactamente +2f.
+    static void JabOnHitEsMasDos()
+    {
+        var s = NewSim(-0.5f, 0.5f, p1Blocks: false);
+        s.SetQueue(0, new List<int> { MoveCatalog.AttackA });
+        var ev = Find(Run(s, 30), EvKind.Hit, 0);
+        Check(ev.HasValue && ev.Value.FrameAdv == 2 && ev.Value.Damage == 1f,
+            "jab on hit = +2, 1 dmg", ev.HasValue ? $"adv {ev.Value.FrameAdv}, dmg {ev.Value.Damage}" : "no conectó");
+    }
+
+    // "A on block = −5".
+    static void JabOnBlockEsMenosCinco()
+    {
+        var s = NewSim(-0.5f, 0.5f, p1Blocks: true); // P1 en neutral bloquea
+        s.SetQueue(0, new List<int> { MoveCatalog.AttackA });
+        var ev = Find(Run(s, 30), EvKind.Blocked, 0);
+        Check(ev.HasValue && ev.Value.FrameAdv == -5,
+            "jab on block = −5", ev.HasValue ? $"adv {ev.Value.FrameAdv}" : "no lo bloqueó");
+    }
+
+    static void SweepDerriba()
+    {
+        var s = NewSim(-0.5f, 0.6f, p1Blocks: false);
+        s.SetQueue(0, new List<int> { MoveCatalog.AttackB });
+        var evs = Run(s, 25);
+        var ev = Find(evs, EvKind.Hit, 0);
+        Check(ev.HasValue && ev.Value.Damage == 2f && s.Fighters[1].Stun == StunKind.Knockdown,
+            "sweep pega 2 y derriba", $"stun {s.Fighters[1].Stun}");
+    }
+
+    // "tatsu atraviesa hadouken": el proyectil no le pega girando (frames 8..40).
+    static void TatsuAtraviesaHadouken()
+    {
+        var s = NewSim(-1f, 3.5f, p1Blocks: false);
+        s.Projectiles.Add(new Projectile { Owner = 1, X = 0f, Dir = -1, Alive = true });
+        s.SetQueue(0, new List<int> { MoveCatalog.Tatsu });
+        var evs = Run(s, 46);
+        Check(s.Fighters[0].Hp == SimConfig.MaxHp && Find(evs, EvKind.Hit, 1) == null,
+            "tatsu atraviesa hadoukens", $"hp {s.Fighters[0].Hp}");
+    }
+
+    // Invuln 1..10 del shoryu: un proyectil encima no conecta en el arranque.
+    static void ShoryuInvulnerableAlArranque()
+    {
+        var s = NewSim(-1f, 3.5f, p1Blocks: false);
+        s.Projectiles.Add(new Projectile { Owner = 1, X = -0.9f, Dir = -1, Alive = true });
+        s.SetQueue(0, new List<int> { MoveCatalog.Shoryuken });
+        var evs = Run(s, 12);
+        Check(s.Fighters[0].Hp == SimConfig.MaxHp && Find(evs, EvKind.Hit, 1) == null,
+            "shoryu invulnerable frames 1-10", $"hp {s.Fighters[0].Hp}");
+    }
+
+    static void SieteJabsBloqueadosRompenLaGuardia()
+    {
+        var s = NewSim(-0.5f, 0.5f, p1Blocks: true);
+        int blocked = 0;
+        SimEvent? crush = null;
+        for (int turn = 0; turn < 8 && crush == null; turn++)
+        {
+            s.SetQueue(0, new List<int> { MoveCatalog.WalkF, MoveCatalog.AttackA, MoveCatalog.AttackA });
+            s.SetQueue(1, new List<int>());
+            for (int t = 0; t < SimConfig.TurnFrames && crush == null; t++)
+            {
+                s.Step();
+                foreach (var e in s.LastEvents)
+                {
+                    if (e.Kind == EvKind.Blocked) blocked++;
+                    if (e.Kind == EvKind.GuardCrush) crush = e;
+                }
+            }
+            s.OnTurnEnd(0);
+            s.OnTurnEnd(1);
+        }
+        Check(crush.HasValue && blocked == 6 && s.Fighters[1].Guard == SimConfig.GuardCrushRespawn,
+            "guard crush al 7° jab bloqueado, barra renace al 50%",
+            $"bloqueados {blocked}, guardia {s.Fighters[1].Guard}");
+    }
+
+    static void LaEsquinaEmpujaAlAtacante()
+    {
+        var s = NewSim(SimConfig.StageHalfWidth - 1f, SimConfig.StageHalfWidth, p1Blocks: false);
+        s.SetQueue(0, new List<int> { MoveCatalog.AttackA });
+        float before = s.Fighters[0].X;
+        Run(s, 15);
+        Check(s.Fighters[0].X < before - 0.05f,
+            "el pushback en la esquina se transfiere al atacante",
+            $"P0 {before:0.00} → {s.Fighters[0].X:0.00}");
+    }
+
+    static void AgarreVsAgarreEsTech()
+    {
+        var s = NewSim(-0.45f, 0.45f, p1Blocks: true);
+        s.SetQueue(0, new List<int> { MoveCatalog.Grab });
+        s.SetQueue(1, new List<int> { MoveCatalog.Grab });
+        var evs = Run(s, 20);
+        Check(Find(evs, EvKind.Tech) != null && s.Fighters[0].Hp == 6f && s.Fighters[1].Hp == 6f,
+            "agarre vs agarre = tech, nadie come daño");
+    }
+
+    static void WakeupAjustaElKnockdown()
+    {
+        var s = NewSim(-0.5f, 0.6f, p1Blocks: false);
+        s.SetQueue(0, new List<int> { MoveCatalog.AttackB }); // derriba
+        Run(s, 25);
+        int before = s.StunRemaining(1);
+        s.AdjustKnockdown(1, -16);
+        int quick = s.StunRemaining(1);
+        s.AdjustKnockdown(1, 32); // rápido → quedarse
+        int stay = s.StunRemaining(1);
+        Check(before > 0 && quick == before - 16 && stay == quick + 32,
+            "wakeup ajusta el knockdown arrastrado", $"{before} → {quick} → {stay}");
+    }
+
+    // La base de todo: misma entrada, misma pelea, bit a bit.
+    static void MismaEntradaMismaPelea()
+    {
+        var a = PeleaConSeed(99);
+        var b = PeleaConSeed(99);
+        Check(a == b, "determinismo: misma entrada, misma pelea", $"{a} vs {b}");
+    }
+
+    static string PeleaConSeed(int seed)
+    {
+        var s = new MatchSim();
+        var ai0 = new SimpleAI(seed);
+        var ai1 = new SimpleAI(seed + 1);
+        for (int turn = 0; turn < 30 && !s.Over; turn++)
+        {
+            s.SetQueue(0, ai0.Plan(s, 0, SimConfig.TurnFrames));
+            s.SetQueue(1, ai1.Plan(s, 1, SimConfig.TurnFrames));
+            for (int t = 0; t < SimConfig.TurnFrames && !s.Over; t++) s.Step();
+            s.OnTurnEnd(0);
+            s.OnTurnEnd(1);
+        }
+        return $"{s.Tick}|{s.Winner}|{s.Fighters[0].Hp}|{s.Fighters[1].Hp}|{s.Fighters[0].X:0.0000}|{s.Fighters[1].X:0.0000}";
+    }
+}

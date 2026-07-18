@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Tests de framedata sobre la sim pura, sin Unity ni frameworks:
+       dotnet run (en esta carpeta). Sale con codigo 1 si algo falla. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>9</LangVersion>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="..\..\Assets\Scripts\LagFighter\Sim.cs" />
+    <Compile Include="..\..\Assets\Scripts\LagFighter\SimpleAI.cs" />
+  </ItemGroup>
+</Project>
