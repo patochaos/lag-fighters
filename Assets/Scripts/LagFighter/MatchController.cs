@@ -216,7 +216,13 @@ namespace LagFighter
             string adv = "";
             if (myStun > 0) adv = $"  ·  arrancás −{myStun}f ({StunName(Picker)})";
             else if (oppStun > 0) adv = $"  ·  VENTAJA +{oppStun}f (rival en {StunName(1 - Picker)})";
-            _hud.SetPrompt($"TURNO {TurnNumber} — {who}{adv}");
+            string lag = "";
+            if (LagMode)
+            {
+                int prevLvl = Mathf.Min((Mathf.Max(TurnNumber - 1, 1) - 1) / 4, 4);
+                if (LagLevel > prevLvl) lag = $"  ·  ¡AHORA {CurrentTurnFrames}F POR TURNO!";
+            }
+            _hud.SetPrompt($"TURNO {TurnNumber} — {who}{adv}{lag}");
 
             // resumen de lo que pasó en el turno anterior, desde la silla del picker
             if (_hasTurnSummary && Mode != GameMode.Practice)

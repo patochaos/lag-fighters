@@ -8,7 +8,7 @@ namespace LagFighter
     // del avance de ticks; no toca la sim).
     public static class SfxLib
     {
-        public enum Kind { Hit, Counter, Block, Ko, Fireball, TurnStart }
+        public enum Kind { Hit, Counter, Block, Ko, Fireball, TurnStart, Glitch }
 
         static AudioSource _source;
         static AudioClip[] _clips;
@@ -24,7 +24,7 @@ namespace LagFighter
             var rng = new System.Random(7);
             Func<float> noise = () => (float)(rng.NextDouble() * 2.0 - 1.0);
 
-            _clips = new AudioClip[6];
+            _clips = new AudioClip[7];
             _clips[(int)Kind.Hit] = Make("hit", 0.11f, t =>
                 Mathf.Sin(t * 140f * Mathf.PI * 2f) * 0.9f * Mathf.Exp(-t * 28f) + noise() * 0.45f * Mathf.Exp(-t * 40f));
             _clips[(int)Kind.Counter] = Make("counter", 0.14f, t =>
@@ -37,6 +37,9 @@ namespace LagFighter
                 noise() * 0.4f * Mathf.Exp(-t * 14f) + Mathf.Sin(t * 320f * Mathf.PI * 2f) * 0.25f * Mathf.Exp(-t * 12f));
             _clips[(int)Kind.TurnStart] = Make("turn", 0.06f, t =>
                 Mathf.Sin(t * 660f * Mathf.PI * 2f) * 0.35f * Mathf.Exp(-t * 30f));
+            // estática entrecortada: la conexión empeorando (subida de lag)
+            _clips[(int)Kind.Glitch] = Make("glitch", 0.45f, t =>
+                (Mathf.Sin(t * 30f * Mathf.PI * 2f) > 0f ? 1f : 0.15f) * noise() * 0.5f * Mathf.Exp(-t * 4f));
         }
 
         static AudioClip Make(string name, float dur, Func<float, float> wave)

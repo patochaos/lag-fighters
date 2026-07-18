@@ -16,7 +16,10 @@ namespace LagFighter
     public class HudUI : MonoBehaviour
     {
         public const float RowW = 1440f;
-        float PxPerFrame => RowW / _mc.CurrentTurnFrames; // en Lag Mode la escala cambia por turno
+        // La escala de la timeline se ANIMA cuando sube el lag: ves tus fichas
+        // comprimirse mientras aparece el espacio nuevo (que además se destaca).
+        float _shownTurnFrames = SimConfig.TurnFrames;
+        float PxPerFrame => RowW / _shownTurnFrames;
 
         MatchController _mc;
         Font _font;      // cuerpo (Liberation): texto largo y símbolos ←»
@@ -58,6 +61,12 @@ namespace LagFighter
         // overlay de planificación + flash de ejecución
         Image _planOverlay;
         MatchController.Flow _prevFlow = MatchController.Flow.ModeSelect;
+
+        // FX de subida de lag: glitch de pantalla + highlight del espacio nuevo
+        int _prevLagLevel;
+        float _lagFxTimer;          // glitch fuerte los primeros ~0.7s
+        int _lagOldFrames = SimConfig.TurnFrames; // cuántos frames había ANTES del salto
+        readonly Image[] _glitchBars = new Image[6];
 
         // botones de fin de partida
         Image _btnRematch, _btnReplay, _btnMenu;
@@ -175,6 +184,14 @@ namespace LagFighter
             _btnReplay = MakeButton("REPLAY", new Vector2(0f, -40f), Palette.Block);
             _btnMenu = MakeButton("MENU", new Vector2(190f, -40f), Palette.Neutral);
             SetGameOverButtons(false);
+
+            // barras de glitch (subida de lag): franjas que parpadean un instante
+            for (int g = 0; g < _glitchBars.Length; g++)
+            {
+                _glitchBars[g] = MakeImage(_canvasRt, "Glitch" + g, new Vector2(0.5f, 0.5f), Vector2.zero,
+                    new Vector2(2200f, 8f), new Color(0.6f, 0.9f, 1f, 0.25f));
+                _glitchBars[g].gameObject.SetActive(false);
+            }
         }
 
         Image MakeButton(string label, Vector2 pos, Color accent)
@@ -335,6 +352,52 @@ namespace LagFighter
             }
 
             bool executing = flow == MatchController.Flow.Executing || flow == MatchController.Flow.Replay;
+
+            // ---- subida de lag: glitch + escala animada + highlight ----
+            int lagLvl = _mc.LagLevel;
+            if (lagLvl != _prevLagLevel)
+            {
+                if (lagLvl > _prevLagLevel && _mc.LagMode)
+                {
+                    _lagOldFrames = SimConfig.TurnFrames << _prevLagLevel;
+                    _lagFxTimer = 0.7f;
+                    SfxLib.Play(SfxLib.Kind.Glitch, 0.9f);
+                }
+                _prevLagLevel = lagLvl;
+            }
+
+            // la timeline se estira animada hacia la escala nueva (snap al achicarse)
+            float targetFrames = _mc.CurrentTurnFrames;
+            if (targetFrames < _shownTurnFrames) _shownTurnFrames = targetFrames;
+            else _shownTurnFrames = Mathf.Lerp(_shownTurnFrames, targetFrames, 1f - Mathf.Exp(-4.5f * Time.deltaTime));
+            if (Mathf.Abs(_shownTurnFrames - targetFrames) < 0.5f) _shownTurnFrames = targetFrames;
+
+            // franjas de glitch (la conexión rompiéndose)
+            if (_lagFxTimer > 0f)
+            {
+                _lagFxTimer -= Time.deltaTime;
+                foreach (var gb in _glitchBars)
+                {
+                    bool on = _lagFxTimer > 0f && Random.value < 0.6f;
+                    gb.gameObject.SetActive(on);
+                    if (!on) continue;
+                    gb.rectTransform.anchoredPosition = new Vector2(Random.Range(-50f, 50f), Random.Range(-520f, 520f));
+                    gb.rectTransform.sizeDelta = new Vector2(2200f, Random.Range(3f, 14f));
+                    gb.color = new Color(0.6f + Random.value * 0.4f, 0.9f, 1f, 0.10f + Random.value * 0.22f);
+                }
+                if (_lagFxTimer <= 0f)
+                    foreach (var gb in _glitchBars) gb.gameObject.SetActive(false);
+            }
+
+            // el espacio NUEVO de la barra se destaca durante toda la
+            // planificación del primer turno de cada nivel de lag
+            int prevTurnLvl = _mc.LagMode ? Mathf.Min((Mathf.Max(_mc.TurnNumber - 1, 1) - 1) / 4, 4) : 0;
+            bool newLagTurn = _mc.LagMode && flow == MatchController.Flow.Planning && lagLvl > prevTurnLvl;
+            int oldFrames = SimConfig.TurnFrames << prevTurnLvl;
+            float lagFromX = oldFrames * PxPerFrame;
+            string lagLabel = $"+{_mc.CurrentTurnFrames - oldFrames}F NUEVOS";
+            _row0.SetLagHighlight(newLagTurn, lagFromX, lagLabel);
+            _row1.SetLagHighlight(newLagTurn, lagFromX, "");
 
             for (int i = 0; i < 2; i++)
             {
@@ -590,6 +653,8 @@ namespace LagFighter
             readonly Image _playhead;
             readonly Image _stunSeg;
             readonly Text _stunLabel;
+            Image _lagSeg;
+            Text _lagLabel;
             readonly Text _hidden;
             readonly float _height;
             readonly bool _dim;
@@ -621,6 +686,13 @@ namespace LagFighter
                 _hidden = hud.MakeTextP(_area, "Hidden", "? ? ?", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(300f, 24f),
                     12, new Color(1f, 1f, 1f, 0.3f), TextAnchor.MiddleCenter);
 
+                // highlight del espacio nuevo cuando sube el lag (pulsa en ámbar)
+                _lagSeg = hud.MakeImage(_area, "LagSeg", new Vector2(0f, 0.5f), Vector2.zero, new Vector2(0f, height), Palette.Guard);
+                _lagSeg.rectTransform.pivot = new Vector2(0f, 0.5f);
+                _lagLabel = hud.MakeTextP(_lagSeg.rectTransform, "L", "", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(400f, 20f),
+                    9, Palette.Guard, TextAnchor.MiddleCenter);
+                _lagSeg.gameObject.SetActive(false);
+
                 _stunSeg = hud.MakeImage(_area, "StunSeg", new Vector2(0f, 0.5f), Vector2.zero, new Vector2(0f, height - 4f), Color.white);
                 _stunSeg.rectTransform.pivot = new Vector2(0f, 0.5f);
                 _stunLabel = hud.MakeText(_stunSeg.rectTransform, "L", "", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(120f, 22f),
@@ -629,6 +701,22 @@ namespace LagFighter
 
                 _playhead = hud.MakeImage(_area, "Playhead", new Vector2(0f, 0.5f), Vector2.zero, new Vector2(3f, height), Color.white);
                 _playhead.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            }
+
+            // destaca la zona nueva de la barra: "de acá para allá es TODO nuevo"
+            public void SetLagHighlight(bool on, float fromX, string label)
+            {
+                _lagSeg.gameObject.SetActive(on);
+                if (!on) return;
+                float w = RowW - fromX;
+                _lagSeg.rectTransform.anchoredPosition = new Vector2(fromX, 0f);
+                _lagSeg.rectTransform.sizeDelta = new Vector2(Mathf.Max(0f, w), _height);
+                float pulse = 0.10f + Mathf.PingPong(Time.time * 0.35f, 0.13f);
+                _lagSeg.color = new Color(Palette.Guard.r, Palette.Guard.g, Palette.Guard.b, pulse);
+                _lagLabel.text = w > 160f ? label : "";
+                var lc = Palette.Guard;
+                lc.a = 0.75f + Mathf.PingPong(Time.time * 0.8f, 0.25f);
+                _lagLabel.color = lc;
             }
 
             public void UpdateRow(List<int> queue, bool revealed, float playX, int stunFrames, StunKind stunKind)

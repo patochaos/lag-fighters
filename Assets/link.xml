@@ -1,0 +1,6 @@
+<!-- WebGL/IL2CPP: el stripping borraba MeshCollider y compañía, y
+     GameObject.CreatePrimitive (que usamos para armar TODO por código)
+     los necesita en runtime -> pantalla negra tras el logo. -->
+<linker>
+  <assembly fullname="UnityEngine.PhysicsModule" preserve="all"/>
+</linker>
