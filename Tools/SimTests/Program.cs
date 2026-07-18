@@ -53,6 +53,11 @@ class Tests
         ElFinalDelTatsuComeProyectiles();
         LaEsquinaEmpujaAlAtacante();
         AgarreVsAgarreEsTech();
+        ParryRechazaUnJab();
+        AgarreLeGanaAlParry();
+        AtaqueDemoradoCastigaElParry();
+        ParryDesactivaProyectilSinStunearAlZoner();
+        PerfilesDeIAMantienenPresupuesto();
         WakeupAjustaElKnockdown();
         if (SimConfig.LimbsEnabled)
         {
@@ -69,7 +74,7 @@ class Tests
         else
         {
             Console.WriteLine("  --  agachado: desactivado (SimConfig.CrouchEnabled), tests salteados");
-            ElAgachadoDesactivadoDegradaAEsperar();
+            ElAgachadoDesactivadoQuedaNeutral();
         }
         CodigoDeTurnoIdaYVuelta();
         MismaEntradaMismaPelea();
@@ -205,6 +210,64 @@ class Tests
             "agarre vs agarre = tech, nadie come daño");
     }
 
+    static void ParryRechazaUnJab()
+    {
+        var s = NewSim(-0.5f, 0.5f, p1Blocks: false);
+        s.SetQueue(0, new List<int> { MoveCatalog.AttackA });
+        s.SetQueue(1, new List<int> { MoveCatalog.Parry });
+        var ev = Find(Run(s, 10), EvKind.Parry, 1);
+        Check(ev.HasValue && s.Fighters[1].Hp == SimConfig.MaxHp && s.IsStunned(0) && s.Fighters[0].MoveIndex < 0,
+            "parry f3-7 rechaza el jab e interrumpe al atacante");
+    }
+
+    static void AgarreLeGanaAlParry()
+    {
+        var s = NewSim(-0.45f, 0.45f, p1Blocks: true);
+        s.SetQueue(0, new List<int> { MoveCatalog.Grab });
+        s.SetQueue(1, new List<int> { MoveCatalog.Parry });
+        var evs = Run(s, 12);
+        Check(Find(evs, EvKind.Hit, 0).HasValue && Find(evs, EvKind.Parry) == null && s.Fighters[1].Hp < SimConfig.MaxHp,
+            "agarre le gana al parry");
+    }
+
+    static void AtaqueDemoradoCastigaElParry()
+    {
+        var s = NewSim(-0.5f, 0.5f, p1Blocks: false);
+        s.Fighters[0].Stun = StunKind.Hitstun;
+        s.Fighters[0].StunEndTick = 6;
+        s.SetQueue(0, new List<int> { MoveCatalog.AttackA });
+        s.SetQueue(1, new List<int> { MoveCatalog.Parry });
+        var evs = Run(s, 16);
+        Check(Find(evs, EvKind.Hit, 0).HasValue && Find(evs, EvKind.Parry) == null,
+            "un ataque demorado castiga el recovery del parry");
+    }
+
+    static void ParryDesactivaProyectilSinStunearAlZoner()
+    {
+        var s = NewSim(-2f, 0.5f, p1Blocks: false);
+        s.Projectiles.Add(new Projectile { Owner = 0, X = -0.25f, Dir = 1, Alive = true });
+        s.SetQueue(1, new List<int> { MoveCatalog.Parry });
+        var evs = Run(s, 8);
+        Check(Find(evs, EvKind.Parry, 1).HasValue && s.Fighters[1].Hp == SimConfig.MaxHp && !s.IsStunned(0) && s.Projectiles.Count == 0,
+            "parry apaga el proyectil sin stunear al zoner lejano");
+    }
+
+    static void PerfilesDeIAMantienenPresupuesto()
+    {
+        var sim = new MatchSim();
+        bool ok = true;
+        foreach (AIProfile profile in Enum.GetValues(typeof(AIProfile)))
+        foreach (AIDifficulty difficulty in Enum.GetValues(typeof(AIDifficulty)))
+        {
+            var ai = new SimpleAI(77, profile, difficulty);
+            var plan = ai.Plan(sim, 1, SimConfig.TurnFrames);
+            int frames = 0;
+            foreach (int move in plan) frames += MoveCatalog.All[move].Total;
+            ok &= frames <= SimConfig.TurnFrames && ai.ResolvedProfile != AIProfile.Random;
+        }
+        Check(ok, "todos los perfiles y dificultades respetan el presupuesto");
+    }
+
     static void WakeupAjustaElKnockdown()
     {
         var s = NewSim(-0.5f, 0.6f, p1Blocks: false);
@@ -305,15 +368,15 @@ class Tests
     }
 
     // Con el agachado desactivado, un código async con Crouch/LowKick no debe
-    // romper nada: la orden degrada a Esperar.
-    static void ElAgachadoDesactivadoDegradaAEsperar()
+    // romper nada: la orden se consume y queda en neutral.
+    static void ElAgachadoDesactivadoQuedaNeutral()
     {
         var s = NewSim(-2f, 2f, p1Blocks: true);
         s.SetQueue(0, new List<int> { MoveCatalog.Crouch, MoveCatalog.LowKick });
         s.SetQueue(1, new List<int>());
         s.Step();
-        Check(s.CurrentMove(0) != null && s.CurrentMove(0).Id == "wait" && !s.IsCrouching(0),
-            "agachado off: Crouch/LowKick degradan a Esperar");
+        Check(s.CurrentMove(0) == null && !s.IsCrouching(0) && s.IsBlockingState(0),
+            "agachado off: Crouch/LowKick se consumen en neutral");
     }
 
     // Online asincrónico: el código de turno serializa y deserializa exacto,

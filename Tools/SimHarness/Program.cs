@@ -17,6 +17,7 @@ class Program
         var blocks = new int[n];
         var whiffs = new int[n];
         var crushes = new int[n];
+        var parries = new int[n];
         var dmg = new double[n];
         int wins0 = 0, wins1 = 0, draws = 0, timeouts = 0, techs = 0;
         int totalTurns = 0, totalCrushes = 0, matchesWithCrush = 0;
@@ -47,6 +48,7 @@ class Program
                         {
                             case EvKind.Hit: hits[ev.MoveIndex]++; dmg[ev.MoveIndex] += ev.Damage; break;
                             case EvKind.Blocked: blocks[ev.MoveIndex]++; break;
+                            case EvKind.Parry: parries[MoveCatalog.Parry]++; break;
                             case EvKind.Whiff: whiffs[ev.MoveIndex]++; break;
                             case EvKind.Tech: techs++; break;
                             case EvKind.GuardCrush: crushes[ev.MoveIndex]++; totalCrushes++; crushesThis++; break;
@@ -72,7 +74,7 @@ class Program
         Console.WriteLine($"GUARD CRUSH: {totalCrushes} total · {(double)totalCrushes / matches:0.00}/pelea · {100.0 * matchesWithCrush / matches:0.0}% de peleas con >=1");
         Console.WriteLine($"guardia promedio en juego: {guardSum / guardSamples:0.0}/{SimConfig.GuardMax:0}");
         Console.WriteLine();
-        Console.WriteLine($"{"mov",-18}{"usos",8}{"hit",7}{"block",7}{"whiff",7}{"crush",7}{"hit%",7}{"dmg/uso",9}");
+        Console.WriteLine($"{"mov",-18}{"usos",8}{"hit",7}{"block",7}{"whiff",7}{"parry",7}{"crush",7}{"hit%",7}{"dmg/uso",9}");
         for (int i = 0; i < n; i++)
         {
             var mdef = MoveCatalog.All[i];
@@ -80,7 +82,7 @@ class Program
             int contacts = hits[i] + blocks[i] + whiffs[i];
             double hitPct = contacts > 0 ? 100.0 * hits[i] / contacts : 0;
             double dpu = uses[i] > 0 ? dmg[i] / uses[i] : 0;
-            Console.WriteLine($"{mdef.Name,-18}{uses[i],8}{hits[i],7}{blocks[i],7}{whiffs[i],7}{crushes[i],7}{hitPct,6:0.0}%{dpu,9:0.00}");
+            Console.WriteLine($"{mdef.Name,-18}{uses[i],8}{hits[i],7}{blocks[i],7}{whiffs[i],7}{parries[i],7}{crushes[i],7}{hitPct,6:0.0}%{dpu,9:0.00}");
         }
     }
 
@@ -107,7 +109,7 @@ class Program
             : "FALLO: el atacante no retrocedió");
     }
 
-    // Escenario determinista: P0 presiona con jabs, P1 bloquea siempre (Esperar).
+    // Escenario determinista: P0 presiona con jabs, P1 bloquea en neutral.
     // Esperado: la guardia de P1 baja 15 por jab bloqueado, cruje en 0,
     // stun de 50f, y la barra renace en 50.
     static void CrushTest()
@@ -119,7 +121,7 @@ class Program
         for (int turn = 0; turn < 12; turn++)
         {
             sim.SetQueue(0, new List<int> { MoveCatalog.WalkF, MoveCatalog.AttackA, MoveCatalog.AttackA });
-            sim.SetQueue(1, new List<int> { MoveCatalog.Wait, MoveCatalog.Wait, MoveCatalog.Wait, MoveCatalog.Wait, MoveCatalog.Wait });
+            sim.SetQueue(1, new List<int>());
             for (int t = 0; t < SimConfig.TurnFrames && !sim.Over; t++)
             {
                 sim.Step();

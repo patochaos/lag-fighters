@@ -101,7 +101,7 @@ startup/active/recovery. HP total: 6.
 | 9 | Patada B | 16/6/30 | 2 | −30 | sweep, soft KD 42f, **−10 on block** |
 | 10 | Hadouken | 14/2/44 | 1 | −25 | 60f: ocupa el turno ENTERO; saltable |
 | 11 | Shoryuken | 4/5/32 | 2 | −35 | invuln 1..10, hard KD, −15 block; anti-aéreo (Y 1.0+) |
-| 12 | Esperar | 12 | — | — | neutral, **bloquea** |
+| 12 | Parry | 2/5/5 | — | — | rechaza golpes/proyectiles en f3–7; interrumpe melee; pierde vs agarre/delay; no bloquea |
 | 13 | Tatsumaki | 12/18/16 | 1+1 | −15/hit | viaja +1.6, atraviesa hadoukens (8..34), 2° hit derriba, hitbox baja |
 | 14 | Agarre | 6/4/20 | 1 | — | rompe guardia, KD; pierde vs aéreos/caídos; tech espejo |
 | 15 | Agacharse (OFF) | 14 | — | — | **bloquea** con hurtbox 0.9: jab y hadouken pasan por arriba |
@@ -133,7 +133,7 @@ altura: bajo 1.0 come **pierna**, arriba come **brazo** (3 HP por miembro).
 - **Pierna en 0**: ni Patada B, ni Tatsumaki, ni Patada baja; las patadas
   aéreas no salen (saltás igual); caminar y dash rinden 65%.
 
-Las órdenes ya planificadas con un miembro perdido degradan a Esperar
+Las órdenes ya planificadas con un miembro perdido se consumen en neutral
 (determinista: el replay y el online por código no se rompen). Los miembros
 vuelven al empezar cada round.
 

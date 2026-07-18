@@ -327,6 +327,12 @@ namespace LagFighter
                 WorldFX.Popup((atkX + defX) * 0.5f, "¡TECH!", new Color(0.5f, 0.95f, 1f), 1.2f);
                 return;
             }
+            if (ev.Kind == EvKind.Parry)
+            {
+                WorldFX.Popup(atkX, "¡PARRY!", new Color(0.35f, 0.9f, 1f), 1.25f);
+                if (ev.FrameAdv != 0) WorldFX.Popup(atkX, $"+{ev.FrameAdv}F", new Color(1f, 1f, 1f, 0.8f), 0.8f);
+                return;
+            }
             if (ev.Kind == EvKind.LimbLost)
             {
                 WorldFX.Popup(defX, ev.Limb == Limb.Arm ? "¡BRAZO FUERA!" : "¡PIERNA FUERA!", new Color(1f, 0.35f, 0.3f), 1.25f);
@@ -654,7 +660,7 @@ namespace LagFighter
                 case MoveCatalog.DashB: return new Color(0.2f, 0.72f, 0.72f);
                 case MoveCatalog.Tatsu: return new Color(0.9f, 0.45f, 0.15f);
                 case MoveCatalog.Grab: return Palette.GrabC;
-                case MoveCatalog.Wait: return Palette.Neutral;
+                case MoveCatalog.Parry: return new Color(0.25f, 0.75f, 0.95f);
                 case MoveCatalog.Crouch: return new Color(0.35f, 0.55f, 0.85f);
                 case MoveCatalog.LowKick: return new Color(0.75f, 0.28f, 0.3f);
                 default: return new Color(0.25f, 0.72f, 0.45f); // caminar
@@ -678,6 +684,7 @@ namespace LagFighter
                 case MoveCatalog.DashB: return "«";
                 case MoveCatalog.Tatsu: return "T";
                 case MoveCatalog.Grab: return "G";
+                case MoveCatalog.Parry: return "P";
                 case MoveCatalog.Crouch: return "▼";
                 case MoveCatalog.LowKick: return "b";
                 default: return "·";

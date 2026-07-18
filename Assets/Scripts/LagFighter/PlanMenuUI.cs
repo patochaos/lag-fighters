@@ -22,7 +22,7 @@ namespace LagFighter
             MoveCatalog.WalkF, MoveCatalog.WalkB, MoveCatalog.DashF, MoveCatalog.DashB,
             MoveCatalog.JumpF, MoveCatalog.JumpN, MoveCatalog.JumpB,
             MoveCatalog.AttackA, MoveCatalog.AttackB, MoveCatalog.Tatsu, MoveCatalog.Hadouken,
-            MoveCatalog.Shoryuken, MoveCatalog.Grab, MoveCatalog.Wait,
+            MoveCatalog.Shoryuken, MoveCatalog.Grab, MoveCatalog.Parry,
             // agachado desactivado — reactivar junto con SimConfig.CrouchEnabled:
             // MoveCatalog.LowKick, MoveCatalog.Crouch,
         };
@@ -71,7 +71,7 @@ namespace LagFighter
             if (m.Hits.Length > 0 && m.HasAir) return new Color(0.55f, 0.8f, 0.35f);
             if (m.IsAttack) return new Color(0.9f, 0.32f, 0.24f);
             if (m.HasAir) return new Color(0.55f, 0.8f, 0.35f);
-            if (mi == MoveCatalog.Wait || mi == MoveCatalog.WalkB || mi == MoveCatalog.Crouch) return new Color(0.35f, 0.55f, 0.85f);
+            if (mi == MoveCatalog.Parry || mi == MoveCatalog.WalkB || mi == MoveCatalog.Crouch) return new Color(0.35f, 0.55f, 0.85f);
             return new Color(0.3f, 0.7f, 0.45f);
         }
 
@@ -85,7 +85,7 @@ namespace LagFighter
                 case MoveCatalog.Hadouken: return "PROYECTIL · turno entero";
                 case MoveCatalog.Tatsu: return "PASA HADOUKENS · DERRIBA";
                 case MoveCatalog.WalkB: return "BLOQUEA · retrocede";
-                case MoveCatalog.Wait: return "BLOQUEA · quieto";
+                case MoveCatalog.Parry: return "PARRY f3-7 · pierde vs AGARRE";
                 case MoveCatalog.Crouch: return "BLOQUEA · esquiva ALTOS";
                 case MoveCatalog.LowKick: return "PEGA BAJO · agachado";
                 case MoveCatalog.JumpF: return "PATADA AL CAER · +1.9";

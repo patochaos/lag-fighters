@@ -23,6 +23,8 @@ namespace LagFighter
         public float TickFloat => Sim == null ? 0f : Sim.Tick + _acc / SimConfig.TickDuration;
         public GameMode Mode { get; private set; }
         public bool LagMode { get; private set; }
+        public AIProfile SelectedAIProfile { get; private set; } = AIProfile.Random;
+        public AIDifficulty SelectedAIDifficulty { get; private set; } = AIDifficulty.Normal;
         public Flow State { get; private set; } = Flow.ModeSelect;
         public int Picker { get; private set; }
         public int LocalSide { get; private set; } // en Async: qué lado soy yo
@@ -122,11 +124,14 @@ namespace LagFighter
             _hud.SetPrompt("");
         }
 
-        public void StartMatch(GameMode mode, bool lagMode, int localSide = 0)
+        public void StartMatch(GameMode mode, bool lagMode, int localSide = 0,
+            AIProfile aiProfile = AIProfile.Random, AIDifficulty aiDifficulty = AIDifficulty.Normal)
         {
             Mode = mode;
             LagMode = lagMode;
             LocalSide = localSide;
+            SelectedAIProfile = aiProfile;
+            SelectedAIDifficulty = aiDifficulty;
             _modeMenu.Close();
             ResetMatch();
         }
@@ -134,7 +139,7 @@ namespace LagFighter
         void ResetMatch()
         {
             _wins[0] = _wins[1] = 0;
-            _ai = new SimpleAI(_seed++);
+            _ai = new SimpleAI(_seed++, SelectedAIProfile, SelectedAIDifficulty);
             StartRound();
         }
 
@@ -213,7 +218,9 @@ namespace LagFighter
         void UpdatePlanPrompt()
         {
             string who = Mode == GameMode.PvP ? $"PLANIFICA JUGADOR {Picker + 1}" :
-                         Mode == GameMode.Practice ? "PRÁCTICA — el dummy no hace nada" : "ARMÁ TU TURNO";
+                         Mode == GameMode.Practice ? "PRÁCTICA — el dummy no hace nada" :
+                         Mode == GameMode.VsAI ? $"ARMÁ TU TURNO · IA {ProfileName(_ai.ResolvedProfile)} {DifficultyName(SelectedAIDifficulty)}" :
+                         "ARMÁ TU TURNO";
             int myStun = Sim.StunRemaining(Picker);
             int oppStun = Sim.StunRemaining(1 - Picker);
             string adv = "";
@@ -392,6 +399,7 @@ namespace LagFighter
 
         void BeginExecution()
         {
+            if (Mode == GameMode.VsAI) _ai.ObserveOpponentPlan(_plans[0]);
             Sim.AdjustKnockdown(0, WakeDelta(0));
             Sim.AdjustKnockdown(1, WakeDelta(1));
             CaptureTurnStartStun(); // las timelines muestran el wakeup real al ejecutar
@@ -409,6 +417,10 @@ namespace LagFighter
             _hud.SetPrompt($"TURNO {TurnNumber} — ¡EJECUTANDO!");
             SfxLib.Play(SfxLib.Kind.TurnStart, 0.6f);
         }
+
+        static string ProfileName(AIProfile profile) => profile.ToString().ToUpperInvariant();
+        static string DifficultyName(AIDifficulty difficulty) => difficulty == AIDifficulty.Easy ? "FÁCIL" :
+            difficulty == AIDifficulty.Hard ? "DIFÍCIL" : "NORMAL";
 
         void EndTurn()
         {
@@ -690,6 +702,14 @@ namespace LagFighter
                         SparkFX.Burst(ContactPos(def), new Color(0.45f, 0.75f, 1f), 6, 2.2f);
                         SfxLib.Play(SfxLib.Kind.Block, 0.8f);
                         _hitstop = Mathf.Max(_hitstop, 0.04f);
+                        break;
+                    case EvKind.Parry:
+                        _views[ev.Attacker].FlashParry();
+                        SparkFX.Burst(ContactPos(ev.Attacker), new Color(0.3f, 0.95f, 1f), 12, 3.2f);
+                        SfxLib.Play(SfxLib.Kind.Block, 1.15f);
+                        _hitstop = Mathf.Max(_hitstop, 0.09f);
+                        CamFx()?.Shake(0.06f);
+                        _hud.ShowBigMessage("¡PARRY!", new Color(0.3f, 0.95f, 1f));
                         break;
                     case EvKind.Tech:
                         SfxLib.Play(SfxLib.Kind.Block, 1f);

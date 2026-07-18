@@ -6,8 +6,8 @@ namespace LagFighter
     // Simulación pura y determinista. Ryu vs Ken por turnos programados:
     //  - 60 ticks/s = frames. Cada turno ambos arman una cola de hasta 240
     //    frames y se ejecutan simultáneas.
-    //  - Guardia automática: bloqueás si estás en neutral, esperando o
-    //    caminando hacia atrás (y en el piso). No hay botón de bloqueo.
+    //  - Guardia automática: bloqueás si estás en neutral o caminando hacia
+    //    atrás (y en el piso). Parry es una lectura activa, no un bloqueo.
     //  - Estados con framedata: HITSTUN / BLOCKSTUN / KNOCKDOWN. Comen parte
     //    del turno; apenas terminan, la cola sigue ejecutando lo que quede.
     //  - Proyectiles (Hadouken), saltos que los pasan por arriba, y Shoryuken
@@ -64,7 +64,7 @@ namespace LagFighter
         public const float CrouchHeight = 0.9f;
     }
 
-    public enum AnimKind { Walk, Dash, Jump, AttackA, AttackB, Fireball, Dragon, Tatsu, Grab, Wait, Crouch, LowKick }
+    public enum AnimKind { Walk, Dash, Jump, AttackA, AttackB, Fireball, Dragon, Tatsu, Grab, Parry, Crouch, LowKick }
     public enum StunKind { None, Hitstun, Blockstun, Knockdown }
 
     public struct HitWindow
@@ -109,7 +109,7 @@ namespace LagFighter
     {
         public const int WalkF = 0, WalkB = 1, DashF = 2, DashB = 3,
                          JumpF = 4, JumpN = 5, JumpB = 6,
-                         AttackA = 7, AttackB = 8, Hadouken = 9, Shoryuken = 10, Wait = 11,
+                         AttackA = 7, AttackB = 8, Hadouken = 9, Shoryuken = 10, Parry = 11,
                          Tatsu = 12, Grab = 13, Crouch = 14, LowKick = 15;
 
         public static readonly MoveDef[] All =
@@ -166,8 +166,8 @@ namespace LagFighter
                 Hits = new[] { new HitWindow { Start = 4, Duration = 5, Fwd0 = 0.15f, Fwd1 = 0.75f, Y0 = 1.0f, Y1 = 2.5f,
                     Damage = 2f, Hitstun = 60, Blockstun = 22, CounterStun = 70, Push = 0.4f, Knockdown = true, GuardDamage = 35f } } },
 
-            new MoveDef { Id = "wait", Name = "Esperar", Anim = AnimKind.Wait, Startup = 0, Active = 12, Recovery = 0,
-                Desc = "12 frames quieto, bloqueando. No meter órdenes también bloquea." },
+            new MoveDef { Id = "parry", Name = "Parry", Anim = AnimKind.Parry, Startup = 2, Active = 5, Recovery = 5,
+                Desc = "Lectura de 12f: rechaza golpes y proyectiles entre f3-7. Pierde contra agarres y ataques demorados." },
 
             new MoveDef { Id = "tatsu", Name = "Tatsumaki", Anim = AnimKind.Tatsu, Startup = 12, Active = 18, Recovery = 16,
                 Desc = "Giratoria que viaja lejos y ATRAVIESA hadoukens (girando, 8..34: el final es castigable). Dos hits; el segundo derriba. Guardia −15 por hit.",
@@ -235,7 +235,7 @@ namespace LagFighter
         }
     }
 
-    public enum EvKind { Hit, Blocked, Whiff, Tech, GuardCrush, LimbLost }
+    public enum EvKind { Hit, Blocked, Parry, Whiff, Tech, GuardCrush, LimbLost }
 
     public enum Limb { Arm, Leg }
 
@@ -318,10 +318,19 @@ namespace LagFighter
             return p >= m.ProjImmuneStart && p < m.ProjImmuneEnd;
         }
 
+        public bool IsParrying(int i)
+        {
+            var f = Fighters[i];
+            if (f.MoveIndex != MoveCatalog.Parry || IsStunned(i) || IsAirborne(i)) return false;
+            var m = MoveCatalog.All[MoveCatalog.Parry];
+            int p = Phase(i);
+            return p >= m.Startup && p < m.Startup + m.Active;
+        }
+
         // Pérdida de miembros: sin brazo no hay A ni Hadouken; sin pierna no
         // hay B ni Tatsumaki (y las patadas aéreas no salen: saltás igual).
-        // Con el agachado desactivado, sus movimientos degradan a Esperar
-        // (protege también contra códigos async de builds con el flag prendido).
+        // Con el agachado desactivado, sus movimientos se consumen y dejan al
+        // jugador neutral (protege códigos async de builds con el flag prendido).
         public bool MoveAllowed(int i, int moveIndex)
         {
             if (!SimConfig.CrouchEnabled && (moveIndex == MoveCatalog.Crouch || moveIndex == MoveCatalog.LowKick))
@@ -335,13 +344,13 @@ namespace LagFighter
             return true;
         }
 
-        // Guardia automática: neutral, esperar o caminar hacia atrás — en el piso.
+        // Guardia automática: neutral o caminar hacia atrás — en el piso.
         public bool IsBlockingState(int i)
         {
             var f = Fighters[i];
             if (!f.BlockEnabled || IsStunned(i) || IsAirborne(i)) return false;
             if (f.MoveIndex < 0) return true;
-            return f.MoveIndex == MoveCatalog.WalkB || f.MoveIndex == MoveCatalog.Wait || f.MoveIndex == MoveCatalog.Crouch;
+            return f.MoveIndex == MoveCatalog.WalkB || f.MoveIndex == MoveCatalog.Crouch;
         }
 
         public void SetQueue(int i, IEnumerable<int> moves)
@@ -422,8 +431,13 @@ namespace LagFighter
         {
             var f = Fighters[i];
             int mi = f.Queue[f.QueueIndex++];
-            // si el miembro voló después de planificar, la orden degrada a Esperar
-            if (!MoveAllowed(i, mi)) mi = MoveCatalog.Wait;
+            // Si quedó inválida después de planificar, se consume en neutral.
+            if (!MoveAllowed(i, mi))
+            {
+                f.MoveIndex = -1;
+                f.WindowHit = 0;
+                return;
+            }
             f.MoveIndex = mi;
             f.MoveStartTick = Tick;
             f.WindowHit = 0;
@@ -519,7 +533,8 @@ namespace LagFighter
                 ApplyContact(BuildPending(p.Owner, MoveCatalog.Hadouken,
                     SimConfig.ProjDamage, SimConfig.ProjHitstun, SimConfig.ProjBlockstun, SimConfig.ProjHitstun + 8,
                     SimConfig.ProjPush, knockdown: false, attackerFreeTick: AttackerFreeTick(p.Owner),
-                    guardDamage: SimConfig.ProjGuardDamage, hitY: (SimConfig.ProjY0 + SimConfig.ProjY1) * 0.5f));
+                    guardDamage: SimConfig.ProjGuardDamage, hitY: (SimConfig.ProjY0 + SimConfig.ProjY1) * 0.5f,
+                    isProjectile: true));
                 p.Alive = false;
                 Projectiles[pi] = p;
             }
@@ -552,6 +567,7 @@ namespace LagFighter
                         h.Push, h.Knockdown, attackerFreeTick: atk.MoveStartTick + m.Total, guardDamage: h.GuardDamage,
                         hitY: (h.Y0 + h.Y1) * 0.5f);
                     pending.IsGrab = h.IsGrab;
+                    pending.Parried = !h.IsGrab && IsParrying(1 - i);
                     _pending.Add(pending);
                 }
             }
@@ -599,13 +615,14 @@ namespace LagFighter
             public int Attacker, MoveIndex;
             public float Damage, Push, GuardDamage, HitY;
             public int Hitstun, Blockstun, CounterStun, AttackerFree;
-            public bool Knockdown, Guarded, Counter, AirHit, IsGrab;
+            public bool Knockdown, Guarded, Counter, AirHit, IsGrab, Parried, IsProjectile;
         }
 
         readonly List<PendingHit> _pending = new List<PendingHit>();
 
         PendingHit BuildPending(int attacker, int moveIndex, float damage, int hitstun, int blockstun, int counterStun,
-            float push, bool knockdown, int attackerFreeTick, float guardDamage, float hitY = 1.2f)
+            float push, bool knockdown, int attackerFreeTick, float guardDamage, float hitY = 1.2f,
+            bool isProjectile = false)
         {
             int d = 1 - attacker;
             var defMove = CurrentMove(d);
@@ -625,6 +642,8 @@ namespace LagFighter
                 Guarded = IsBlockingState(d),
                 Counter = defMove != null && defMove.IsAttack && Phase(d) < defMove.Startup,
                 AirHit = IsAirborne(d),
+                Parried = IsParrying(d),
+                IsProjectile = isProjectile,
             };
         }
 
@@ -646,6 +665,27 @@ namespace LagFighter
             int d = 1 - p.Attacker;
             var def = Fighters[d];
             int face = Fighters[p.Attacker].Face;
+
+            if (p.Parried && !p.IsGrab)
+            {
+                const int punishStun = 18;
+                if (!p.IsProjectile)
+                {
+                    var attacker = Fighters[p.Attacker];
+                    attacker.MoveIndex = -1;
+                    attacker.Stun = StunKind.Hitstun;
+                    attacker.StunEndTick = Tick + punishStun;
+                }
+                int parryFree = def.MoveStartTick + MoveCatalog.All[MoveCatalog.Parry].Total;
+                LastEvents.Add(new SimEvent
+                {
+                    Attacker = d,
+                    Kind = EvKind.Parry,
+                    MoveIndex = p.MoveIndex,
+                    FrameAdv = p.IsProjectile ? 0 : Tick + punishStun - parryFree,
+                });
+                return;
+            }
 
             if (p.Guarded && !p.IsGrab) // el agarre rompe la guardia
             {

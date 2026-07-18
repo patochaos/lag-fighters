@@ -3,10 +3,10 @@ using UnityEngine.UI;
 
 namespace LagFighter
 {
-    // Menú inicial en dos pasos:
+    // Menú inicial por pasos:
     //  1) NORMAL o LAG MODE (cada 3 turnos el lag sube 50%)
     //  2) Práctica / VS IA / 1v1 local / POR CÓDIGO
-    // Teclas 1-3, flechas+Enter, o click.
+    // VS IA agrega perfil y dificultad. Teclas 1-6, flechas+Enter, o click.
     public class ModeMenuUI : MonoBehaviour
     {
         static readonly (string label, string desc)[] LagOptions =
@@ -29,6 +29,23 @@ namespace LagFighter
             ("SOY JUGADOR 2", "El de la derecha (naranja)."),
         };
 
+        static readonly (string label, string desc, AIProfile profile)[] AIProfiles =
+        {
+            ("RANDOM", "Elige un perfil al empezar la partida y lo mantiene durante todos los rounds.", AIProfile.Random),
+            ("ZONER", "Controla distancia con Hadouken, retroceso y anti-air.", AIProfile.Zoner),
+            ("AGGRESSIVE", "Cierra espacio, presiona y mezcla golpes con agarres.", AIProfile.Aggressive),
+            ("DEFENSIVE", "Prioriza spacing, castigos, anti-air y Parry.", AIProfile.Defensive),
+            ("TRICKSTER", "Usa baits, cambios de ritmo, saltos y agarres inesperados.", AIProfile.Trickster),
+            ("ADAPTIVE", "Estudia tus planes revelados y contrarresta tus hábitos en turnos futuros.", AIProfile.Adaptive),
+        };
+
+        static readonly (string label, string desc, AIDifficulty difficulty)[] AIDifficulties =
+        {
+            ("FÁCIL", "Deja parte del turno libre y se desvía seguido de su estrategia.", AIDifficulty.Easy),
+            ("NORMAL", "Ejecuta su perfil con errores ocasionales.", AIDifficulty.Normal),
+            ("DIFÍCIL", "Aprovecha todo el turno, comete pocos errores y reacciona mejor al estado visible.", AIDifficulty.Hard),
+        };
+
         MatchController _mc;
         Font _font;
         GameObject _root;
@@ -36,8 +53,9 @@ namespace LagFighter
         Text[] _cardLabels;
         Text _desc, _stepTitle;
         int _sel;
-        int _step; // 0 = lag mode, 1 = modo de juego, 2 = lado (solo async)
+        int _step; // 0 lag, 1 modo, 2 lado async, 3 perfil IA, 4 dificultad IA
         bool _lagChoice;
+        AIProfile _aiProfileChoice = AIProfile.Random;
         bool _active;
         Vector2 _lastMouse;
 
@@ -102,17 +120,17 @@ namespace LagFighter
             bandRt.SetParent(rootRt, false);
             bandRt.anchorMin = bandRt.anchorMax = new Vector2(0.5f, 0.5f);
             bandRt.anchoredPosition = new Vector2(0f, -10f);
-            bandRt.sizeDelta = new Vector2(1160f, 380f);
+            bandRt.sizeDelta = new Vector2(1160f, 500f);
             band.GetComponent<Image>().color = new Color(0f, 0f, 0f, hasSplash ? 0.62f : 0.25f);
             band.GetComponent<Image>().raycastTarget = false;
 
-            _stepTitle = Txt(rootRt, "Step", "", new Vector2(0f, 128f), 15, new Color(1f, 1f, 1f, 0.85f), FontStyle.Normal);
+            _stepTitle = Txt(rootRt, "Step", "", new Vector2(0f, 175f), 15, new Color(1f, 1f, 1f, 0.85f), FontStyle.Normal);
             _stepTitle.font = UIFonts.Pixel;
 
-            // hasta 4 cartas (paso 0 usa 2, paso 1 usa 4, paso 2 usa 2)
-            _cards = new Image[4];
-            _cardLabels = new Text[4];
-            for (int i = 0; i < 4; i++)
+            // Perfil IA usa seis cartas en una grilla 3x2.
+            _cards = new Image[6];
+            _cardLabels = new Text[6];
+            for (int i = 0; i < _cards.Length; i++)
             {
                 var card = new GameObject("Card" + i, typeof(RectTransform), typeof(Image));
                 var rt = card.GetComponent<RectTransform>();
@@ -129,8 +147,8 @@ namespace LagFighter
             }
 
             _desc = Txt(rootRt, "Desc", "", new Vector2(0f, -86f), 20, new Color(1f, 1f, 1f, 0.85f), FontStyle.Normal);
-            Txt(rootRt, "Help", "1-4 o ←/→ + Enter · click también funciona · en partida: R reinicia, M vuelve acá",
-                new Vector2(0f, -146f), 16, new Color(1f, 1f, 1f, 0.5f), FontStyle.Normal);
+            Txt(rootRt, "Help", "1-6 o flechas + Enter · click también funciona · en partida: R reinicia, M vuelve acá",
+                new Vector2(0f, -210f), 16, new Color(1f, 1f, 1f, 0.5f), FontStyle.Normal);
         }
 
         Text Txt(RectTransform parent, string name, string content, Vector2 pos, int size, Color color, FontStyle style)
@@ -154,7 +172,8 @@ namespace LagFighter
             return t;
         }
 
-        int OptionCount => _step == 0 ? LagOptions.Length : _step == 1 ? Modes.Length : Sides.Length;
+        int OptionCount => _step == 0 ? LagOptions.Length : _step == 1 ? Modes.Length :
+            _step == 2 ? Sides.Length : _step == 3 ? AIProfiles.Length : AIDifficulties.Length;
 
         public void Open()
         {
@@ -176,18 +195,26 @@ namespace LagFighter
             int count = OptionCount;
             _stepTitle.text = _step == 0 ? "¿CUÁNTO LAG QUERÉS?" :
                               _step == 1 ? (_lagChoice ? "LAG MODE — elegí rival" : "NORMAL — elegí rival") :
-                              "POR CÓDIGO — ¿de qué lado jugás?";
+                              _step == 2 ? "POR CÓDIGO — ¿de qué lado jugás?" :
+                              _step == 3 ? "VS IA — ELEGÍ UN PERFIL" : "VS IA — ELEGÍ DIFICULTAD";
             float cardW = count >= 4 ? 300f : 330f;
             for (int i = 0; i < _cards.Length; i++)
             {
                 bool on = i < count;
                 _cards[i].gameObject.SetActive(on);
                 if (!on) continue;
-                float x = (i - (count - 1) * 0.5f) * cardW;
-                _cards[i].rectTransform.anchoredPosition = new Vector2(x, 10f);
-                _cardLabels[i].text = _step == 0 ? LagOptions[i].label : _step == 1 ? Modes[i].label : Sides[i].label;
-                _cardLabels[i].fontSize = _step == 1 && count >= 4 ? 24 : 28;
+                bool grid = count > 4;
+                int col = grid ? i % 3 : i;
+                int row = grid ? i / 3 : 0;
+                float x = grid ? (col - 1) * cardW : (i - (count - 1) * 0.5f) * cardW;
+                float y = grid ? 55f - row * 115f : 10f;
+                _cards[i].rectTransform.sizeDelta = grid ? new Vector2(280f, 100f) : new Vector2(300f, 110f);
+                _cards[i].rectTransform.anchoredPosition = new Vector2(x, y);
+                _cardLabels[i].text = _step == 0 ? LagOptions[i].label : _step == 1 ? Modes[i].label :
+                    _step == 2 ? Sides[i].label : _step == 3 ? AIProfiles[i].label : AIDifficulties[i].label;
+                _cardLabels[i].fontSize = count >= 4 ? 23 : 28;
             }
+            _desc.rectTransform.anchoredPosition = new Vector2(0f, count > 4 ? -145f : -86f);
             Highlight(_sel);
         }
 
@@ -201,7 +228,8 @@ namespace LagFighter
                     ? (lagCard ? new Color(0.6f, 0.25f, 0.15f, 0.98f) : new Color(0.25f, 0.42f, 0.62f, 0.98f))
                     : new Color(0.12f, 0.13f, 0.17f, 0.9f);
             }
-            _desc.text = _step == 0 ? LagOptions[_sel].desc : _step == 1 ? Modes[_sel].desc : Sides[_sel].desc;
+            _desc.text = _step == 0 ? LagOptions[_sel].desc : _step == 1 ? Modes[_sel].desc :
+                _step == 2 ? Sides[_sel].desc : _step == 3 ? AIProfiles[_sel].desc : AIDifficulties[_sel].desc;
         }
 
         void Confirm(int idx)
@@ -216,6 +244,13 @@ namespace LagFighter
             }
             if (_step == 1)
             {
+                if (Modes[idx].mode == GameMode.VsAI)
+                {
+                    _step = 3;
+                    _sel = 0; // RANDOM por defecto
+                    Layout();
+                    return;
+                }
                 if (Modes[idx].mode == GameMode.Async)
                 {
                     _step = 2;
@@ -226,7 +261,20 @@ namespace LagFighter
                 _mc.StartMatch(Modes[idx].mode, _lagChoice);
                 return;
             }
-            _mc.StartMatch(GameMode.Async, _lagChoice, idx);
+            if (_step == 2)
+            {
+                _mc.StartMatch(GameMode.Async, _lagChoice, idx);
+                return;
+            }
+            if (_step == 3)
+            {
+                _aiProfileChoice = AIProfiles[idx].profile;
+                _step = 4;
+                _sel = 1; // NORMAL por defecto
+                Layout();
+                return;
+            }
+            _mc.StartMatch(GameMode.VsAI, _lagChoice, 0, _aiProfileChoice, AIDifficulties[idx].difficulty);
         }
 
         void Update()
@@ -259,6 +307,8 @@ namespace LagFighter
 
             if (GameInput.LeftPressed()) Highlight(_sel - 1);
             if (GameInput.RightPressed()) Highlight(_sel + 1);
+            if (_step == 3 && GameInput.UpPressed()) Highlight(_sel - 3);
+            if (_step == 3 && GameInput.DownPressed()) Highlight(_sel + 3);
             int n = GameInput.NumberPressed();
             if (n >= 1 && n <= OptionCount) { Confirm(n - 1); return; }
             if (GameInput.ConfirmPressed()) Confirm(_sel);

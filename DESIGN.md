@@ -36,7 +36,7 @@ Balanceado contra la framedata real de ST Ryu (supercombo.gg, 2026-07-17):
 | 9 | Patada B | 16/6/30 | 2 dmg, soft KD 42f, bs26 → **−10 on block** (sweep ST: −9) |
 | 10 | Hadouken | 14/2/44 = **60f** | ocupa el turno ENTERO; el salto lo castiga (ST: 52-54f, acá nerf extra a pedido) |
 | 11 | Shoryuken | 4/5/32 = 41f | **invuln 1..10**, hard KD 60f, −15 block; **anti-aéreo especializado** (Y 1.0–2.5, alcance 0.75): ya no pega OTG ni domina el suelo (nerf 2026-07-18: 76%→61% en el lab) |
-| 12 | Esperar | 12f | neutral, **bloquea** (no meter órdenes = bloquear) |
+| 12 | Parry | 2/5/5 = 12f | rechaza golpes/proyectiles en f3–7 e interrumpe ataques cuerpo a cuerpo; pierde vs agarre y delay; **no bloquea** |
 | 13 | Tatsumaki | 12/18/16 = 46f | viaja +1.6, 2 hits, el 2° derriba; **atraviesa hadoukens** (girando 8..34: el final es castigable con proyectil); hitbox baja: los saltos la pasan |
 | 14 | Agarre | 6/4/20 = 30f | **rompe guardia**, tira 1.2 + KD 45f; los saltos y caídos lo ignoran; **agarre vs agarre = TECH** |
 | 15 | Agacharse (OFF) | 14f | **bloquea** con hurtbox 0.9: jab y hadouken **pasan por arriba**; sweep/baja/agarre pegan. Desactivado: `SimConfig.CrouchEnabled` |
@@ -58,7 +58,7 @@ vulnerable por off-by-one; lo pescó el test de framedata).
   (2026-07-17, mismo día): daño localizado por altura (bajo `LimbSplitY`=1.0
   → pierna; arriba → brazo), 3 HP por miembro; sin brazo ni A ni Hadouken;
   sin pierna ni B/Tatsu/baja, aéreas no salen, velocidad 65%; el bloque del
-  rig desaparece; órdenes huérfanas degradan a Esperar. **Para reactivar:
+  rig desaparece; órdenes huérfanas se consumen en neutral. **Para reactivar:
   `SimConfig.LimbsEnabled = true`** (los tests se reactivan solos). Ídem
   agachado: `SimConfig.CrouchEnabled` + descomentar cartas en
   `PlanMenuUI.Order` y opciones en `SimpleAI`.
@@ -71,13 +71,18 @@ vulnerable por off-by-one; lo pescó el test de framedata).
 
 ### Lag Mode
 
-Menú inicial en dos pasos: primero NORMAL o **LAG MODE**. En Lag Mode, cada 3
+Menú inicial: primero NORMAL o **LAG MODE**. En Lag Mode, cada 3
 turnos los frames del turno suben 50%: 60 → 90 → 135 → 202 → 303 (cap; se
 suavizó el 2026-07-17: duplicar cada 4 era demasiado brusco).
 Al subir aparece el cartel ("IT GETS LAGGIER…", "EL WIFI ESTÁ LLORANDO",
 "MODO DIAL-UP", "PALOMA MENSAJERA") y un indicador de wifi arriba que pierde
 barras y termina parpadeando en rojo (con "ping" falso). La timeline re-escala
 (RowW / CurrentTurnFrames). El lag level se resetea por round.
+
+En **VS IA**, después se elige perfil (RANDOM por defecto, Zoner, Aggressive,
+Defensive, Trickster o Adaptive) y dificultad (Fácil, Normal por defecto o
+Difícil). RANDOM fija un perfil para toda la partida; Adaptive aprende solo de
+planes ya revelados y aplica lo observado a partir del turno siguiente.
 
 ### Presentación / testeo
 

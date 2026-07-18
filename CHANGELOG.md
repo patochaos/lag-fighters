@@ -2,6 +2,23 @@
 
 Cada subida a GitHub agrega acá sus change notes.
 
+## 0.4.0 — 2026-07-18 (Parry + perfiles de IA)
+
+### Gameplay
+- **Parry reemplaza Esperar** sin cambiar el índice del comando ni romper los
+  códigos de turno: 2f startup, 5f activos, 5f recovery. Rechaza golpes y
+  proyectiles; contra melee interrumpe 18f. Pierde contra agarre y delay.
+- Las órdenes de features apagadas ahora se consumen en neutral, sin regalar
+  un Parry ni invalidar replays/códigos.
+
+### VS IA
+- Selector posterior a VS IA con **RANDOM** por defecto y cinco perfiles para
+  práctica repetible: Zoner, Aggressive, Defensive, Trickster y Adaptive.
+- Dificultades Fácil, Normal (default) y Difícil. Adaptive aprende únicamente
+  de planes ya revelados, nunca del plan secreto actual.
+- Feedback visual y HUD propio para Parry; pruebas deterministas nuevas para
+  ventana, counters, proyectiles, perfiles y presupuesto de turnos.
+
 ## 0.3.0 — 2026-07-17 (primer playtest + build web)
 
 Ajustes tras el primer playtest de Patricio, y la primera build WebGL.
@@ -10,7 +27,7 @@ Ajustes tras el primer playtest de Patricio, y la primera build WebGL.
 - **Pérdida de miembros y agachado DESACTIVADOS** (a pedido): el código
   queda completo detrás de `SimConfig.LimbsEnabled` / `CrouchEnabled`
   (false) — flipear los flags y descomentar cartas/IA para reactivar.
-  Los códigos async con esos movimientos degradan a Esperar (no rompen).
+  Los códigos async con esos movimientos se consumen en neutral (no rompen).
 - **Lag Mode más suave**: sube 50% cada 3 turnos (60 → 90 → 135 → 202 →
   303) en vez de duplicarse cada 4.
 
@@ -39,7 +56,7 @@ Todo `PLAN.md` implementado en una sesión, con tests y lab verdes.
 - **Pérdida de miembros** (la idea fundacional): daño localizado por altura
   del golpe, 3 HP por miembro. Sin brazo: ni A ni Hadouken. Sin pierna: ni
   B/Tatsu/baja, las patadas aéreas no salen, velocidad 65%. El bloque del
-  rig literalmente se cae; órdenes huérfanas degradan a Esperar.
+  rig literalmente se cae; órdenes huérfanas se consumen en neutral.
 - **Agacharse + alto/bajo posicional**: hurtbox 0.9 — el jab y el hadouken
   pasan por arriba (esquivar no gasta guardia). Nueva **Patada baja**
   (+2 hit / −3 block, pega bajo, agachado todo el move).

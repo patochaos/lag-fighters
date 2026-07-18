@@ -119,6 +119,7 @@ namespace LagFighter
             _flashColor = counter ? new Color(1f, 0.45f, 0.05f) : Color.white;
         }
         public void FlashBlock() { _flash = 0.7f; _flashColor = new Color(0.4f, 0.8f, 1f); }
+        public void FlashParry() { _flash = 1f; _flashColor = new Color(0.25f, 0.95f, 1f); }
 
         void Update()
         {
@@ -265,6 +266,13 @@ namespace LagFighter
                             rigPitch = 8f; // se tira hacia adelante a buscar el cuerpo
                         }
                         break;
+                    case AnimKind.Parry:
+                        // Brazos cruzados y cuerpo hacia atrás: lectura activa,
+                        // visualmente distinta de la guardia automática.
+                        armF = new Vector3(-0.08f, 1.42f, 0.46f);
+                        armB = new Vector3(0.08f, 1.24f, 0.42f);
+                        rigPitch = -10f;
+                        break;
                 }
             }
 
@@ -279,7 +287,7 @@ namespace LagFighter
 
             // bloqueo visible: brazos cubriendo (si está en estado de guardia durante ejecución)
             bool blocking = sim.IsBlockingState(_index) && !sim.Over && showBlockPose;
-            if (blocking && (m == null || m.Anim == AnimKind.Walk || m.Anim == AnimKind.Wait))
+            if (blocking && (m == null || m.Anim == AnimKind.Walk))
             {
                 armF = new Vector3(0.1f, 1.3f, 0.4f);
                 armB = new Vector3(-0.1f, 1.44f, 0.36f);
