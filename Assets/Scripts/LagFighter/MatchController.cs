@@ -152,7 +152,7 @@ namespace LagFighter
             _views[1].OnMatchReset();
             _hud.OnMatchReset();
             if (Mode != GameMode.Practice)
-                _hud.ShowBigMessage($"ROUND {_wins[0] + _wins[1] + 1}\n<size=34>¡PELEA!</size>", new Color(1f, 0.9f, 0.4f));
+                _hud.ShowBigMessage($"ROUND {_wins[0] + _wins[1] + 1}\n<size=18>¡PELEA!</size>", new Color(1f, 0.9f, 0.4f));
             StartPlanning();
         }
 
@@ -229,10 +229,10 @@ namespace LagFighter
         {
             switch (level)
             {
-                case 1: return "IT GETS LAGGIER…\n<size=30>120 frames por turno</size>";
-                case 2: return "EL WIFI ESTÁ LLORANDO\n<size=30>240 frames por turno</size>";
-                case 3: return "MODO DIAL-UP\n<size=30>480 frames por turno</size>";
-                default: return "PALOMA MENSAJERA\n<size=30>960 frames por turno</size>";
+                case 1: return "IT GETS LAGGIER…\n<size=14>120 frames por turno</size>";
+                case 2: return "EL WIFI ESTÁ LLORANDO\n<size=14>240 frames por turno</size>";
+                case 3: return "MODO DIAL-UP\n<size=14>480 frames por turno</size>";
+                default: return "PALOMA MENSAJERA\n<size=14>960 frames por turno</size>";
             }
         }
 
@@ -293,6 +293,23 @@ namespace LagFighter
             _plans[Picker].Add(moveIndex);
             UpdateGhost();
         }
+
+        // borrar una orden puntual (click derecho en su ficha de la timeline)
+        public void PlanRemoveAt(int fighter, int index)
+        {
+            if (State != Flow.Planning || fighter != Picker) return;
+            if (index < 0 || index >= _plans[Picker].Count) return;
+            _plans[Picker].RemoveAt(index);
+            UpdateGhost();
+        }
+
+        // scrub del ghost desde la timeline (−1 = volver al loop automático)
+        public void GhostScrub(float frame) => _ghost.SetScrub(frame);
+
+        // wrappers para los botones de fin de partida
+        public void RequestRematch() { if (State == Flow.GameOver) ResetMatch(); }
+        public void RequestReplay() { if (State == Flow.GameOver && HasReplay) StartReplay(); }
+        public bool HasReplay => _turnLog.Count > 0;
 
         public void PlanUndo()
         {
@@ -704,6 +721,8 @@ namespace LagFighter
         public static bool MenuPressed() => K != null && (K.mKey.wasPressedThisFrame || K.escapeKey.wasPressedThisFrame);
         public static bool ReplayPressed() => K != null && K.vKey.wasPressedThisFrame;
         public static bool ClickPressed() => Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame;
+        public static bool ClickHeld() => Mouse.current != null && Mouse.current.leftButton.isPressed;
+        public static bool RightClickPressed() => Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame;
         public static Vector2 MousePos() => Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero;
         public static bool BoxesPressed() => K != null && K.hKey.wasPressedThisFrame;
         public static bool LogPressed() => K != null && K.lKey.wasPressedThisFrame;
@@ -728,6 +747,8 @@ namespace LagFighter
         public static bool MenuPressed() => Input.GetKeyDown(KeyCode.M) || Input.GetKeyDown(KeyCode.Escape);
         public static bool ReplayPressed() => Input.GetKeyDown(KeyCode.V);
         public static bool ClickPressed() => Input.GetMouseButtonDown(0);
+        public static bool ClickHeld() => Input.GetMouseButton(0);
+        public static bool RightClickPressed() => Input.GetMouseButtonDown(1);
         public static Vector2 MousePos() => Input.mousePosition;
         public static bool BoxesPressed() => Input.GetKeyDown(KeyCode.H);
         public static bool LogPressed() => Input.GetKeyDown(KeyCode.L);

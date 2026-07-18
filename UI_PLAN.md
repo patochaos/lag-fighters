@@ -1,4 +1,9 @@
-# Lag Fighters — Plan de UI/UX (2026-07-17, solo plan, a revisar)
+# Lag Fighters — Plan de UI/UX (2026-07-17)
+
+**Estado: fases UI-1, UI-2 y UI-3 (scrub + borrar ficha) + botones de fin de
+partida EJECUTADAS el mismo día.** Difierido para otra sesión: pictogramas en
+fichas, pantalla de resultados con gráfico de HP por turno, tooltips de
+onboarding, cámara dinámica (el KO slow-mo ya estaba).
 
 ## 0. Diagnóstico del estado actual
 

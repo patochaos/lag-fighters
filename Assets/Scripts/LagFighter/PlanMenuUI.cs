@@ -136,13 +136,14 @@ namespace LagFighter
                 var header = MakeImage(card.rectTransform, "Header", new Vector2(0.5f, 1f), new Vector2(0f, -13f),
                     new Vector2(CardW, 26f), new Color(cat.r, cat.g, cat.b, 0.85f));
                 _cardHeader[pos] = header;
-                var name = MakeText(header.rectTransform, "Name", m.Name, new Vector2(0.5f, 0.5f), Vector2.zero,
-                    new Vector2(CardW - 30f, 22f), 15, Color.white, TextAnchor.MiddleCenter);
-                name.fontStyle = FontStyle.Bold;
+                var name = MakeText(header.rectTransform, "Name", m.Name.ToUpperInvariant(), new Vector2(0.5f, 0.5f), Vector2.zero,
+                    new Vector2(CardW - 30f, 22f), 9, Color.white, TextAnchor.MiddleCenter);
+                name.font = UIFonts.Pixel;
 
                 string key = pos < 9 ? (pos + 1).ToString() : pos == 9 ? "0" : "";
-                MakeText(header.rectTransform, "Key", key, new Vector2(0f, 0.5f), new Vector2(10f, 0f),
-                    new Vector2(20f, 20f), 13, new Color(1f, 1f, 1f, 0.65f), TextAnchor.MiddleLeft);
+                var keyT = MakeText(header.rectTransform, "Key", key, new Vector2(0f, 0.5f), new Vector2(10f, 0f),
+                    new Vector2(20f, 20f), 9, new Color(1f, 1f, 1f, 0.65f), TextAnchor.MiddleLeft);
+                keyT.font = UIFonts.Pixel;
 
                 // mini-barra de framedata: startup/activo/recovery a escala
                 float barY = -34f, barW = CardW - 22f;
@@ -186,7 +187,7 @@ namespace LagFighter
             float topY = 26f + totalH + 40f;
             _detail = MakeText(rootRt, "Detail", "", new Vector2(0.5f, 0f), new Vector2(0f, topY + 26f), new Vector2(1700f, 24f), 16, Color.white, TextAnchor.MiddleCenter);
             _status = MakeText(rootRt, "Status", "", new Vector2(0.5f, 0f), new Vector2(0f, topY), new Vector2(1700f, 22f), 16, new Color(0.5f, 1f, 0.6f), TextAnchor.MiddleCenter);
-            MakeText(rootRt, "Help", "click o 1-9/0 agrega · flechas + Enter agrega · Backspace borra · ESPACIO cierra el turno",
+            MakeText(rootRt, "Help", "click/1-9 agrega · Backspace borra · arrastrá tu timeline = scrub del ghost · click derecho en ficha = borrarla · ESPACIO cierra",
                 new Vector2(0.5f, 0f), new Vector2(0f, 6f), new Vector2(1300f, 20f), 13, new Color(1f, 1f, 1f, 0.45f), TextAnchor.MiddleCenter);
         }
 
@@ -217,6 +218,7 @@ namespace LagFighter
         {
             _active = false;
             if (_root != null) _root.SetActive(false);
+            RangePreview.Clear();
         }
 
         public void SetPrediction(PlanPreview g, int framesUsed, int available)
@@ -246,6 +248,9 @@ namespace LagFighter
             }
             var m = MoveCatalog.All[Order[_sel]];
             _detail.text = $"{m.Name} — {m.Desc}";
+
+            // el rango del movimiento se dibuja EN el escenario (Into the Breach)
+            RangePreview.Show(_mc.Sim, _mc.Picker, Order[_sel]);
         }
 
         void Update()

@@ -230,12 +230,27 @@ namespace LagFighter
             _clock = 0f;
         }
 
+        // Scrub estilo YOMIH: arrastrando el playhead de la timeline el ghost
+        // se posa en ese frame exacto; −1 vuelve al loop automático.
+        float _scrub = -1f;
+        public void SetScrub(float frame) => _scrub = frame;
+
         void Update()
         {
             if (!_active) return;
             float dt = Time.deltaTime;
-            _clock += dt * SimConfig.TicksPerSecond;
-            if (_clock >= _loopFrames) { Restart(); return; }
+
+            if (_scrub >= 0f)
+            {
+                float target = Mathf.Clamp(_scrub, 0f, _loopFrames - 1f);
+                if (target < _sim.Tick - _t0) Restart(); // la sim solo avanza: rebobinar = re-simular
+                _clock = target;
+            }
+            else
+            {
+                _clock += dt * SimConfig.TicksPerSecond;
+                if (_clock >= _loopFrames) { Restart(); return; }
+            }
 
             while (_sim.Tick - _t0 < (int)_clock && !_sim.Over)
                 _sim.Step();

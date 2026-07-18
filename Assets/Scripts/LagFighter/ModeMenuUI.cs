@@ -106,7 +106,8 @@ namespace LagFighter
             band.GetComponent<Image>().color = new Color(0f, 0f, 0f, hasSplash ? 0.62f : 0.25f);
             band.GetComponent<Image>().raycastTarget = false;
 
-            _stepTitle = Txt(rootRt, "Step", "", new Vector2(0f, 128f), 24, new Color(1f, 1f, 1f, 0.85f), FontStyle.Bold);
+            _stepTitle = Txt(rootRt, "Step", "", new Vector2(0f, 128f), 15, new Color(1f, 1f, 1f, 0.85f), FontStyle.Normal);
+            _stepTitle.font = UIFonts.Pixel;
 
             // hasta 4 cartas (paso 0 usa 2, paso 1 usa 4, paso 2 usa 2)
             _cards = new Image[4];
@@ -121,8 +122,10 @@ namespace LagFighter
                 _cards[i] = card.GetComponent<Image>();
                 _cards[i].raycastTarget = false;
 
-                Txt(rt, "K", (i + 1).ToString(), new Vector2(-118f, 32f), 20, new Color(1f, 1f, 1f, 0.5f), FontStyle.Normal);
-                _cardLabels[i] = Txt(rt, "L", "", new Vector2(0f, 0f), 28, Color.white, FontStyle.Bold);
+                var k = Txt(rt, "K", (i + 1).ToString(), new Vector2(-118f, 32f), 12, new Color(1f, 1f, 1f, 0.5f), FontStyle.Normal);
+                k.font = UIFonts.Pixel;
+                _cardLabels[i] = Txt(rt, "L", "", new Vector2(0f, 0f), 15, Color.white, FontStyle.Normal);
+                _cardLabels[i].font = UIFonts.Pixel;
             }
 
             _desc = Txt(rootRt, "Desc", "", new Vector2(0f, -86f), 20, new Color(1f, 1f, 1f, 0.85f), FontStyle.Normal);
