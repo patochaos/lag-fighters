@@ -24,6 +24,9 @@ Recordings/
 # Plastic SCM (estado local del workspace)
 .plastic/
 
+# Basura que deja la build WebGL/Burst en la raíz del proyecto
+/Data/
+
 # OS
 Thumbs.db
 .DS_Store
