@@ -34,13 +34,15 @@ namespace LagFighter
         public const float ProjDamage = 1f;
         public const int ProjHitstun = 22, ProjBlockstun = 16;
         public const float ProjPush = 0.3f;
-        public const float ProjGuardDamage = 20f;
+        public const float ProjGuardDamage = 25f; // sube de 20: que zonear lastime la guardia
 
-        // guard gauge: bloquear no cuesta vida pero sí guardia; en 0 → GUARD CRUSH
-        public const float GuardMax = 100f;
+        // guard gauge: bloquear no cuesta vida pero sí guardia; en 0 → GUARD CRUSH.
+        // Barra de 70 (era 100: crushear casi no pasaba): 5 jabs o 3 sweeps
+        // bloqueados seguidos y la guardia vuela.
+        public const float GuardMax = 70f;
         public const float GuardRegen = 0.1f;       // ~6/seg, solo fuera de guardia/blockstun
         public const int GuardCrushStun = 50;
-        public const float GuardCrushRespawn = 50f; // la barra renace al 50%
+        public const float GuardCrushRespawn = 35f; // la barra renace al 50%
 
         // ---- features DESACTIVADAS a pedido de Patricio (2026-07-17) ----
         // El código de pérdida de miembros y agachado sigue completo abajo;
@@ -129,9 +131,9 @@ namespace LagFighter
                 MoveDx = -1.0f, MotionStart = 2, MotionEnd = 12 },
 
             new MoveDef { Id = "jumpF", Name = "Salto + (patada)", Anim = AnimKind.Jump, Startup = 6, Active = 28, Recovery = 10,
-                Desc = "Jump-in con patada en la bajada + 10f de recovery al caer. Pasa hadoukens; en el aire no bloqueás. Guardia −15.",
+                Desc = "Jump-in con patada en la bajada (hit 20..28) + 10f de recovery al caer. Pasa hadoukens; en el aire no bloqueás. Guardia −15.",
                 MoveDx = 1.9f, MotionStart = 6, MotionEnd = 34, AirStart = 6, AirEnd = 34,
-                Hits = new[] { new HitWindow { Start = 20, Duration = 10, Fwd0 = 0.2f, Fwd1 = 0.95f, Y0 = 0.85f, Y1 = 1.65f,
+                Hits = new[] { new HitWindow { Start = 20, Duration = 8, Fwd0 = 0.2f, Fwd1 = 0.95f, Y0 = 0.85f, Y1 = 1.65f,
                     Damage = 1f, Hitstun = 26, Blockstun = 15, CounterStun = 36, Push = 0.2f, GuardDamage = 15f } } },
 
             new MoveDef { Id = "jumpN", Name = "Salto N (patada)", Anim = AnimKind.Jump, Startup = 6, Active = 28, Recovery = 6,
@@ -155,21 +157,21 @@ namespace LagFighter
                     Damage = 2f, Hitstun = 42, Blockstun = 26, CounterStun = 55, Push = 0.55f, Knockdown = true, GuardDamage = 30f } } },
 
             new MoveDef { Id = "hadouken", Name = "Hadouken", Anim = AnimKind.Fireball, Startup = 14, Active = 2, Recovery = 44,
-                Desc = "Proyectil. 60f totales: tirarlo es comprometer EL TURNO ENTERO. Saltable y castigable. Guardia −20.",
+                Desc = "Proyectil. 60f totales: tirarlo es comprometer EL TURNO ENTERO. Saltable y castigable. Guardia −25.",
                 SpawnFrame = 14 },
 
-            new MoveDef { Id = "shoryu", Name = "Shoryuken", Anim = AnimKind.Dragon, Startup = 4, Active = 8, Recovery = 32,
-                Desc = "Invuln frames 1-10 (después, vulnerable subiendo). Anti-aéreo, hard KD, −17 en block. Guardia −35.",
+            new MoveDef { Id = "shoryu", Name = "Shoryuken", Anim = AnimKind.Dragon, Startup = 4, Active = 5, Recovery = 32,
+                Desc = "Invuln frames 1-10 (después, vulnerable subiendo). ANTI-AÉREO (no pega abajo de Y 1.0), hard KD, −15 en block. Guardia −35.",
                 InvulnStart = 0, InvulnEnd = 10, AirStart = 6, AirEnd = 30, MoveDx = 0.4f, MotionStart = 2, MotionEnd = 12,
-                Hits = new[] { new HitWindow { Start = 4, Duration = 8, Fwd0 = 0.15f, Fwd1 = 0.95f, Y0 = 0.7f, Y1 = 2.5f,
+                Hits = new[] { new HitWindow { Start = 4, Duration = 5, Fwd0 = 0.15f, Fwd1 = 0.75f, Y0 = 1.0f, Y1 = 2.5f,
                     Damage = 2f, Hitstun = 60, Blockstun = 22, CounterStun = 70, Push = 0.4f, Knockdown = true, GuardDamage = 35f } } },
 
             new MoveDef { Id = "wait", Name = "Esperar", Anim = AnimKind.Wait, Startup = 0, Active = 12, Recovery = 0,
                 Desc = "12 frames quieto, bloqueando. No meter órdenes también bloquea." },
 
             new MoveDef { Id = "tatsu", Name = "Tatsumaki", Anim = AnimKind.Tatsu, Startup = 12, Active = 18, Recovery = 16,
-                Desc = "Giratoria que viaja lejos y ATRAVIESA hadoukens (girando, 8..40). Dos hits; el segundo derriba. Guardia −15 por hit.",
-                MoveDx = 1.6f, MotionStart = 10, MotionEnd = 30, ProjImmuneStart = 8, ProjImmuneEnd = 40,
+                Desc = "Giratoria que viaja lejos y ATRAVIESA hadoukens (girando, 8..34: el final es castigable). Dos hits; el segundo derriba. Guardia −15 por hit.",
+                MoveDx = 1.6f, MotionStart = 10, MotionEnd = 30, ProjImmuneStart = 8, ProjImmuneEnd = 34,
                 Hits = new[] {
                     new HitWindow { Start = 14, Duration = 5, Fwd0 = 0.3f, Fwd1 = 0.95f, Y0 = 0.9f, Y1 = 1.3f,
                         Damage = 1f, Hitstun = 22, Blockstun = 14, CounterStun = 32, Push = 0.3f, GuardDamage = 15f },
@@ -186,7 +188,7 @@ namespace LagFighter
                 CrouchStart = 0, CrouchEnd = 14 },
 
             new MoveDef { Id = "lowKick", Name = "Patada baja", Anim = AnimKind.LowKick, Startup = 8, Active = 4, Recovery = 16,
-                Desc = "Rastrera desde abajo: pega BAJO (+2 hit / −3 block), agachado mientras dura. Guardia −15.",
+                Desc = "Rastrera desde abajo: pega BAJO (+2 hit / −7 block), agachado mientras dura. Guardia −15.",
                 CrouchStart = 0, CrouchEnd = 28,
                 Hits = new[] { new HitWindow { Start = 8, Duration = 4, Fwd0 = 0.4f, Fwd1 = 1.15f, Y0 = 0.25f, Y1 = 0.8f,
                     Damage = 1f, Hitstun = 22, Blockstun = 13, CounterStun = 32, Push = 0.3f, GuardDamage = 15f } } },
@@ -214,6 +216,7 @@ namespace LagFighter
         public float ArmHp = SimConfig.LimbHp;
         public float LegHp = SimConfig.LimbHp;
         public float X;
+        public float PrevX; // X del tick anterior: la view interpola entre ambos (sin smear mentiroso)
         public int Face = 1;
         public List<int> Queue = new List<int>();
         public int QueueIndex;
@@ -260,6 +263,8 @@ namespace LagFighter
         {
             Fighters[0].X = -SimConfig.StartX;
             Fighters[1].X = SimConfig.StartX;
+            Fighters[0].PrevX = Fighters[0].X;
+            Fighters[1].PrevX = Fighters[1].X;
             Fighters[0].Face = 1;
             Fighters[1].Face = -1;
         }
@@ -429,6 +434,8 @@ namespace LagFighter
         {
             if (Over) return;
             LastEvents.Clear();
+            Fighters[0].PrevX = Fighters[0].X;
+            Fighters[1].PrevX = Fighters[1].X;
 
             // fin de comandos (+ whiff), fin de stun, arranque del siguiente
             for (int i = 0; i < 2; i++)
@@ -665,7 +672,9 @@ namespace LagFighter
             }
 
             bool kd = p.Knockdown || p.AirHit; // pegarle a alguien en el aire lo derriba
-            float dmg = p.Damage + (p.Counter ? 1f : 0f);
+            // counter: +1 de daño SOLO para golpes de 1 (un DP counter de 3/6 HP
+            // decidía medio round en una lectura); los pesados suman solo stun
+            float dmg = p.Damage + (p.Counter && p.Damage < 2f ? 1f : 0f);
             int stun = p.Counter ? p.CounterStun : p.Hitstun;
             if (p.AirHit) stun = Math.Max(stun, 60); // caída del aire = hard knockdown
 

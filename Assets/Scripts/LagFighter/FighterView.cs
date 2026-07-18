@@ -137,11 +137,13 @@ namespace LagFighter
             if (_armF.gameObject.activeSelf != f.ArmHp > 0f) _armF.gameObject.SetActive(f.ArmHp > 0f);
             if (_legF.gameObject.activeSelf != f.LegHp > 0f) _legF.gameObject.SetActive(f.LegHp > 0f);
 
-            var target = new Vector3(f.X, 0f, 0f);
-            if ((target - transform.position).sqrMagnitude > 4f)
-                transform.position = target; // salto grande (loop del ghost / reset): sin smear
-            else
-                transform.position = Vector3.Lerp(transform.position, target, 1f - Mathf.Exp(-14f * dt));
+            // Posición HONESTA: interpolación entre el tick anterior y el actual
+            // con el acumulador de la sim. El smoothing exponencial viejo dejaba
+            // al muñeco ~0.4u atrás en un dash (media hurtbox de mentira visual).
+            // El smear queda para inclinación, extremidades y trails.
+            float frac = Mathf.Clamp01(tf - sim.Tick); // acc/tickDur: cuánto avanzó el frame visual
+            float renderX = Mathf.Lerp(f.PrevX, f.X, frac);
+            transform.position = new Vector3(renderX, 0f, 0f);
             float wantYaw = f.Face > 0 ? 90f : -90f;
             _faceYaw = Mathf.LerpAngle(_faceYaw, wantYaw, 1f - Mathf.Exp(-10f * dt));
 
@@ -290,11 +292,24 @@ namespace LagFighter
             _legF.localRotation = legFRot;
             _legB.localRotation = legBRot;
 
-            // trails encendidos solo en la ventana activa de un ataque
+            // trails encendidos solo mientras hay una HitWindow REAL viva
+            // (antes usaban Startup/Active genéricos: el salto "brillaba" 28f
+            // cuando la patada pega 8)
             if (_trailArm != null)
             {
-                bool active = m != null && !stunned && m.Hits.Length > 0 &&
-                              phase >= m.Startup && phase < m.Startup + m.Active;
+                bool active = false;
+                if (m != null && !stunned && m.Hits.Length > 0)
+                {
+                    for (int wi = 0; wi < m.Hits.Length; wi++)
+                    {
+                        var h = m.Hits[wi];
+                        if (phase >= h.Start && phase < h.Start + h.Duration && (f.WindowHit & (1u << wi)) == 0)
+                        {
+                            active = true;
+                            break;
+                        }
+                    }
+                }
                 bool armMove = m != null && (m.Anim == AnimKind.AttackA || m.Anim == AnimKind.Dragon || m.Anim == AnimKind.Grab);
                 _trailArm.emitting = active && armMove;
                 _trailLeg.emitting = active && !armMove;

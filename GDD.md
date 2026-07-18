@@ -64,8 +64,8 @@ Turno corto = 1-2 decisiones por turno → casi yomi puro, decisión a decisión
 Los frames restantes de stun son visibles en el HUD en vivo, y el feedback de
 cada intercambio muestra la ventaja real ("+6f" / "−16f").
 
-**Counter hit**: pegarle a alguien durante el startup de su ataque = +1 daño
-y más stun.
+**Counter hit**: pegarle a alguien durante el startup de su ataque = más stun,
+y +1 daño solo en golpes de 1 (los pesados ya pegan bastante).
 
 **Trade**: si ambos conectan en el mismo frame, ambos comen daño y stun
 (resolución en dos fases para que sea justo, sin ventaja por orden de loop).
@@ -74,10 +74,11 @@ y más stun.
 
 - **Automática, sin botón**: bloqueás en el piso si estás en neutral, esperando
   o caminando atrás. En el aire, en dash y caminando adelante NO.
-- **Guard gauge (barra de 100)**: cada bloqueo la come según el golpe
-  (ver tabla de movelist). Regenera ~6/seg SOLO cuando no estás bloqueando ni
-  en blockstun. En 0 → **GUARD CRUSH**: stun de 50f sin daño (+~32f de
-  ventaja → golpe garantizado) y la barra renace al 50%.
+- **Guard gauge (barra de 70)**: cada bloqueo la come según el golpe
+  (ver tabla de movelist; 5 jabs o 3 sweeps seguidos = crush). Regenera
+  ~6/seg SOLO cuando no estás bloqueando ni en blockstun. En 0 →
+  **GUARD CRUSH**: stun de 50f sin daño (+~32f de ventaja → golpe
+  garantizado) y la barra renace al 50%.
 - El bloqueo queda con **dos counters**: el agarre (puntual, rompe guardia una
   vez) y el crush (estructural, castiga tortuguear).
 - **Agarre vs agarre = TECH**: se separan, nadie come.
@@ -93,15 +94,15 @@ startup/active/recovery. HP total: 6.
 | 2 | Caminar − | 20 | — | — | −0.38 (atrás más lento, como SF2), **bloquea** |
 | 3 | Dash + | 16 | — | — | +1.0, no bloquea: puro compromiso |
 | 4 | Dash − | 16 | — | — | −1.0, el bait |
-| 5 | Salto + | 6/28/10 | 1 | −15 | +1.9, patada de jump-in (hit 20..30, ~+3/−8) |
+| 5 | Salto + | 6/28/10 | 1 | −15 | +1.9, patada de jump-in (hit 20..28) |
 | 6 | Salto N | 6/28/6 | 1 | −15 | vertical, patada al caer — el wakeup que pega |
 | 7 | Salto − | 6/28/6 | — | — | −1.9, la retirada sobre el hadouken |
 | 8 | Golpe A | 6/4/14 | 1 | −15 | jab: **+2 on hit / −5 on block** |
 | 9 | Patada B | 16/6/30 | 2 | −30 | sweep, soft KD 42f, **−10 on block** |
-| 10 | Hadouken | 14/2/44 | 1 | −20 | 60f: ocupa el turno ENTERO; saltable |
-| 11 | Shoryuken | 4/8/32 | 2 | −35 | invuln 1..10, hard KD 60f, −17 block |
+| 10 | Hadouken | 14/2/44 | 1 | −25 | 60f: ocupa el turno ENTERO; saltable |
+| 11 | Shoryuken | 4/5/32 | 2 | −35 | invuln 1..10, hard KD, −15 block; anti-aéreo (Y 1.0+) |
 | 12 | Esperar | 12 | — | — | neutral, **bloquea** |
-| 13 | Tatsumaki | 12/18/16 | 1+1 | −15/hit | viaja +1.6, atraviesa hadoukens (8..40), 2° hit derriba, hitbox baja |
+| 13 | Tatsumaki | 12/18/16 | 1+1 | −15/hit | viaja +1.6, atraviesa hadoukens (8..34), 2° hit derriba, hitbox baja |
 | 14 | Agarre | 6/4/20 | 1 | — | rompe guardia, KD; pierde vs aéreos/caídos; tech espejo |
 | 15 | Agacharse (OFF) | 14 | — | — | **bloquea** con hurtbox 0.9: jab y hadouken pasan por arriba |
 | 16 | Patada baja (OFF) | 8/4/16 | 1 | −15 | pega BAJO, **+2 hit / −3 block**, agachado todo el move; es patada |

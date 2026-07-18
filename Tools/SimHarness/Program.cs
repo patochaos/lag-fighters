@@ -70,7 +70,7 @@ class Program
         Console.WriteLine($"peleas: {matches} · P0 {wins0} · P1 {wins1} · dobleKO {draws} · timeout {timeouts} · techs {techs}");
         Console.WriteLine($"turnos/pelea: {(double)totalTurns / matches:0.0}");
         Console.WriteLine($"GUARD CRUSH: {totalCrushes} total · {(double)totalCrushes / matches:0.00}/pelea · {100.0 * matchesWithCrush / matches:0.0}% de peleas con >=1");
-        Console.WriteLine($"guardia promedio en juego: {guardSum / guardSamples:0.0}/100");
+        Console.WriteLine($"guardia promedio en juego: {guardSum / guardSamples:0.0}/{SimConfig.GuardMax:0}");
         Console.WriteLine();
         Console.WriteLine($"{"mov",-18}{"usos",8}{"hit",7}{"block",7}{"whiff",7}{"crush",7}{"hit%",7}{"dmg/uso",9}");
         for (int i = 0; i < n; i++)

@@ -48,7 +48,9 @@ class Tests
         SweepDerriba();
         TatsuAtraviesaHadouken();
         ShoryuInvulnerableAlArranque();
-        SieteJabsBloqueadosRompenLaGuardia();
+        LosJabsBloqueadosRompenLaGuardia();
+        DpBloqueadoEsMenosQuince();
+        ElFinalDelTatsuComeProyectiles();
         LaEsquinaEmpujaAlAtacante();
         AgarreVsAgarreEsTech();
         WakeupAjustaElKnockdown();
@@ -128,12 +130,15 @@ class Tests
             "shoryu invulnerable frames 1-10", $"hp {s.Fighters[0].Hp}");
     }
 
-    static void SieteJabsBloqueadosRompenLaGuardia()
+    static void LosJabsBloqueadosRompenLaGuardia()
     {
+        // genérico sobre las constantes: con barra de 70 y jab −15 son 5 jabs
+        int perJab = 15;
+        int needed = (int)Math.Ceiling(SimConfig.GuardMax / (double)perJab);
         var s = NewSim(-0.5f, 0.5f, p1Blocks: true);
         int blocked = 0;
         SimEvent? crush = null;
-        for (int turn = 0; turn < 8 && crush == null; turn++)
+        for (int turn = 0; turn < 10 && crush == null; turn++)
         {
             s.SetQueue(0, new List<int> { MoveCatalog.WalkF, MoveCatalog.AttackA, MoveCatalog.AttackA });
             s.SetQueue(1, new List<int>());
@@ -149,9 +154,34 @@ class Tests
             s.OnTurnEnd(0);
             s.OnTurnEnd(1);
         }
-        Check(crush.HasValue && blocked == 6 && s.Fighters[1].Guard == SimConfig.GuardCrushRespawn,
-            "guard crush al 7° jab bloqueado, barra renace al 50%",
+        Check(crush.HasValue && blocked == needed - 1 && s.Fighters[1].Guard == SimConfig.GuardCrushRespawn,
+            $"guard crush al {needed}° jab bloqueado, barra renace al 50%",
             $"bloqueados {blocked}, guardia {s.Fighters[1].Guard}");
+    }
+
+    // La ventaja del DP bloqueado en el primer frame activo (la peor para el
+    // defensor) tiene que coincidir con lo que dice la carta: −15.
+    static void DpBloqueadoEsMenosQuince()
+    {
+        var s = NewSim(-0.5f, 0.5f, p1Blocks: true);
+        s.SetQueue(0, new List<int> { MoveCatalog.Shoryuken });
+        var ev = Find(Run(s, 50), EvKind.Blocked, 0);
+        Check(ev.HasValue && ev.Value.FrameAdv == -15,
+            "shoryu bloqueado = −15 en el primer frame activo",
+            ev.HasValue ? $"adv {ev.Value.FrameAdv}" : "no lo bloqueó");
+    }
+
+    // La inmunidad del tatsu termina en 34: un proyectil que llega al final
+    // del giro SÍ conecta (el recovery quedó castigable).
+    static void ElFinalDelTatsuComeProyectiles()
+    {
+        var s = NewSim(-1f, 3.9f, p1Blocks: false);
+        s.Projectiles.Add(new Projectile { Owner = 1, X = 2.75f, Dir = -1, Alive = true });
+        s.SetQueue(0, new List<int> { MoveCatalog.Tatsu });
+        Run(s, 46);
+        Check(s.Fighters[0].Hp < SimConfig.MaxHp,
+            "la inmunidad del tatsu termina en 34: el final come proyectiles",
+            $"hp {s.Fighters[0].Hp}");
     }
 
     static void LaEsquinaEmpujaAlAtacante()

@@ -16,7 +16,8 @@ advantage) + *Your Only Move Is HUSTLE* (framedata visible, ghost, replay).
   llegó a ejecutarse **se pierde al final del turno** ("perdió N órdenes").
 - El hitstun/knockdown **se arrastra al turno siguiente**: arrancás -Nf y el
   prompt lo muestra ("VENTAJA +50f, rival derribado") → okizeme natural.
-- Counter hit: pegarle a alguien en el startup de su ataque = +1 daño y más stun.
+- Counter hit: pegarle a alguien en el startup de su ataque = más stun, y +1
+  daño SOLO en golpes de 1 (un DP counter de 3/6 HP decidía medio round).
 
 ### Comandos (16) — `MoveCatalog` en `Sim.cs` (sabor Ryu vs Ken)
 
@@ -28,15 +29,15 @@ Balanceado contra la framedata real de ST Ryu (supercombo.gg, 2026-07-17):
 | 2 | Caminar − | 20f | −0.38 (atrás más lento, como SF2), **bloquea** |
 | 3 | Dash + | 16f | +1.0, no bloquea |
 | 4 | Dash − | 16f | −1.0, el bait, no bloquea |
-| 5 | Salto + | 6/28/10 | +1.9, aéreo 6..34, **patada de jump-in** (hit 20..30, ~+3 hit / −8 block) |
+| 5 | Salto + | 6/28/10 | +1.9, aéreo 6..34, **patada de jump-in** (hit 20..28; la ventana de 10 daba hasta +11) |
 | 6 | Salto N | 6/28/6 | vertical, **patada al caer** (hit 18..30, corta: el wakeup que pega) |
 | 7 | Salto − | 6/28/6 | −1.9 |
 | 8 | Golpe A | 6/4/14 | 1 dmg, hs20/bs13 → **+2 on hit / −5 on block** (jab de ST: +4/+2) |
 | 9 | Patada B | 16/6/30 | 2 dmg, soft KD 42f, bs26 → **−10 on block** (sweep ST: −9) |
 | 10 | Hadouken | 14/2/44 = **60f** | ocupa el turno ENTERO; el salto lo castiga (ST: 52-54f, acá nerf extra a pedido) |
-| 11 | Shoryuken | 4/8/32 = 44f | **invuln 1..10** (vulnerable subiendo, como N.Ryu), hard KD 60f, −17 block (ST jab DP: 44f, invuln 1-8, −18) |
+| 11 | Shoryuken | 4/5/32 = 41f | **invuln 1..10**, hard KD 60f, −15 block; **anti-aéreo especializado** (Y 1.0–2.5, alcance 0.75): ya no pega OTG ni domina el suelo (nerf 2026-07-18: 76%→61% en el lab) |
 | 12 | Esperar | 12f | neutral, **bloquea** (no meter órdenes = bloquear) |
-| 13 | Tatsumaki | 12/18/16 = 46f | viaja +1.6, 2 hits, el 2° derriba; **atraviesa hadoukens** (girando 8..40); hitbox baja: los saltos la pasan |
+| 13 | Tatsumaki | 12/18/16 = 46f | viaja +1.6, 2 hits, el 2° derriba; **atraviesa hadoukens** (girando 8..34: el final es castigable con proyectil); hitbox baja: los saltos la pasan |
 | 14 | Agarre | 6/4/20 = 30f | **rompe guardia**, tira 1.2 + KD 45f; los saltos y caídos lo ignoran; **agarre vs agarre = TECH** |
 | 15 | Agacharse (OFF) | 14f | **bloquea** con hurtbox 0.9: jab y hadouken **pasan por arriba**; sweep/baja/agarre pegan. Desactivado: `SimConfig.CrouchEnabled` |
 | 16 | Patada baja (OFF) | 8/4/16 | 1 dmg, pega BAJO, **+2 hit / −3 block**, agachado todo el move. Desactivado con el agachado |
@@ -98,15 +99,15 @@ barras y termina parpadeando en rojo (con "ping" falso). La timeline re-escala
 - **Guardia automática (sin botón)**: bloqueás en neutral, esperando o caminando
   atrás, en el piso. Bloquear = BLOCKSTUN (te come turno). En el aire y en
   dash/walk-forward NO se bloquea.
-- **Guard gauge** (2026-07-17): barra de 100 por jugador. Cada bloqueo la come
-  según el golpe: A −15 · B −30 · patadas aéreas −15 · hadouken −20 ·
-  shoryu −35 · tatsu −15/hit. Regenera ~6/seg SOLO cuando no estás bloqueando
-  ni en blockstun. En 0 → **GUARD CRUSH**: stun de 50f sin daño (+~32f de
-  ventaja: garantiza un golpe), la barra renace al 50%. El bloqueo queda con
-  dos counters: agarre (puntual) y crush (estructural). Verificado en el lab:
-  7 jabs bloqueados seguidos = crush; el turtle absoluto pierde ~1 HP por
-  ciclo. UI: barrita amarilla bajo los pips (parpadea en rojo <25%) +
-  "¡GUARDIA ROTA!" en grande.
+- **Guard gauge** (2026-07-17, barra achicada 2026-07-18): barra de **70** por
+  jugador (con 100 crushear casi no pasaba: 0 crushes en 2000 peleas del lab;
+  con 70 hay 46). Cada bloqueo la come según el golpe: A −15 · B −30 ·
+  patadas aéreas −15 · hadouken −25 · shoryu −35 · tatsu −15/hit. Regenera
+  ~6/seg SOLO cuando no estás bloqueando ni en blockstun. En 0 →
+  **GUARD CRUSH**: stun de 50f sin daño (+~32f: golpe garantizado), la barra
+  renace al 50% (35). 5 jabs o 3 sweeps bloqueados seguidos = crush. El
+  bloqueo queda con dos counters: agarre (puntual) y crush (estructural).
+  UI: barrita amarilla bajo los pips (parpadea en rojo <25%).
 - **Estados**: HITSTUN / BLOCKSTUN / KNOCKDOWN con frames visibles en el HUD.
   Cancelan el comando actual, comen turno, y apenas terminan la cola sigue con
   lo que quedaba. Golpe aéreo = knockdown. Counter (pegar en startup) = +1 dmg.

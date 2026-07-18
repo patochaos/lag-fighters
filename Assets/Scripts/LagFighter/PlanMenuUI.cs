@@ -36,7 +36,7 @@ namespace LagFighter
         Image _undoBtn, _doneBtn, _wakeBtn;
         Text _wakeLabel;
         // panel de info a la derecha de la grilla: se llena con el hover
-        Text _detailTitle, _detailFrames, _detailTag, _detail, _status;
+        Text _detailTitle, _detailFrames, _detailAdv, _detailTag, _detail, _status;
         Image _segBg, _segS, _segA, _segR;
         float _segW;
         int _sel;
@@ -174,8 +174,8 @@ namespace LagFighter
             // panel de info a la DERECHA de la grilla: nombre, framedata con
             // mini-barra S/A/R, tag y descripción del movimiento hovereado.
             // Nunca tapa la timeline: vive en el espacio muerto del costado.
-            var infoBg = MakeImage(rootRt, "InfoBg", new Vector2(0.5f, 0f), new Vector2(sideX + 96f, 26f + (totalH + 28f) / 2f),
-                new Vector2(330f, totalH + 28f), new Color(0.04f, 0.05f, 0.07f, 0.94f));
+            var infoBg = MakeImage(rootRt, "InfoBg", new Vector2(0.5f, 0f), new Vector2(sideX + 96f, 26f + (totalH + 60f) / 2f),
+                new Vector2(330f, totalH + 60f), new Color(0.04f, 0.05f, 0.07f, 0.94f));
             var ibr = infoBg.rectTransform;
 
             _detailTitle = MakeText(ibr, "Title", "", new Vector2(0f, 1f), new Vector2(14f, -18f),
@@ -198,12 +198,17 @@ namespace LagFighter
             _segR = MakeImage(ibr, "SegR", new Vector2(0f, 1f), new Vector2(14f, -58f), new Vector2(0f, 8f), new Color(0.3f, 0.55f, 0.95f, 0.95f));
             _segR.rectTransform.pivot = new Vector2(0f, 0.5f);
 
-            _detailTag = MakeText(ibr, "Tag", "", new Vector2(0f, 1f), new Vector2(14f, -76f),
+            // rango de ventaja real: depende de en qué frame activo conecta
+            _detailAdv = MakeText(ibr, "Adv", "", new Vector2(0f, 1f), new Vector2(14f, -74f),
+                new Vector2(302f, 18f), 13, new Color(0.7f, 0.95f, 0.75f), TextAnchor.MiddleLeft);
+            _detailAdv.rectTransform.pivot = new Vector2(0f, 0.5f);
+
+            _detailTag = MakeText(ibr, "Tag", "", new Vector2(0f, 1f), new Vector2(14f, -94f),
                 new Vector2(302f, 18f), 8, Color.white, TextAnchor.MiddleLeft);
             _detailTag.font = UIFonts.Pixel;
             _detailTag.rectTransform.pivot = new Vector2(0f, 0.5f);
 
-            _detail = MakeText(ibr, "Desc", "", new Vector2(0f, 1f), new Vector2(14f, -88f),
+            _detail = MakeText(ibr, "Desc", "", new Vector2(0f, 1f), new Vector2(14f, -106f),
                 new Vector2(302f, 40f), 13, new Color(1f, 1f, 1f, 0.85f), TextAnchor.UpperLeft);
             _detail.rectTransform.pivot = new Vector2(0f, 1f);
             _detail.horizontalOverflow = HorizontalWrapMode.Wrap; // que envuelva, no que desborde
@@ -214,6 +219,35 @@ namespace LagFighter
             _status.rectTransform.pivot = new Vector2(1f, 0.5f);
             MakeText(rootRt, "Help", "click/1-9 agrega · Backspace borra · arrastrá tu timeline = scrub del ghost · click derecho en ficha = borrarla · ESPACIO cierra",
                 new Vector2(0.5f, 0f), new Vector2(0f, 6f), new Vector2(1300f, 20f), 13, new Color(1f, 1f, 1f, 0.45f), TextAnchor.MiddleCenter);
+        }
+
+        // Rango de ventaja REAL: la ventaja depende de en qué frame activo
+        // conecta el golpe (contacto tardío = más ventaja, el recovery del
+        // atacante es fijo). Un solo número mentía.
+        static string AdvRange(MoveDef m)
+        {
+            if (m.Hits.Length == 0) return "";
+            int hMin = int.MaxValue, hMax = int.MinValue, bMin = int.MaxValue, bMax = int.MinValue;
+            bool kd = false, grab = false;
+            foreach (var h in m.Hits)
+            {
+                int first = h.Start, last = h.Start + h.Duration - 1;
+                hMin = Mathf.Min(hMin, h.Hitstun - (m.Total - first));
+                hMax = Mathf.Max(hMax, h.Hitstun - (m.Total - last));
+                if (h.IsGrab) grab = true;
+                else
+                {
+                    bMin = Mathf.Min(bMin, h.Blockstun - (m.Total - first));
+                    bMax = Mathf.Max(bMax, h.Blockstun - (m.Total - last));
+                }
+                kd |= h.Knockdown;
+            }
+            string S(int v) => v >= 0 ? $"+{v}" : $"−{-v}";
+            string R(int a, int b) => a == b ? S(a) : $"{S(a)}…{S(b)}";
+            string res = (kd ? "KD · " : "") + $"HIT {R(hMin, hMax)}";
+            if (bMin != int.MaxValue) res += $"   BLOCK {R(bMin, bMax)}";
+            else if (grab) res += "   NO BLOQUEABLE";
+            return res;
         }
 
         public void Open(int picker)
@@ -283,6 +317,7 @@ namespace LagFighter
             _segR.rectTransform.anchoredPosition = new Vector2(14f + (m.Startup + m.Active) * px, -58f);
             _segR.rectTransform.sizeDelta = new Vector2(m.Recovery * px, 8f);
 
+            _detailAdv.text = AdvRange(m);
             _detailTag.text = CardTag(mi).ToUpperInvariant();
             _detailTag.color = new Color(cat.r * 0.6f + 0.4f, cat.g * 0.6f + 0.4f, cat.b * 0.6f + 0.4f);
             _detail.text = m.Desc;
