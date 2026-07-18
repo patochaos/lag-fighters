@@ -126,6 +126,9 @@ namespace LagFighter
             }
         }
 
+        // Counter-picks CONSCIENTES DE DISTANCIA: la versión anterior elegía
+        // la respuesta correcta a la distancia equivocada (saltaba fireballs
+        // desde el cuerpo a cuerpo) y perdía 89-15 contra Zoner en el lab.
         int PickAdaptive(float dist, double r)
         {
             int best = 0;
@@ -133,11 +136,22 @@ namespace LagFighter
             if (_observed[best] == 0) return PickUnfocused(dist);
             switch (best)
             {
-                case 0: return r < 0.48 ? MoveCatalog.JumpF : r < 0.78 ? MoveCatalog.Tatsu : MoveCatalog.DashF;
-                case 1: return r < 0.48 ? MoveCatalog.Parry : r < 0.76 ? MoveCatalog.WalkB : MoveCatalog.Shoryuken;
-                case 2: return r < 0.48 ? MoveCatalog.AttackA : r < 0.76 ? MoveCatalog.DashB : MoveCatalog.JumpB;
-                case 3: return r < 0.55 ? MoveCatalog.Grab : r < 0.78 ? MoveCatalog.DashF : MoveCatalog.AttackB;
-                default: return dist < 1.4f ? MoveCatalog.AttackA : r < 0.5 ? MoveCatalog.AttackB : MoveCatalog.Hadouken;
+                case 0: // proyectiles: saltarlos DE LEJOS, parriarlos, castigarlo de cerca
+                    if (dist > 2.3f) return r < 0.50 ? MoveCatalog.JumpF : r < 0.78 ? MoveCatalog.Parry : MoveCatalog.WalkF;
+                    if (dist > 1.4f) return r < 0.42 ? MoveCatalog.Tatsu : r < 0.72 ? MoveCatalog.DashF : MoveCatalog.JumpF;
+                    return r < 0.45 ? MoveCatalog.AttackA : r < 0.75 ? MoveCatalog.Grab : MoveCatalog.AttackB;
+                case 1: // ataques: guardia/parry en rango, poke fuera de rango
+                    if (dist > 2.0f) return r < 0.55 ? MoveCatalog.WalkB : MoveCatalog.Hadouken;
+                    return r < 0.40 ? MoveCatalog.Parry : r < 0.72 ? MoveCatalog.WalkB : MoveCatalog.Shoryuken;
+                case 2: // agarres: los saltos y el jab (más rápido) ganan
+                    if (dist > 1.6f) return r < 0.55 ? MoveCatalog.AttackB : MoveCatalog.WalkB;
+                    return r < 0.45 ? MoveCatalog.AttackA : r < 0.75 ? MoveCatalog.JumpB : MoveCatalog.JumpN;
+                case 3: // defensa: agarre, presión que chipea y avance
+                    if (dist > 1.6f) return r < 0.48 ? MoveCatalog.WalkF : r < 0.78 ? MoveCatalog.DashF : MoveCatalog.AttackB;
+                    return r < 0.50 ? MoveCatalog.Grab : r < 0.80 ? MoveCatalog.AttackB : MoveCatalog.WalkF;
+                default: // movilidad: pokes largos y control de espacio
+                    if (dist > 2.2f) return r < 0.50 ? MoveCatalog.Hadouken : MoveCatalog.WalkF;
+                    return r < 0.55 ? MoveCatalog.AttackB : MoveCatalog.AttackA;
             }
         }
 

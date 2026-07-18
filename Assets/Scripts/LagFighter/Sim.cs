@@ -43,6 +43,7 @@ namespace LagFighter
         public const float GuardRegen = 0.1f;       // ~6/seg, solo fuera de guardia/blockstun
         public const int GuardCrushStun = 50;
         public const float GuardCrushRespawn = 35f; // la barra renace al 50%
+        public const float ParryGuardRefund = 15f;  // parry exitoso RECARGA guardia: anti-chip
 
         // ---- features DESACTIVADAS a pedido de Patricio (2026-07-17) ----
         // El código de pérdida de miembros y agachado sigue completo abajo;
@@ -167,7 +168,7 @@ namespace LagFighter
                     Damage = 2f, Hitstun = 60, Blockstun = 22, CounterStun = 70, Push = 0.4f, Knockdown = true, GuardDamage = 35f } } },
 
             new MoveDef { Id = "parry", Name = "Parry", Anim = AnimKind.Parry, Startup = 2, Active = 5, Recovery = 5,
-                Desc = "Lectura de 12f: rechaza golpes y proyectiles entre f3-7. Pierde contra agarres y ataques demorados." },
+                Desc = "Lectura de 12f: rechaza golpes y proyectiles entre f3-7 y RECARGA 15 de guardia. Pierde contra agarres y ataques demorados." },
 
             new MoveDef { Id = "tatsu", Name = "Tatsumaki", Anim = AnimKind.Tatsu, Startup = 12, Active = 18, Recovery = 16,
                 Desc = "Giratoria que viaja lejos y ATRAVIESA hadoukens (girando, 8..34: el final es castigable). Dos hits; el segundo derriba. Guardia −15 por hit.",
@@ -668,6 +669,8 @@ namespace LagFighter
 
             if (p.Parried && !p.IsGrab)
             {
+                // el parry recarga guardia: la respuesta activa al chip del zoner
+                def.Guard = Math.Min(SimConfig.GuardMax, def.Guard + SimConfig.ParryGuardRefund);
                 const int punishStun = 18;
                 if (!p.IsProjectile)
                 {

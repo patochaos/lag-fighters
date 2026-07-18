@@ -50,6 +50,7 @@ class Tests
         ShoryuInvulnerableAlArranque();
         LosJabsBloqueadosRompenLaGuardia();
         DpBloqueadoEsMenosQuince();
+        ElParryRecargaGuardia();
         ElFinalDelTatsuComeProyectiles();
         LaEsquinaEmpujaAlAtacante();
         AgarreVsAgarreEsTech();
@@ -162,6 +163,19 @@ class Tests
         Check(crush.HasValue && blocked == needed - 1 && s.Fighters[1].Guard == SimConfig.GuardCrushRespawn,
             $"guard crush al {needed}° jab bloqueado, barra renace al 50%",
             $"bloqueados {blocked}, guardia {s.Fighters[1].Guard}");
+    }
+
+    // El parry exitoso recarga guardia (anti-chip del zoner).
+    static void ElParryRecargaGuardia()
+    {
+        var s = NewSim(-0.5f, 0.5f, p1Blocks: true);
+        s.Fighters[1].Guard = 30f;
+        s.SetQueue(0, new List<int> { MoveCatalog.AttackA });          // jab activo en f6..9
+        s.SetQueue(1, new List<int> { MoveCatalog.Parry, MoveCatalog.Parry }); // 2° parry activo f14..18… el 1° cubre f2..6
+        var evs = Run(s, 30);
+        bool parried = Find(evs, EvKind.Parry) != null;
+        Check(parried && s.Fighters[1].Guard >= 30f + SimConfig.ParryGuardRefund - 1f,
+            "el parry recarga guardia", $"parry {parried}, guardia {s.Fighters[1].Guard}");
     }
 
     // La ventaja del DP bloqueado en el primer frame activo (la peor para el

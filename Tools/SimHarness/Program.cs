@@ -35,7 +35,8 @@ class Program
             var ai1 = new SimpleAI(m * 2 + 2);
             int crushesThis = 0;
 
-            for (int turn = 0; turn < 120 && !sim.Over; turn++)
+            // 15 turnos por round, como el juego real (TIME OVER → juez por vida)
+            for (int turn = 0; turn < 15 && !sim.Over; turn++)
             {
                 var p0 = ai0.Plan(sim, 0, SimConfig.TurnFrames);
                 var p1 = ai1.Plan(sim, 1, SimConfig.TurnFrames);
@@ -67,9 +68,10 @@ class Program
                 totalTurns++;
             }
 
-            if (!sim.Over) timeouts++;
-            else if (sim.Winner == 0) wins0++;
-            else if (sim.Winner == 1) wins1++;
+            int winner = Judge(sim);
+            if (!sim.Over) timeouts++; // TIME OVER: lo decide el juez por vida
+            if (winner == 0) wins0++;
+            else if (winner == 1) wins1++;
             else draws++;
             if (crushesThis > 0) matchesWithCrush++;
         }
@@ -89,6 +91,14 @@ class Program
             double dpu = uses[i] > 0 ? dmg[i] / uses[i] : 0;
             Console.WriteLine($"{mdef.Name,-18}{uses[i],8}{hits[i],7}{blocks[i],7}{whiffs[i],7}{parries[i],7}{crushes[i],7}{hitPct,6:0.0}%{dpu,9:0.00}");
         }
+    }
+
+    // Mismo criterio que el juego: KO manda, TIME OVER lo decide la vida.
+    static int Judge(MatchSim sim)
+    {
+        if (sim.Over) return sim.Winner;
+        float h0 = sim.Fighters[0].Hp, h1 = sim.Fighters[1].Hp;
+        return h0 > h1 ? 0 : h1 > h0 ? 1 : -1;
     }
 
     // Round-robin de perfiles de IA: cada perfil contra cada perfil (espejo
@@ -113,7 +123,7 @@ class Program
                     var ai0 = new SimpleAI(seed++, profiles[a]);
                     var ai1 = new SimpleAI(seed++, profiles[b]);
                     int turn = 0;
-                    for (; turn < 120 && !sim.Over; turn++)
+                    for (; turn < 15 && !sim.Over; turn++) // reglas reales: TIME OVER a los 15
                     {
                         var p0 = ai0.Plan(sim, 0, SimConfig.TurnFrames);
                         var p1 = ai1.Plan(sim, 1, SimConfig.TurnFrames);
@@ -133,9 +143,9 @@ class Program
                     }
                     games[a, b]++;
                     turnsSum[a, b] += turn;
-                    if (!sim.Over) timeouts++;
-                    else if (sim.Winner == 0) wins[a, b]++;
-                    // empate/doble KO: no suma para nadie
+                    if (!sim.Over) timeouts++; // TIME OVER: juez por vida
+                    if (Judge(sim) == 0) wins[a, b]++;
+                    // empate: no suma para nadie
                 }
 
         Console.WriteLine($"MATRIZ DE PERFILES — {perPair} peleas por cruce, dificultad Normal, win% del perfil de la FILA (como P0)\n");
@@ -161,7 +171,7 @@ class Program
         for (int a = 0; a < np; a++)
             for (int b = a; b < np; b++)
                 Console.WriteLine($"  {profiles[a],-11} vs {profiles[b],-11}  turnos {(double)turnsSum[a, b] / games[a, b],5:0.0} · crushes {(double)crushSum[a, b] / games[a, b]:0.00}");
-        Console.WriteLine($"\ntimeouts totales (120 turnos): {timeouts}");
+        Console.WriteLine($"\npeleas decididas por el juez (TIME OVER a los 15): {timeouts}");
         Console.WriteLine("nota: P0 vs P1 no es perfectamente simétrico; comparar fila vs columna del mismo cruce da el sesgo de lado.");
     }
 

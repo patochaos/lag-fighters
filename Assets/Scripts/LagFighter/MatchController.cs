@@ -18,6 +18,7 @@ namespace LagFighter
         public enum Flow { ModeSelect, Planning, Executing, RoundOver, GameOver, Replay }
 
         public const int RoundsToWin = 2; // al mejor de 3
+        public const int TurnsPerRound = 15; // TIME OVER: gana el que tiene más vida
 
         public MatchSim Sim { get; private set; }
         public float TickFloat => Sim == null ? 0f : Sim.Tick + _acc / SimConfig.TickDuration;
@@ -229,7 +230,9 @@ namespace LagFighter
             string lag = "";
             if (LagMode && LagLevel > LagLevelForTurn(TurnNumber - 1))
                 lag = $"  ·  ¡AHORA {CurrentTurnFrames}F POR TURNO!";
-            _hud.SetPrompt($"TURNO {TurnNumber} — {who}{adv}{lag}");
+            string turnLabel = Mode == GameMode.Practice ? $"TURNO {TurnNumber}" : $"TURNO {TurnNumber}/{TurnsPerRound}";
+            if (Mode != GameMode.Practice && TurnNumber >= TurnsPerRound - 2) turnLabel += " · ¡SE ACABA!";
+            _hud.SetPrompt($"{turnLabel} — {who}{adv}{lag}");
 
             // resumen de lo que pasó en el turno anterior, desde la silla del picker
             if (_hasTurnSummary && Mode != GameMode.Practice)
@@ -433,7 +436,24 @@ namespace LagFighter
             }
             _hasTurnSummary = true;
             AddTurnLogLine();
+
+            // TIME OVER: se acabaron los turnos del round, decide la vida
+            if (Mode != GameMode.Practice && TurnNumber >= TurnsPerRound)
+            {
+                _hud.ShowBigMessage("TIME OVER", new Color(1f, 0.85f, 0.3f));
+                SfxLib.Play(SfxLib.Kind.Ko, 0.6f);
+                BeginRoundReplay();
+                return;
+            }
             StartPlanning();
+        }
+
+        // Ganador efectivo del round: KO manda; sin KO decide la vida (TIME OVER).
+        public int EffectiveWinner()
+        {
+            if (Sim.Over) return Sim.Winner;
+            float h0 = Sim.Fighters[0].Hp, h1 = Sim.Fighters[1].Hp;
+            return h0 > h1 ? 0 : h1 > h0 ? 1 : -1;
         }
 
         void AddTurnLogLine()
@@ -553,9 +573,10 @@ namespace LagFighter
         {
             _acc = 0f;
             _hud.SetPrompt("");
-            if (Sim.Winner >= 0) _wins[Sim.Winner]++;
+            int winner = EffectiveWinner(); // KO, o la vida si fue TIME OVER
+            if (winner >= 0) _wins[winner]++;
 
-            if (Sim.Winner >= 0 && _wins[Sim.Winner] >= RoundsToWin)
+            if (winner >= 0 && _wins[winner] >= RoundsToWin)
             {
                 State = Flow.GameOver;
                 return;
@@ -563,7 +584,8 @@ namespace LagFighter
 
             State = Flow.RoundOver;
             _roundTimer = 2.6f;
-            string txt = Sim.Winner == 0 ? "ROUND PARA VOS" : Sim.Winner == 1 ? "ROUND PARA EL RIVAL" : "ROUND EMPATADO";
+            string how = Sim.Over ? "" : " (por vida)";
+            string txt = winner == 0 ? $"ROUND PARA VOS{how}" : winner == 1 ? $"ROUND PARA EL RIVAL{how}" : "ROUND EMPATADO";
             _hud.SetBanner($"{txt}\n<size=30>{_wins[0]} — {_wins[1]}</size>");
         }
 

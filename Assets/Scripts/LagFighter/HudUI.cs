@@ -626,7 +626,8 @@ namespace LagFighter
             SetGameOverButtons(over);
             if (over)
             {
-                _banner.text = (sim.Winner == 0 ? "¡GANASTE LA PELEA!" : sim.Winner == 1 ? "PERDISTE LA PELEA" : "DOBLE KO")
+                int w = _mc.EffectiveWinner(); // KO o decisión por vida (TIME OVER)
+                _banner.text = (w == 0 ? "¡GANASTE LA PELEA!" : w == 1 ? "PERDISTE LA PELEA" : "EMPATE")
                                + $"\n<size=30>{_mc.GetWins(0)} — {_mc.GetWins(1)}</size>";
                 var mp = GameInput.MousePos();
                 if (GameInput.ClickPressed())
