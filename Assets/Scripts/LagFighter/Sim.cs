@@ -219,7 +219,7 @@ namespace LagFighter
         public int QueueIndex;
         public int MoveIndex = -1;
         public int MoveStartTick;
-        public bool[] WindowHit = Array.Empty<bool>();
+        public uint WindowHit; // bitmask: 1 = esa ventana de hit ya conectó
         public StunKind Stun = StunKind.None;
         public int StunEndTick;
         public bool BlockEnabled = true; // el dummy de práctica no bloquea
@@ -228,7 +228,6 @@ namespace LagFighter
         {
             var c = (FighterState)MemberwiseClone();
             c.Queue = new List<int>(Queue);
-            c.WindowHit = (bool[])WindowHit.Clone();
             return c;
         }
     }
@@ -392,7 +391,7 @@ namespace LagFighter
             for (int wi = 0; wi < m.Hits.Length; wi++)
             {
                 var h = m.Hits[wi];
-                if (phase >= h.Start && phase < h.Start + h.Duration && !f.WindowHit[wi])
+                if (phase >= h.Start && phase < h.Start + h.Duration && (f.WindowHit & (1u << wi)) == 0)
                 {
                     var r = HitRectWorld(i, h);
                     r.Grab = h.IsGrab;
@@ -422,7 +421,7 @@ namespace LagFighter
             if (!MoveAllowed(i, mi)) mi = MoveCatalog.Wait;
             f.MoveIndex = mi;
             f.MoveStartTick = Tick;
-            f.WindowHit = new bool[MoveCatalog.All[f.MoveIndex].Hits.Length];
+            f.WindowHit = 0;
             f.Face = Fighters[1 - i].X >= f.X ? 1 : -1;
         }
 
@@ -440,12 +439,8 @@ namespace LagFighter
                     var m = MoveCatalog.All[f.MoveIndex];
                     if (Tick - f.MoveStartTick >= m.Total)
                     {
-                        if (m.Hits.Length > 0)
-                        {
-                            bool any = false;
-                            foreach (var h in f.WindowHit) any |= h;
-                            if (!any) LastEvents.Add(new SimEvent { Attacker = i, Kind = EvKind.Whiff, MoveIndex = f.MoveIndex });
-                        }
+                        if (m.Hits.Length > 0 && f.WindowHit == 0)
+                            LastEvents.Add(new SimEvent { Attacker = i, Kind = EvKind.Whiff, MoveIndex = f.MoveIndex });
                         f.MoveIndex = -1;
                     }
                 }
@@ -538,14 +533,14 @@ namespace LagFighter
                 for (int wi = 0; wi < m.Hits.Length; wi++)
                 {
                     var h = m.Hits[wi];
-                    if (phase < h.Start || phase >= h.Start + h.Duration || atk.WindowHit[wi]) continue;
+                    if (phase < h.Start || phase >= h.Start + h.Duration || (atk.WindowHit & (1u << wi)) != 0) continue;
                     if (m.Anim == AnimKind.Jump && atk.LegHp <= 0f) continue; // sin pierna la patada aérea no sale
                     if (IsInvulnerable(1 - i)) continue; // pasa de largo, la ventana sigue viva
                     if (h.IsGrab && (IsAirborne(1 - i) || (Fighters[1 - i].Stun == StunKind.Knockdown && IsStunned(1 - i))))
                         continue; // no se agarra al que salta ni al caído; la ventana sigue viva
                     if (!HitRectWorld(i, h).Overlaps(HurtRect(1 - i))) continue;
 
-                    atk.WindowHit[wi] = true;
+                    atk.WindowHit |= 1u << wi;
                     var pending = BuildPending(i, atk.MoveIndex, h.Damage, h.Hitstun, h.Blockstun, h.CounterStun,
                         h.Push, h.Knockdown, attackerFreeTick: atk.MoveStartTick + m.Total, guardDamage: h.GuardDamage,
                         hitY: (h.Y0 + h.Y1) * 0.5f);
@@ -764,13 +759,6 @@ namespace LagFighter
     // (conserva su stun arrastrado; en neutral bloquea, como en el juego real).
     public class PlanPreview
     {
-        public struct Snap
-        {
-            public float X;
-            public List<WorldRect> HitRects;
-        }
-
-        public List<Snap> Snaps = new List<Snap>();
         public float DamageIfStill;
         public int BlockedCount;
 
@@ -783,10 +771,6 @@ namespace LagFighter
 
             for (int t = 0; t < turnFrames; t++)
             {
-                var snap = new Snap { X = sim.Fighters[fighter].X, HitRects = new List<WorldRect>() };
-                sim.GetActiveHitRects(fighter, snap.HitRects);
-                sim.GetProjectileRects(fighter, snap.HitRects);
-                g.Snaps.Add(snap);
                 sim.Step();
                 foreach (var ev in sim.LastEvents)
                 {

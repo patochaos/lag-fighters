@@ -70,6 +70,14 @@ namespace LagFighter
         // botones de fin de partida
         Image _btnRematch, _btnReplay, _btnMenu;
 
+        // cartel de replay + botón SKIP (el replay corre siempre, saltearlo es opcional)
+        Image _replayPanel, _skipBtn;
+        Text _replayTitle;
+
+        // caches para no armar strings por frame (WebGL sufre el GC)
+        float _lastConnDist = -1f;
+        int _lastConnPing = -1;
+
         public static HudUI Create(MatchController mc)
         {
             var go = new GameObject("LagFighter.HUD");
@@ -135,6 +143,15 @@ namespace LagFighter
             // cartel grande (IT GETS LAGGIER / COUNTER / K.O.)
             _lagMsg = MakeTextP(_canvasRt, "LagMsg", "", new Vector2(0.5f, 0.5f), new Vector2(0f, 280f), new Vector2(1600f, 120f),
                 30, new Color(1f, 0.35f, 0.3f), TextAnchor.MiddleCenter);
+
+            // REPLAY + SKIP, arriba al medio (solo visible durante la repetición)
+            _replayPanel = MakePanel(_canvasRt, "ReplayPanel", new Vector2(0.5f, 1f), new Vector2(0f, -120f), new Vector2(430f, 44f), Palette.Damage);
+            _replayTitle = MakeTextP(_replayPanel.rectTransform, "T", "► REPLAY", new Vector2(0f, 0.5f), new Vector2(120f, 0f), new Vector2(220f, 24f),
+                13, new Color(1f, 0.4f, 0.35f), TextAnchor.MiddleLeft);
+            _skipBtn = MakeImage(_replayPanel.rectTransform, "SkipBtn", new Vector2(1f, 0.5f), new Vector2(-84f, 0f), new Vector2(150f, 32f), new Color(0.1f, 0.12f, 0.16f, 0.95f));
+            MakeTextP(_skipBtn.rectTransform, "T", "SKIP (ESP)", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(146f, 20f),
+                9, new Color(1f, 1f, 1f, 0.85f), TextAnchor.MiddleCenter);
+            _replayPanel.gameObject.SetActive(false);
 
             // ajustes [OPC] colapsados, esquina derecha bajo el bloque del rival
             _optBtn = MakePanel(_canvasRt, "OptBtn", new Vector2(1f, 1f), new Vector2(-28f, -150f), new Vector2(96f, 30f), Palette.Neutral);
@@ -344,6 +361,21 @@ namespace LagFighter
 
             // transición de fase: overlay frío al planificar, flash al ejecutar
             _planOverlay.gameObject.SetActive(flow == MatchController.Flow.Planning);
+
+            // cartel REPLAY + SKIP mientras corre la repetición
+            bool replaying = flow == MatchController.Flow.Replay;
+            if (_replayPanel.gameObject.activeSelf != replaying) _replayPanel.gameObject.SetActive(replaying);
+            if (replaying)
+            {
+                var rc = _replayTitle.color;
+                rc.a = 0.65f + Mathf.PingPong(Time.time * 1.6f, 0.35f); // parpadeo estilo VHS
+                _replayTitle.color = rc;
+                if (GameInput.ClickPressed() && Inside(_skipBtn, GameInput.MousePos()))
+                {
+                    _mc.SkipReplay();
+                    return;
+                }
+            }
             if (flow != _prevFlow)
             {
                 if (flow == MatchController.Flow.Executing && _prevFlow == MatchController.Flow.Planning)
@@ -503,8 +535,16 @@ namespace LagFighter
         {
             float dist = Mathf.Abs(sim.Fighters[1].X - sim.Fighters[0].X);
             int lvl = _mc.LagLevel;
-            string ping = _mc.LagMode ? $"PING {_mc.CurrentTurnFrames * 16}MS" : "PING 0MS · LAN";
-            _connText.text = $"DIST {dist:0.00}   ·   {ping}";
+            // armar el string solo cuando cambia algo (GC por frame en WebGL)
+            float distShown = Mathf.Round(dist * 100f) / 100f;
+            int pingShown = _mc.LagMode ? _mc.CurrentTurnFrames * 16 : 0;
+            if (!Mathf.Approximately(distShown, _lastConnDist) || pingShown != _lastConnPing)
+            {
+                _lastConnDist = distShown;
+                _lastConnPing = pingShown;
+                string ping = _mc.LagMode ? $"PING {pingShown}MS" : "PING 0MS · LAN";
+                _connText.text = $"DIST {distShown:0.00}   ·   {ping}";
+            }
 
             int alive = _mc.LagMode ? Mathf.Max(4 - lvl, 1) : 4;
             var barColor = !_mc.LagMode || lvl == 0 ? Palette.Ok :
@@ -655,6 +695,7 @@ namespace LagFighter
             readonly Text _stunLabel;
             Image _lagSeg;
             Text _lagLabel;
+            int _lastStunShown = -1; // para no armar el string del stun por frame
             readonly Text _hidden;
             readonly float _height;
             readonly bool _dim;
@@ -735,7 +776,12 @@ namespace LagFighter
                     _stunSeg.color = stunKind == StunKind.Blockstun ? new Color(0.3f, 0.5f, 0.85f, 0.75f)
                                    : stunKind == StunKind.Knockdown ? new Color(0.9f, 0.45f, 0.15f, 0.8f)
                                    : new Color(0.85f, 0.25f, 0.22f, 0.8f);
-                    _stunLabel.text = offset > 46f ? $"−{stunFrames}f" : "";
+                    int shown = offset > 46f ? stunFrames : 0;
+                    if (shown != _lastStunShown)
+                    {
+                        _lastStunShown = shown;
+                        _stunLabel.text = shown > 0 ? $"−{shown}f" : "";
+                    }
                 }
                 else
                 {

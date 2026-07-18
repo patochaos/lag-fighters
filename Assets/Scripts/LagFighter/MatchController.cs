@@ -458,6 +458,7 @@ namespace LagFighter
 
             if (GameInput.MenuPressed()) { GoToModeSelect(); return; }
             if (State == Flow.GameOver && GameInput.ReplayPressed()) { StartReplay(); return; }
+            if (State == Flow.Replay && GameInput.EndTurnPressed()) { SkipReplay(); return; }
             if (GameInput.RestartPressed()) { ResetMatch(); return; }
 
             // pantalla "pasá el teclado" (1v1) y espera de código (async)
@@ -564,6 +565,31 @@ namespace LagFighter
             _autoReplay = true;
             StartReplay();
             _hud.SetPrompt("REPETICIÓN DEL ROUND — la pelea entera, de corrido");
+        }
+
+        // SKIP del replay: adelanta la re-simulación hasta el final, sin juice.
+        // Determinista, así que el resultado es idéntico al que viste en vivo.
+        public void SkipReplay()
+        {
+            if (State != Flow.Replay) return;
+            int safety = 1000000;
+            while (safety-- > 0)
+            {
+                Sim.Step();
+                if (Sim.Over) break;
+                if (Sim.Tick - TurnStartTick >= CurrentTurnFrames)
+                {
+                    Sim.OnTurnEnd(0);
+                    Sim.OnTurnEnd(1);
+                    _replayTurn++;
+                    if (_replayTurn >= _turnLog.Count) break;
+                    LoadReplayTurn();
+                }
+            }
+            _acc = 0f;
+            _hitstop = 0f;
+            if (_autoReplay) { _autoReplay = false; OnRoundEnd(); }
+            else { State = Flow.GameOver; _hud.SetPrompt(""); }
         }
 
         void StartReplay()

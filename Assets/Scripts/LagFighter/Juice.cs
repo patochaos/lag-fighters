@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace LagFighter
@@ -89,30 +90,52 @@ namespace LagFighter
 
     // Hit-sparks: ráfaga de cubitos que salen despedidos del punto de contacto.
     // Mismo lenguaje visual que los blockmen; cero assets de partículas.
+    // POOL fijo: cada cubo, su material y su componente se crean UNA vez y se
+    // reciclan — clave en WebGL, donde crear/instanciar por impacto picaba CPU.
     public static class SparkFX
     {
+        const int PoolSize = 48;
+        static readonly List<SparkShard> _pool = new List<SparkShard>(PoolSize);
+        static System.Random _rng = new System.Random(1234);
+
+        static SparkShard Get()
+        {
+            foreach (var s in _pool)
+                if (!s.gameObject.activeSelf) return s;
+            if (_pool.Count >= PoolSize) return null; // sin cubos libres: se pierde el spark, nadie llora
+
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = "Spark";
+            var col = go.GetComponent<Collider>();
+            if (col != null) UnityEngine.Object.Destroy(col);
+            var r = go.GetComponent<Renderer>();
+            r.material = new Material(VizLib.BaseMat);
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            var shard = go.AddComponent<SparkShard>();
+            shard.Rend = r;
+            UnityEngine.Object.DontDestroyOnLoad(go);
+            _pool.Add(shard);
+            return shard;
+        }
+
         public static void Burst(Vector3 pos, Color color, int count = 9, float speed = 3.2f)
         {
-            var rng = new System.Random((int)(Time.realtimeSinceStartup * 1000f));
             for (int i = 0; i < count; i++)
             {
-                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                go.name = "Spark";
-                var col = go.GetComponent<Collider>();
-                if (col != null) UnityEngine.Object.Destroy(col);
-                float s = 0.05f + (float)rng.NextDouble() * 0.06f;
-                go.transform.position = pos;
-                go.transform.localScale = new Vector3(s, s, s);
-                go.transform.rotation = UnityEngine.Random.rotation;
-                var r = go.GetComponent<Renderer>();
-                r.material = new Material(VizLib.BaseMat) { color = color };
-                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-
-                var shard = go.AddComponent<SparkShard>();
-                float ang = (float)rng.NextDouble() * Mathf.PI * 2f;
-                float up = 0.4f + (float)rng.NextDouble() * 1.2f;
+                var shard = Get();
+                if (shard == null) return;
+                float s = 0.05f + (float)_rng.NextDouble() * 0.06f;
+                shard.transform.position = pos;
+                shard.BaseScale = s;
+                shard.transform.localScale = new Vector3(s, s, s);
+                shard.transform.rotation = Quaternion.Euler((float)_rng.NextDouble() * 360f, (float)_rng.NextDouble() * 360f, 0f);
+                shard.Rend.material.color = color;
+                float ang = (float)_rng.NextDouble() * Mathf.PI * 2f;
+                float up = 0.4f + (float)_rng.NextDouble() * 1.2f;
                 shard.Vel = new Vector3(Mathf.Cos(ang), up, Mathf.Sin(ang) * 0.35f).normalized
-                            * speed * (0.55f + (float)rng.NextDouble() * 0.7f);
+                            * speed * (0.55f + (float)_rng.NextDouble() * 0.7f);
+                shard.Life = 0.5f;
+                shard.gameObject.SetActive(true);
             }
         }
     }
@@ -120,13 +143,15 @@ namespace LagFighter
     public class SparkShard : MonoBehaviour
     {
         public Vector3 Vel;
-        float _life = 0.5f;
+        public float Life;
+        public float BaseScale;
+        public Renderer Rend;
 
         void Update()
         {
             float dt = Time.deltaTime;
-            _life -= dt;
-            if (_life <= 0f) { Destroy(gameObject); return; }
+            Life -= dt;
+            if (Life <= 0f) { gameObject.SetActive(false); return; } // vuelve al pool
             Vel += Vector3.down * (9f * dt);
             transform.position += Vel * dt;
             transform.localScale *= 1f - 3.4f * dt;
