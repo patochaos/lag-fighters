@@ -87,9 +87,9 @@ planes ya revelados y aplica lo observado a partir del turno siguiente.
 ### Presentación / testeo
 
 - Rounds al mejor de 3 (marcadores dorados junto a los pips; V repite el
-  último round, R es revancha). **15 turnos por round** (2026-07-18): al
+  último round, R es revancha). **20 turnos por round** (2026-07-18): al
   agotarse → TIME OVER y gana el que tiene más vida (empate posible). El
-  prompt muestra TURNO X/15 y avisa en los últimos. Práctica no tiene límite.
+  prompt muestra TURNO X/20 y avisa en los últimos. Práctica no tiene límite.
 - **Parry recarga guardia** (+15 por parry exitoso): la respuesta activa al
   chip de proyectiles — en el lab le bajó la opresividad al zoneo.
 - Juice: hitstop cosmético (pausa el avance de ticks, NO toca la sim),

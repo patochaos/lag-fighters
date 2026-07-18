@@ -15,6 +15,11 @@ class Program
             ProfileMatrix(args.Length > 1 ? int.Parse(args[1]) : 300);
             return;
         }
+        if (args.Length > 0 && args[0] == "length")
+        {
+            LengthDistribution(args.Length > 1 ? int.Parse(args[1]) : 4000);
+            return;
+        }
         int matches = args.Length > 0 ? int.Parse(args[0]) : 3000;
         int n = MoveCatalog.All.Length;
         var uses = new int[n];
@@ -35,8 +40,8 @@ class Program
             var ai1 = new SimpleAI(m * 2 + 2);
             int crushesThis = 0;
 
-            // 15 turnos por round, como el juego real (TIME OVER → juez por vida)
-            for (int turn = 0; turn < 15 && !sim.Over; turn++)
+            // TurnsPerRound, como el juego real (TIME OVER → juez por vida)
+            for (int turn = 0; turn < SimConfig.TurnsPerRound && !sim.Over; turn++)
             {
                 var p0 = ai0.Plan(sim, 0, SimConfig.TurnFrames);
                 var p1 = ai1.Plan(sim, 1, SimConfig.TurnFrames);
@@ -93,6 +98,46 @@ class Program
         }
     }
 
+    // ¿Cuánto dura una pelea SIN límite de turnos? Distribución natural para
+    // calibrar el timer de round (perfiles al azar, como VS IA por defecto).
+    static void LengthDistribution(int matches)
+    {
+        var lengths = new List<int>(matches);
+        int seed = 40000, kos = 0;
+        for (int m = 0; m < matches; m++)
+        {
+            var sim = new MatchSim();
+            var ai0 = new SimpleAI(seed++);
+            var ai1 = new SimpleAI(seed++);
+            int turn = 0;
+            for (; turn < 120 && !sim.Over; turn++)
+            {
+                var p0 = ai0.Plan(sim, 0, SimConfig.TurnFrames);
+                var p1 = ai1.Plan(sim, 1, SimConfig.TurnFrames);
+                sim.SetQueue(0, p0);
+                sim.SetQueue(1, p1);
+                for (int t = 0; t < SimConfig.TurnFrames && !sim.Over; t++) sim.Step();
+                sim.OnTurnEnd(0);
+                sim.OnTurnEnd(1);
+                ai0.ObserveOpponentPlan(p1);
+                ai1.ObserveOpponentPlan(p0);
+            }
+            lengths.Add(turn);
+            if (sim.Over) kos++;
+        }
+        lengths.Sort();
+        int P(double q) => lengths[(int)Math.Min(lengths.Count - 1, q * lengths.Count)];
+        double avg = 0; foreach (var l in lengths) avg += l; avg /= lengths.Count;
+        Console.WriteLine($"DURACIÓN NATURAL — {matches} peleas sin límite (perfiles al azar, dif. Normal)");
+        Console.WriteLine($"KO: {100.0 * kos / matches:0.0}% de las peleas terminan solas (el resto llegaría a 120)");
+        Console.WriteLine($"promedio {avg:0.0} · mediana {P(0.5)} · p25 {P(0.25)} · p75 {P(0.75)} · p90 {P(0.9)} · p95 {P(0.95)}");
+        foreach (int cap in new[] { 10, 12, 15, 18, 20, 25, 30, 40 })
+        {
+            int ended = 0; foreach (var l in lengths) if (l <= cap) ended++;
+            Console.WriteLine($"  con timer de {cap,2} turnos: {100.0 * ended / matches,5:0.0}% termina por KO, {100.0 * (matches - ended) / matches,4:0.0}% lo decide el juez");
+        }
+    }
+
     // Mismo criterio que el juego: KO manda, TIME OVER lo decide la vida.
     static int Judge(MatchSim sim)
     {
@@ -123,7 +168,7 @@ class Program
                     var ai0 = new SimpleAI(seed++, profiles[a]);
                     var ai1 = new SimpleAI(seed++, profiles[b]);
                     int turn = 0;
-                    for (; turn < 15 && !sim.Over; turn++) // reglas reales: TIME OVER a los 15
+                    for (; turn < SimConfig.TurnsPerRound && !sim.Over; turn++) // reglas reales
                     {
                         var p0 = ai0.Plan(sim, 0, SimConfig.TurnFrames);
                         var p1 = ai1.Plan(sim, 1, SimConfig.TurnFrames);
@@ -171,7 +216,7 @@ class Program
         for (int a = 0; a < np; a++)
             for (int b = a; b < np; b++)
                 Console.WriteLine($"  {profiles[a],-11} vs {profiles[b],-11}  turnos {(double)turnsSum[a, b] / games[a, b],5:0.0} · crushes {(double)crushSum[a, b] / games[a, b]:0.00}");
-        Console.WriteLine($"\npeleas decididas por el juez (TIME OVER a los 15): {timeouts}");
+        Console.WriteLine($"\npeleas decididas por el juez (TIME OVER): {timeouts}");
         Console.WriteLine("nota: P0 vs P1 no es perfectamente simétrico; comparar fila vs columna del mismo cruce da el sesgo de lado.");
     }
 

@@ -166,7 +166,7 @@ Se resetea por round.
 
 ### 3.7 Rounds
 
-Al mejor de 3 (marcadores dorados), **15 turnos por round**: si nadie muere,
+Al mejor de 3 (marcadores dorados), **20 turnos por round**: si nadie muere,
 TIME OVER y gana el que tiene más vida (empate si igualan). Al final de CADA
 round corre la repetición completa de la pelea (con SKIP); `V` la repite en
 el game over y `R` es revancha. Práctica no tiene límite de turnos.

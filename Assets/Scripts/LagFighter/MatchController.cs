@@ -18,7 +18,7 @@ namespace LagFighter
         public enum Flow { ModeSelect, Planning, Executing, RoundOver, GameOver, Replay }
 
         public const int RoundsToWin = 2; // al mejor de 3
-        public const int TurnsPerRound = 15; // TIME OVER: gana el que tiene más vida
+        public const int TurnsPerRound = SimConfig.TurnsPerRound; // TIME OVER: gana el que tiene más vida
 
         public MatchSim Sim { get; private set; }
         public float TickFloat => Sim == null ? 0f : Sim.Tick + _acc / SimConfig.TickDuration;

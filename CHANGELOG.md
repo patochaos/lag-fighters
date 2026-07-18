@@ -4,14 +4,14 @@ Cada subida a GitHub agrega acá sus change notes.
 
 ## 0.4.1 — 2026-07-18 (timer de round + parry anti-chip)
 
-- **15 turnos por round**: al agotarse, TIME OVER y gana el que tiene más
-  vida (empate posible). Prompt con TURNO X/15 y aviso en los últimos.
+- **20 turnos por round**: al agotarse, TIME OVER y gana el que tiene más
+  vida (empate posible). Prompt con TURNO X/20 y aviso en los últimos.
   La repetición y el marcador usan el ganador efectivo (KO o por vida).
 - **El parry recarga +15 de guardia**: la respuesta activa al chip de
   proyectiles. En la matriz de perfiles, Zoner bajó de 65.8% a 58.3%.
 - Adaptive con counter-picks conscientes de distancia (mejora sus peores
   cruces pero sigue último, 34.7% — anotado como deuda estructural).
-- El harness juega con las reglas reales (15 turnos + juez por vida).
+- El harness juega con las reglas reales (20 turnos + juez por vida).
 
 ## 0.4.0 — 2026-07-18 (Parry + perfiles de IA + balance pass 2)
 

@@ -18,6 +18,10 @@ namespace LagFighter
         public const int TicksPerSecond = 60;
         public const float TickDuration = 1f / TicksPerSecond;
         public const int TurnFrames = 60; // 1 segundo por turno: denso, decisión a decisión
+        // 20 turnos por round → TIME OVER y decide la vida. Calibrado con la
+        // distribución natural del lab: mediana 13, p75 21; con 20 el 75% de
+        // las peleas termina por KO y el juez solo corta la cola de stalls.
+        public const int TurnsPerRound = 20;
         public const int MaxHp = 6;
         public const float StageHalfWidth = 4.2f;
         public const float MinSeparation = 0.8f;
