@@ -10,6 +10,11 @@ class Program
     {
         if (args.Length > 0 && args[0] == "crushtest") { CrushTest(); return; }
         if (args.Length > 0 && args[0] == "cornertest") { CornerTest(); return; }
+        if (args.Length > 0 && args[0] == "profiles")
+        {
+            ProfileMatrix(args.Length > 1 ? int.Parse(args[1]) : 300);
+            return;
+        }
         int matches = args.Length > 0 ? int.Parse(args[0]) : 3000;
         int n = MoveCatalog.All.Length;
         var uses = new int[n];
@@ -84,6 +89,80 @@ class Program
             double dpu = uses[i] > 0 ? dmg[i] / uses[i] : 0;
             Console.WriteLine($"{mdef.Name,-18}{uses[i],8}{hits[i],7}{blocks[i],7}{whiffs[i],7}{parries[i],7}{crushes[i],7}{hitPct,6:0.0}%{dpu,9:0.00}");
         }
+    }
+
+    // Round-robin de perfiles de IA: cada perfil contra cada perfil (espejo
+    // incluido), N peleas por cruce, dificultad Normal. Detecta perfiles
+    // opresivos: win% total, duración y crushes por cruce.
+    static void ProfileMatrix(int perPair)
+    {
+        var profiles = new[] { AIProfile.Zoner, AIProfile.Aggressive, AIProfile.Defensive, AIProfile.Trickster, AIProfile.Adaptive };
+        int np = profiles.Length;
+        var wins = new int[np, np];      // [a,b] = victorias de a contra b (a como P0)
+        var games = new int[np, np];
+        var turnsSum = new int[np, np];
+        var crushSum = new int[np, np];
+        int seed = 9000;
+        int timeouts = 0;
+
+        for (int a = 0; a < np; a++)
+            for (int b = 0; b < np; b++)
+                for (int g = 0; g < perPair; g++)
+                {
+                    var sim = new MatchSim();
+                    var ai0 = new SimpleAI(seed++, profiles[a]);
+                    var ai1 = new SimpleAI(seed++, profiles[b]);
+                    int turn = 0;
+                    for (; turn < 120 && !sim.Over; turn++)
+                    {
+                        var p0 = ai0.Plan(sim, 0, SimConfig.TurnFrames);
+                        var p1 = ai1.Plan(sim, 1, SimConfig.TurnFrames);
+                        sim.SetQueue(0, p0);
+                        sim.SetQueue(1, p1);
+                        for (int t = 0; t < SimConfig.TurnFrames && !sim.Over; t++)
+                        {
+                            sim.Step();
+                            foreach (var ev in sim.LastEvents)
+                                if (ev.Kind == EvKind.GuardCrush) crushSum[a, b]++;
+                        }
+                        sim.OnTurnEnd(0);
+                        sim.OnTurnEnd(1);
+                        // ambos observan el plan ya revelado del otro (como en VS IA)
+                        ai0.ObserveOpponentPlan(p1);
+                        ai1.ObserveOpponentPlan(p0);
+                    }
+                    games[a, b]++;
+                    turnsSum[a, b] += turn;
+                    if (!sim.Over) timeouts++;
+                    else if (sim.Winner == 0) wins[a, b]++;
+                    // empate/doble KO: no suma para nadie
+                }
+
+        Console.WriteLine($"MATRIZ DE PERFILES — {perPair} peleas por cruce, dificultad Normal, win% del perfil de la FILA (como P0)\n");
+        Console.Write($"{"",-12}");
+        foreach (var p in profiles) Console.Write($"{p,-12}");
+        Console.WriteLine("| win% total (como P0)");
+        double[] totalWin = new double[np];
+        for (int a = 0; a < np; a++)
+        {
+            Console.Write($"{profiles[a],-12}");
+            double sumPct = 0;
+            for (int b = 0; b < np; b++)
+            {
+                double pct = 100.0 * wins[a, b] / games[a, b];
+                sumPct += pct;
+                Console.Write($"{pct,-12:0.0}");
+            }
+            totalWin[a] = sumPct / np;
+            Console.WriteLine($"| {totalWin[a]:0.0}%");
+        }
+
+        Console.WriteLine($"\nturnos promedio y crushes/pelea por cruce:");
+        for (int a = 0; a < np; a++)
+            for (int b = a; b < np; b++)
+                Console.WriteLine($"  {profiles[a],-11} vs {profiles[b],-11}  turnos {(double)turnsSum[a, b] / games[a, b],5:0.0} · crushes {(double)crushSum[a, b] / games[a, b]:0.00}");
+        Console.WriteLine($"\ntimeouts totales (120 turnos): {timeouts}");
+        Console.WriteLine("nota: P0 vs P1 no es perfectamente simétrico; comparar fila vs columna del mismo cruce da el sesgo de lado.");
     }
 
     // Esquina real: P1 pegado a la pared. El pushback del golpe conectado

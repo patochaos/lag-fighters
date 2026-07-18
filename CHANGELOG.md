@@ -2,7 +2,27 @@
 
 Cada subida a GitHub agrega acá sus change notes.
 
-## 0.4.0 — 2026-07-18 (Parry + perfiles de IA)
+## 0.4.0 — 2026-07-18 (Parry + perfiles de IA + balance pass 2)
+
+### Balance (del análisis de framedata efectiva, verificado con el lab)
+- **Shoryuken anti-aéreo especializado**: activa 8→5, alcance 0.75, hitbox
+  desde Y 1.0 (no pega OTG ni domina el suelo). 76%→61% de conexión en el lab.
+- **Tatsu**: inmunidad a proyectiles termina en f34; el final es castigable.
+- **Salto +**: ventana de hit 20..28 (el contacto tardío llegaba a +11).
+- **Counter**: +1 de daño solo para golpes de 1; los pesados suman solo stun.
+- **Guardia crusheable**: barra 100→70 (respawn 35), hadouken −25 de guardia.
+  El lab pasó de 0 a cientos de guard crushes.
+- **Posición visual honesta**: el muñeco interpola entre ticks de la sim (el
+  smoothing viejo lo dejaba media hurtbox atrás en un dash). Trails solo
+  durante las ventanas de hit reales.
+
+### UI
+- Menú de planificación compacto: cartas de solo-nombre + panel de info a la
+  derecha (hover) con framedata, mini-barra S/A/R y **rango real de ventaja**
+  (HIT +2…+5 / BLOCK −5…−2). La timeline quedó protagonista (filas de 52px).
+- Replay con cartel "► REPLAY" y botón **SKIP** (o ESPACIO).
+- Perf para WebGL: pool de sparks, menos strings por frame, preview sin
+  capturas muertas, bitmask de ventanas de hit.
 
 ### Gameplay
 - **Parry reemplaza Esperar** sin cambiar el índice del comando ni romper los
@@ -18,6 +38,17 @@ Cada subida a GitHub agrega acá sus change notes.
   de planes ya revelados, nunca del plan secreto actual.
 - Feedback visual y HUD propio para Parry; pruebas deterministas nuevas para
   ventana, counters, proyectiles, perfiles y presupuesto de turnos.
+- Harness con modo `profiles` (round-robin de perfiles): primer dato — Zoner
+  es opresivo (66% global) y Adaptive el más débil (35%); anotado para tuning.
+
+## 0.3.1 — 2026-07-18 (la web anda de verdad)
+
+- Pantalla negra en WebGL: el stripping de IL2CPP borraba el módulo de
+  física que `CreatePrimitive` necesita → `link.xml` lo preserva.
+- Lentitud + clicks corridos: `devicePixelRatio` fijado en 1 (en retina
+  renderizaba 4× los píxeles y el Input System recibía clicks en px CSS) y
+  pipeline recortado en WebGL (sin FSR/MSAA/HDR/sombras/post).
+- Primera subida con butler (`patochaos/lag-fighters:html5`).
 
 ## 0.3.0 — 2026-07-17 (primer playtest + build web)
 
