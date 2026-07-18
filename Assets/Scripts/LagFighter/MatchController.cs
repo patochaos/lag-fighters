@@ -49,6 +49,16 @@ namespace LagFighter
         float _hitstop;
         int _lastProjCount;
 
+        // velocidad de playback (solo presentación, la sim no cambia)
+        public float PlaybackSpeed { get; private set; } = 1f;
+        public void SetPlaybackSpeed(float s) => PlaybackSpeed = s;
+
+        // stats del turno para el resumen post-turno y el log
+        readonly float[] _turnDmg = new float[2];
+        readonly int[] _turnHitCount = new int[2];
+        readonly int[] _turnLost = new int[2];
+        bool _hasTurnSummary;
+
         readonly FighterView[] _views = new FighterView[2];
         HudUI _hud;
         PlanMenuUI _menu;
@@ -116,6 +126,8 @@ namespace LagFighter
             TurnNumber = 0;
             _prevLagLevel = 0;
             _turnLog.Clear(); // el replay cubre el round en curso
+            _hasTurnSummary = false;
+            _hud.ClearTurnLog();
             _ghost.Clear();
             _menu.Close();
             _views[0].OnMatchReset();
@@ -163,6 +175,16 @@ namespace LagFighter
             if (myStun > 0) adv = $"  ·  arrancás −{myStun}f ({StunName(Picker)})";
             else if (oppStun > 0) adv = $"  ·  VENTAJA +{oppStun}f (rival en {StunName(1 - Picker)})";
             _hud.SetPrompt($"TURNO {TurnNumber} — {who}{adv}");
+
+            // resumen de lo que pasó en el turno anterior, desde la silla del picker
+            if (_hasTurnSummary && Mode != GameMode.Practice)
+            {
+                int p = Picker, o = 1 - Picker;
+                _hud.SetTurnSummary(
+                    $"último turno: pegaste {_turnHitCount[p]} (−{_turnDmg[p]:0} HP) · " +
+                    $"recibiste {_turnHitCount[o]} (−{_turnDmg[o]:0} HP) · perdiste {_turnLost[p]} órdenes");
+            }
+            else _hud.SetTurnSummary("");
         }
 
         static string LagMessage(int level)
@@ -279,6 +301,9 @@ namespace LagFighter
             _ghost.Clear();
             _menu.Close();
             State = Flow.Executing;
+            _turnDmg[0] = _turnDmg[1] = 0f;
+            _turnHitCount[0] = _turnHitCount[1] = 0;
+            _hud.SetTurnSummary("");
             _hud.SetPrompt($"TURNO {TurnNumber} — ¡EJECUTANDO!");
             SfxLib.Play(SfxLib.Kind.TurnStart, 0.6f);
         }
@@ -288,10 +313,29 @@ namespace LagFighter
             for (int i = 0; i < 2; i++)
             {
                 int lost = Sim.OnTurnEnd(i);
+                _turnLost[i] = lost;
                 if (lost > 0 && Mode != GameMode.Practice)
                     _hud.Feedback(i, $"PERDIÓ {lost} ÓRDENES (lo interrumpieron)", new Color(1f, 0.6f, 0.4f));
             }
+            _hasTurnSummary = true;
+            AddTurnLogLine();
             StartPlanning();
+        }
+
+        void AddTurnLogLine()
+        {
+            if (_turnLog.Count == 0) return;
+            var t = _turnLog[_turnLog.Count - 1];
+            string q0 = ChipString(t.q0), q1 = ChipString(t.q1);
+            _hud.AddTurnLog($"T{TurnNumber}  <color=#8cc8ff>{q0}</color> −{_turnDmg[1]:0}  ·  <color=#ffa080>{q1}</color> −{_turnDmg[0]:0}");
+        }
+
+        static string ChipString(List<int> q)
+        {
+            if (q.Count == 0) return "—";
+            var sb = new System.Text.StringBuilder();
+            foreach (var mi in q) { if (sb.Length > 0) sb.Append(' '); sb.Append(HudUI.ChipLabel(mi)); }
+            return sb.ToString();
         }
 
         void Update()
@@ -319,9 +363,9 @@ namespace LagFighter
 
         void TickExecuting()
         {
-            if (_hitstop > 0f) { _hitstop -= Time.deltaTime; return; } // pausa cosmética, la sim no avanza
+            if (_hitstop > 0f) { _hitstop -= Time.deltaTime * PlaybackSpeed; return; } // pausa cosmética, la sim no avanza
 
-            _acc += Time.deltaTime;
+            _acc += Time.deltaTime * PlaybackSpeed;
             while (_acc >= SimConfig.TickDuration)
             {
                 _acc -= SimConfig.TickDuration;
@@ -412,9 +456,9 @@ namespace LagFighter
 
         void TickReplay()
         {
-            if (_hitstop > 0f) { _hitstop -= Time.deltaTime; return; }
+            if (_hitstop > 0f) { _hitstop -= Time.deltaTime * PlaybackSpeed; return; }
 
-            _acc += Time.deltaTime;
+            _acc += Time.deltaTime * PlaybackSpeed;
             while (_acc >= SimConfig.TickDuration)
             {
                 _acc -= SimConfig.TickDuration;
@@ -455,6 +499,8 @@ namespace LagFighter
                 switch (ev.Kind)
                 {
                     case EvKind.Hit:
+                        _turnDmg[ev.Attacker] += ev.Damage;
+                        _turnHitCount[ev.Attacker]++;
                         _views[1 - ev.Attacker].FlashHit(ev.Counter);
                         SfxLib.Play(ev.Counter ? SfxLib.Kind.Counter : SfxLib.Kind.Hit);
                         _hitstop = Mathf.Max(_hitstop, ev.Counter ? 0.13f : 0.075f);
@@ -534,6 +580,7 @@ namespace LagFighter
         public static bool ClickPressed() => Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame;
         public static Vector2 MousePos() => Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero;
         public static bool BoxesPressed() => K != null && K.hKey.wasPressedThisFrame;
+        public static bool LogPressed() => K != null && K.lKey.wasPressedThisFrame;
         public static int NumberPressed()
         {
             if (K == null) return -1;
@@ -557,6 +604,7 @@ namespace LagFighter
         public static bool ClickPressed() => Input.GetMouseButtonDown(0);
         public static Vector2 MousePos() => Input.mousePosition;
         public static bool BoxesPressed() => Input.GetKeyDown(KeyCode.H);
+        public static bool LogPressed() => Input.GetKeyDown(KeyCode.L);
         public static int NumberPressed()
         {
             for (int n = 1; n <= 9; n++)

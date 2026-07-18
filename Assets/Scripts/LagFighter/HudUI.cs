@@ -19,10 +19,21 @@ namespace LagFighter
         readonly Image[][] _winPips = new Image[2][];
         readonly Image[] _guardFill = new Image[2];
         const float GuardBarW = SimConfig.MaxHp * 46f - 8f;
-        Text _banner, _prompt, _dist;
+        Text _banner, _prompt, _dist, _turnSummary;
         string _bannerOverride = "";
         Image _boxBtn;
         Text _boxBtnLabel;
+
+        // velocidad de playback (x0.5 / x1 / x2) — solo presentación
+        static readonly float[] Speeds = { 0.5f, 1f, 2f };
+        readonly Image[] _speedBtns = new Image[3];
+        readonly Text[] _speedLabels = new Text[3];
+
+        // log lateral de turnos, colapsable con L
+        Image _logBtn, _logPanel;
+        Text _logBtnLabel, _logText;
+        bool _logOpen;
+        readonly List<string> _logLines = new List<string>();
         Text _lagMsg;
         float _lagMsgTimer;
         readonly Image[] _wifiBars = new Image[4];
@@ -63,6 +74,9 @@ namespace LagFighter
             _dist = MakeText(_canvasRt, "Dist", "", new Vector2(0.5f, 1f), new Vector2(0f, -82f), new Vector2(300f, 22f),
                 15, new Color(1f, 1f, 1f, 0.45f), TextAnchor.MiddleCenter);
 
+            _turnSummary = MakeText(_canvasRt, "TurnSummary", "", new Vector2(0.5f, 1f), new Vector2(0f, -102f), new Vector2(1400f, 22f),
+                17, new Color(0.85f, 0.9f, 1f, 0.85f), TextAnchor.MiddleCenter);
+
             _boxBtn = MakeImage(_canvasRt, "BoxBtn", new Vector2(0.5f, 1f), new Vector2(0f, -116f), new Vector2(150f, 32f), new Color(0.12f, 0.14f, 0.18f, 0.9f));
             _boxBtnLabel = MakeText(_boxBtn.rectTransform, "T", "CAJAS: ON", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(146f, 24f),
                 14, new Color(0.5f, 1f, 0.6f), TextAnchor.MiddleCenter);
@@ -94,6 +108,44 @@ namespace LagFighter
             }
             _wifiLabel = MakeText(_canvasRt, "WifiLabel", "", new Vector2(0.5f, 1f), new Vector2(wx + 20f, -142f), new Vector2(200f, 16f),
                 12, new Color(1f, 1f, 1f, 0.6f), TextAnchor.MiddleCenter);
+
+            // velocidad de playback, arriba de la timeline propia
+            for (int s = 0; s < Speeds.Length; s++)
+            {
+                _speedBtns[s] = MakeImage(_canvasRt, "Speed" + s, new Vector2(0.5f, 0f),
+                    new Vector2(RowW / 2f - 140f + s * 52f, 372f), new Vector2(48f, 26f), new Color(0.12f, 0.14f, 0.18f, 0.9f));
+                _speedLabels[s] = MakeText(_speedBtns[s].rectTransform, "T", Speeds[s] == 0.5f ? "×½" : $"×{Speeds[s]:0}",
+                    new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(44f, 22f), 14, Color.white, TextAnchor.MiddleCenter);
+            }
+            MakeText(_canvasRt, "SpeedTag", "VELOCIDAD", new Vector2(0.5f, 0f), new Vector2(RowW / 2f - 230f, 372f),
+                new Vector2(110f, 22f), 12, new Color(1f, 1f, 1f, 0.4f), TextAnchor.MiddleRight);
+
+            // log de turnos: botón + panel lateral derecho
+            _logBtn = MakeImage(_canvasRt, "LogBtn", new Vector2(1f, 1f), new Vector2(-40f, -180f), new Vector2(110f, 28f), new Color(0.12f, 0.14f, 0.18f, 0.9f));
+            _logBtn.rectTransform.pivot = new Vector2(1f, 1f);
+            _logBtnLabel = MakeText(_logBtn.rectTransform, "T", "LOG (L)", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(106f, 22f),
+                13, new Color(1f, 1f, 1f, 0.7f), TextAnchor.MiddleCenter);
+            _logPanel = MakeImage(_canvasRt, "LogPanel", new Vector2(1f, 1f), new Vector2(-40f, -214f), new Vector2(400f, 460f), new Color(0.03f, 0.04f, 0.06f, 0.82f));
+            _logPanel.rectTransform.pivot = new Vector2(1f, 1f);
+            _logText = MakeText(_logPanel.rectTransform, "T", "", new Vector2(0f, 1f), new Vector2(12f, -10f), new Vector2(380f, 440f),
+                14, new Color(0.9f, 0.92f, 0.95f), TextAnchor.UpperLeft);
+            _logText.rectTransform.pivot = new Vector2(0f, 1f);
+            _logPanel.gameObject.SetActive(false);
+        }
+
+        public void SetTurnSummary(string s) => _turnSummary.text = s;
+
+        public void AddTurnLog(string line)
+        {
+            _logLines.Insert(0, line);
+            if (_logLines.Count > 26) _logLines.RemoveAt(_logLines.Count - 1);
+            _logText.text = string.Join("\n", _logLines);
+        }
+
+        public void ClearTurnLog()
+        {
+            _logLines.Clear();
+            _logText.text = "";
         }
 
         public void ShowLagMessage(string msg) => ShowBigMessage(msg, new Color(1f, 0.35f, 0.3f));
@@ -310,6 +362,29 @@ namespace LagFighter
                 VizPrefs.ShowBoxes = !VizPrefs.ShowBoxes;
                 _boxBtnLabel.text = VizPrefs.ShowBoxes ? "CAJAS: ON" : "CAJAS: OFF";
                 _boxBtnLabel.color = VizPrefs.ShowBoxes ? new Color(0.5f, 1f, 0.6f) : new Color(1f, 1f, 1f, 0.5f);
+            }
+
+            // velocidad de playback: highlight del activo + clicks
+            for (int s = 0; s < Speeds.Length; s++)
+            {
+                bool on = Mathf.Approximately(_mc.PlaybackSpeed, Speeds[s]);
+                _speedBtns[s].color = on ? new Color(0.2f, 0.4f, 0.6f, 0.95f) : new Color(0.12f, 0.14f, 0.18f, 0.9f);
+                _speedLabels[s].color = on ? Color.white : new Color(1f, 1f, 1f, 0.55f);
+                if (GameInput.ClickPressed() &&
+                    RectTransformUtility.RectangleContainsScreenPoint(_speedBtns[s].rectTransform, GameInput.MousePos(), null))
+                    _mc.SetPlaybackSpeed(Speeds[s]);
+            }
+
+            // log de turnos: L o click en el botón
+            bool logToggle = GameInput.LogPressed();
+            if (!logToggle && GameInput.ClickPressed() &&
+                RectTransformUtility.RectangleContainsScreenPoint(_logBtn.rectTransform, GameInput.MousePos(), null))
+                logToggle = true;
+            if (logToggle)
+            {
+                _logOpen = !_logOpen;
+                _logPanel.gameObject.SetActive(_logOpen);
+                _logBtnLabel.color = _logOpen ? new Color(0.5f, 1f, 0.6f) : new Color(1f, 1f, 1f, 0.7f);
             }
 
             if (_bannerOverride != "")
