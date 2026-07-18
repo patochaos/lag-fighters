@@ -16,6 +16,9 @@ namespace LagFighter
         readonly List<Renderer> _tintRenderers = new List<Renderer>();
         readonly List<Color> _origColors = new List<Color>();
         TrailRenderer _trailArm, _trailLeg;
+        Transform _shadow;
+        Renderer _shadowR;
+        bool _wasWinner;
         float _flash;
         Color _flashColor;
         float _faceYaw;
@@ -72,6 +75,14 @@ namespace LagFighter
             {
                 _trailArm = MakeTrail(_armF, baseColor);
                 _trailLeg = MakeTrail(_legF, baseColor);
+
+                // sombra de contacto: queda en el piso cuando el rig salta,
+                // así se lee de un vistazo dónde va a caer
+                var sh = VizLib.MakeBox("Shadow", new Color(0f, 0f, 0f, 0.42f), transform);
+                sh.transform.localPosition = new Vector3(0f, 0.025f, 0f);
+                sh.transform.localScale = new Vector3(0.62f, 0.012f, 0.42f);
+                _shadow = sh.transform;
+                _shadowR = sh.GetComponent<Renderer>();
             }
         }
 
@@ -109,6 +120,7 @@ namespace LagFighter
         public void OnMatchReset()
         {
             _flash = 0f;
+            _wasWinner = false;
             transform.position = new Vector3(_mc.Sim.Fighters[_index].X, 0f, 0f);
         }
 
@@ -278,12 +290,40 @@ namespace LagFighter
 
             if (stunned && !down) rigPitch = f.Stun == StunKind.Blockstun ? -6f : -16f;
 
+            // festejo: saltitos + burst dorado una sola vez + público eufórico
+            float winBounce = 0f;
+            if (winner && !_ghostMode)
+            {
+                winBounce = Mathf.Abs(Mathf.Sin(Time.time * 5f)) * 0.14f;
+                if (!_wasWinner)
+                {
+                    _wasWinner = true;
+                    SparkFX.Burst(transform.position + new Vector3(0f, 1.7f, 0f), new Color(1f, 0.85f, 0.3f), 18, 3.6f);
+                    CrowdBob.Excite(3.5f);
+                }
+            }
+            else if (!winner) _wasWinner = false;
+
             float lieAngle = down || loser ? -85f : rigPitch;
             var wantRot = Quaternion.Euler(lieAngle, _faceYaw + spinYaw, 0f);
             _rig.localRotation = spinYaw > 0.01f ? wantRot : Quaternion.Slerp(_rig.localRotation, wantRot, 1f - Mathf.Exp(-9f * dt));
-            _rig.localPosition = new Vector3(0f, (down || loser) ? 0.25f : airY + breathe + crouchY, 0f);
+            _rig.localPosition = new Vector3(0f, (down || loser) ? 0.25f : airY + breathe + crouchY + winBounce, 0f);
 
             if (winner) armF = new Vector3(0.12f, 1.7f, 0.1f);
+
+            // la sombra vive en el root (no sube con el rig): se achica y
+            // desvanece con la altura, se estira con el cuerpo tirado
+            if (_shadow != null)
+            {
+                float h = Mathf.Max(airY, winBounce);
+                float k = Mathf.Clamp01(1f - h * 0.38f);
+                _shadow.localScale = down || loser
+                    ? new Vector3(1.0f, 0.012f, 0.42f)
+                    : new Vector3(0.62f * k, 0.012f, 0.42f * k);
+                var sc = _shadowR.material.color;
+                sc.a = 0.42f * Mathf.Clamp01(1f - h * 0.3f);
+                _shadowR.material.color = sc;
+            }
 
             // bloqueo visible: brazos cubriendo (si está en estado de guardia durante ejecución)
             bool blocking = sim.IsBlockingState(_index) && !sim.Over && showBlockPose;

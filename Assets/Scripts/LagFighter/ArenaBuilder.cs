@@ -4,6 +4,13 @@ using UnityEngine.Rendering.Universal;
 
 namespace LagFighter
 {
+    // Referencias al escenario que la UI anima en vivo (glow de esquina).
+    public static class ArenaRefs
+    {
+        public static readonly Renderer[] Walls = new Renderer[2]; // 0 = izquierda, 1 = derecha
+        public static Color WallBase;
+    }
+
     // Escenario 2D de vista lateral, estilo Footsies: una línea de piso,
     // marcas de límites y centro, cámara fija de costado.
     public static class ArenaBuilder
@@ -52,6 +59,7 @@ namespace LagFighter
             center.transform.localScale = new Vector3(0.05f, 0.02f, 1.6f);
             Tint(center, new Color(0.35f, 0.37f, 0.44f));
 
+            ArenaRefs.WallBase = new Color(0.35f, 0.16f, 0.16f);
             for (int s = -1; s <= 1; s += 2)
             {
                 var wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -59,7 +67,9 @@ namespace LagFighter
                 wall.transform.SetParent(root.transform);
                 wall.transform.localPosition = new Vector3(s * (SimConfig.StageHalfWidth + 0.5f), 0.9f, 0f);
                 wall.transform.localScale = new Vector3(0.15f, 1.8f, 1.2f);
-                Tint(wall, new Color(0.35f, 0.16f, 0.16f));
+                Tint(wall, ArenaRefs.WallBase);
+                // la UI las pulsa con el color del acorralado (feedback de esquina)
+                ArenaRefs.Walls[s < 0 ? 0 : 1] = wall.GetComponent<Renderer>();
             }
 
             // líneas de piso: dan lectura de distancia de un vistazo
@@ -136,23 +146,45 @@ namespace LagFighter
                 lightGo.transform.rotation = Quaternion.Euler(45f, -25f, 0f);
                 light.intensity = 1.1f;
             }
+
+            // luces de acento por lado (celeste P1 / naranja P2): despegan a los
+            // blockmen del fondo gris y refuerzan la identidad de cada esquina
+            for (int s = 0; s < 2; s++)
+            {
+                var accGo = new GameObject(s == 0 ? "AccentLightP1" : "AccentLightP2");
+                accGo.transform.SetParent(root.transform);
+                accGo.transform.localPosition = new Vector3(s == 0 ? -3.2f : 3.2f, 2.6f, -2.2f);
+                var acc = accGo.AddComponent<Light>();
+                acc.type = LightType.Point;
+                acc.color = s == 0 ? new Color(0.25f, 0.7f, 0.95f) : new Color(0.95f, 0.45f, 0.25f);
+                acc.intensity = 0.9f;
+                acc.range = 6.5f;
+                acc.shadows = LightShadows.None;
+            }
         }
 
         public static void Tint(GameObject go, Color c) => MatLib.Apply(go, c);
     }
 
     // Un bloque de público que salta en su lugar, cada uno a su ritmo.
+    // En el KO se emociona: salta más rápido y más alto un rato.
     public class CrowdBob : MonoBehaviour
     {
+        public static float ExciteUntil; // Excite() lo setea desde el KO
+
         public float Phase, Speed = 2f;
-        float _baseY;
+        float _baseY, _t;
+
+        public static void Excite(float seconds) => ExciteUntil = Time.time + seconds;
 
         void Start() { _baseY = transform.localPosition.y; }
 
         void Update()
         {
+            bool hyped = Time.time < ExciteUntil;
+            _t += Time.deltaTime * Speed * (hyped ? 2.8f : 1f); // fase acumulada: sin saltos al cambiar de ritmo
             var p = transform.localPosition;
-            p.y = _baseY + Mathf.Max(0f, Mathf.Sin(Time.time * Speed + Phase)) * 0.10f;
+            p.y = _baseY + Mathf.Max(0f, Mathf.Sin(_t + Phase)) * (hyped ? 0.17f : 0.10f);
             transform.localPosition = p;
         }
     }

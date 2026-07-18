@@ -95,6 +95,16 @@ planes ya revelados y aplica lo observado a partir del turno siguiente.
 - Juice: hitstop cosmético (pausa el avance de ticks, NO toca la sim),
   screen shake (`CameraFX`) y sonidos sintetizados en runtime (`SfxLib`,
   cero assets).
+- **Pulido UI/UX/arte (2026-07-18)**: sombra de contacto bajo los peleadores,
+  fases S/A/R dentro de las fichas de la timeline, la pared pulsa con el color
+  del acorralado, pips de vida que "se rompen" al perderse, hover + blips
+  sintetizados en toda la UI (toggle SFX en OPC, persiste), cursor pixel
+  procedural, luces de acento celeste/naranja por lado, hadouken con núcleo
+  rotante y estela, festejo de KO (saltitos + público eufórico + burst
+  dorado), announcer con pitch aleatorio, el menú de modos recuerda la última
+  elección (PlayerPrefs), botón LISTO dice "PASAR (quieto, bloquea)" con plan
+  vacío, tips de primera vez SOLO en Práctica (se apagan para siempre), y
+  tipografía pixel normalizada a 8/16/24/32 px.
 - Botón CAJAS ON/OFF (o tecla H) para hurt/hitboxes; indicador de
   distancia bajo el prompt.
 - Menú de planificación: grilla 7x2 (movimiento arriba, acción abajo) con

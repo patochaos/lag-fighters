@@ -34,7 +34,11 @@ namespace LagFighter
         Text[] _cardName;
         RectTransform[] _cardRt;
         Image _undoBtn, _doneBtn, _wakeBtn;
-        Text _wakeLabel;
+        Text _wakeLabel, _doneLabel;
+        // hover: tinte sobre el color base de cada botón
+        static readonly Color DoneC = new Color(0.18f, 0.45f, 0.22f, 0.95f);
+        static readonly Color UndoC = new Color(0.4f, 0.2f, 0.2f, 0.95f);
+        static readonly Color WakeC = new Color(0.5f, 0.32f, 0.1f, 0.95f);
         // panel de info a la derecha de la grilla: se llena con el hover
         Text _detailTitle, _detailFrames, _detailAdv, _detailTag, _detail, _status;
         Image _segBg, _segS, _segA, _segR;
@@ -144,7 +148,7 @@ namespace LagFighter
                     new Vector2(6f, CardH - 6f), new Color(cat.r, cat.g, cat.b, 0.9f));
 
                 _cardName[pos] = MakeText(card.rectTransform, "Name", m.Name.ToUpperInvariant(), new Vector2(0.5f, 0.5f), new Vector2(6f, 0f),
-                    new Vector2(CardW - 26f, 30f), 11, new Color(1f, 1f, 1f, 0.92f), TextAnchor.MiddleCenter);
+                    new Vector2(CardW - 26f, 30f), 8, new Color(1f, 1f, 1f, 0.92f), TextAnchor.MiddleCenter);
                 _cardName[pos].font = UIFonts.Pixel;
 
                 string key = pos < 9 ? (pos + 1).ToString() : pos == 9 ? "0" : "";
@@ -160,13 +164,14 @@ namespace LagFighter
 
             // LISTO y BORRAR apilados a la izquierda de la grilla
             float sideX = totalW / 2f + 96f;
-            _doneBtn = MakeImage(rootRt, "DoneBtn", new Vector2(0.5f, 0f), new Vector2(-sideX, 118f), new Vector2(150f, 54f), new Color(0.18f, 0.45f, 0.22f, 0.95f));
-            MakeText(_doneBtn.rectTransform, "T", "¡LISTO!", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(146f, 30f), 16, Color.white, TextAnchor.MiddleCenter).fontStyle = FontStyle.Bold;
-            _undoBtn = MakeImage(rootRt, "UndoBtn", new Vector2(0.5f, 0f), new Vector2(-sideX, 62f), new Vector2(150f, 44f), new Color(0.4f, 0.2f, 0.2f, 0.95f));
+            _doneBtn = MakeImage(rootRt, "DoneBtn", new Vector2(0.5f, 0f), new Vector2(-sideX, 118f), new Vector2(150f, 54f), DoneC);
+            _doneLabel = MakeText(_doneBtn.rectTransform, "T", "¡LISTO!", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(146f, 30f), 16, Color.white, TextAnchor.MiddleCenter);
+            _doneLabel.fontStyle = FontStyle.Bold;
+            _undoBtn = MakeImage(rootRt, "UndoBtn", new Vector2(0.5f, 0f), new Vector2(-sideX, 62f), new Vector2(150f, 44f), UndoC);
             MakeText(_undoBtn.rectTransform, "T", "← BORRAR", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(146f, 30f), 14, Color.white, TextAnchor.MiddleCenter).fontStyle = FontStyle.Bold;
 
             // wakeup option: solo aparece si arrancás el turno derribado
-            _wakeBtn = MakeImage(rootRt, "WakeBtn", new Vector2(0.5f, 0f), new Vector2(-sideX, 190f), new Vector2(160f, 56f), new Color(0.5f, 0.32f, 0.1f, 0.95f));
+            _wakeBtn = MakeImage(rootRt, "WakeBtn", new Vector2(0.5f, 0f), new Vector2(-sideX, 190f), new Vector2(160f, 56f), WakeC);
             _wakeLabel = MakeText(_wakeBtn.rectTransform, "T", "", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(156f, 50f), 13, Color.white, TextAnchor.MiddleCenter);
             _wakeLabel.fontStyle = FontStyle.Bold;
             _wakeBtn.gameObject.SetActive(false);
@@ -179,7 +184,7 @@ namespace LagFighter
             var ibr = infoBg.rectTransform;
 
             _detailTitle = MakeText(ibr, "Title", "", new Vector2(0f, 1f), new Vector2(14f, -18f),
-                new Vector2(302f, 22f), 10, Color.white, TextAnchor.MiddleLeft);
+                new Vector2(302f, 22f), 16, Color.white, TextAnchor.MiddleLeft);
             _detailTitle.font = UIFonts.Pixel;
             _detailTitle.rectTransform.pivot = new Vector2(0f, 0.5f);
 
@@ -217,8 +222,8 @@ namespace LagFighter
             _status = MakeText(rootRt, "Status", "", new Vector2(0.5f, 0f), new Vector2(totalW / 2f + 14f, 26f + totalH + 44f),
                 new Vector2(900f, 22f), 14, new Color(0.5f, 1f, 0.6f), TextAnchor.MiddleRight);
             _status.rectTransform.pivot = new Vector2(1f, 0.5f);
-            MakeText(rootRt, "Help", "click/1-9 agrega · Backspace borra · arrastrá tu timeline = scrub del ghost · click derecho en ficha = borrarla · ESPACIO cierra",
-                new Vector2(0.5f, 0f), new Vector2(0f, 6f), new Vector2(1300f, 20f), 13, new Color(1f, 1f, 1f, 0.45f), TextAnchor.MiddleCenter);
+            MakeText(rootRt, "Help", "click o 1-9 agrega  ·  Backspace borra  ·  ESPACIO cierra el turno\narrastrá tu timeline para mover el ghost cuadro a cuadro  ·  click derecho en una ficha la borra",
+                new Vector2(0.5f, 0f), new Vector2(0f, 14f), new Vector2(1300f, 36f), 13, new Color(1f, 1f, 1f, 0.45f), TextAnchor.MiddleCenter);
         }
 
         // Rango de ventaja REAL: la ventaja depende de en qué frame activo
@@ -285,6 +290,12 @@ namespace LagFighter
             if (g.BlockedCount > 0) extra += $"  ·  {g.BlockedCount} bloqueado(s) si se queda en neutral";
             _status.text = $"{framesUsed}/{available} frames planificados{stunNote} — quedan {left}{extra}";
             _status.color = left == 0 ? new Color(1f, 0.85f, 0.3f) : available < SimConfig.TurnFrames ? new Color(1f, 0.65f, 0.4f) : new Color(0.5f, 1f, 0.6f);
+
+            // sin órdenes, confirmar es jugada válida (quieto bloqueando):
+            // que el botón lo diga, no que parezca un LISTO en falso
+            bool empty = framesUsed == 0;
+            _doneLabel.text = empty ? "PASAR\n<size=11>(quieto, bloquea)</size>" : "¡LISTO!";
+            _doneLabel.fontSize = empty ? 14 : 16;
         }
 
         void Highlight(int pos)
@@ -339,10 +350,15 @@ namespace LagFighter
                 for (int i = 0; i < _cardRt.Length; i++)
                 {
                     if (!RectTransformUtility.RectangleContainsScreenPoint(_cardRt[i], mp, null)) continue;
-                    if (i != _sel) Highlight(i);
+                    if (i != _sel) { Highlight(i); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
                     break;
                 }
             }
+
+            // tinte de hover en los botones laterales
+            _doneBtn.color = HoverTint(_doneBtn, DoneC, mp);
+            _undoBtn.color = HoverTint(_undoBtn, UndoC, mp);
+            if (_wakeBtn.gameObject.activeSelf) _wakeBtn.color = HoverTint(_wakeBtn, WakeC, mp);
 
             if (GameInput.ClickPressed())
             {
@@ -350,24 +366,26 @@ namespace LagFighter
                 for (int i = 0; i < _cardRt.Length; i++)
                 {
                     if (!RectTransformUtility.RectangleContainsScreenPoint(_cardRt[i], pos, null)) continue;
-                    _mc.PlanAdd(Order[i]);
+                    TryAdd(Order[i]);
                     Highlight(i);
                     return;
                 }
                 if (RectTransformUtility.RectangleContainsScreenPoint(_undoBtn.rectTransform, pos, null))
                 {
-                    _mc.PlanUndo();
+                    TryUndo();
                     Highlight(_sel);
                     return;
                 }
                 if (RectTransformUtility.RectangleContainsScreenPoint(_doneBtn.rectTransform, pos, null))
                 {
+                    SfxLib.Play(SfxLib.Kind.UiClick, 0.8f);
                     _mc.PlanConfirm();
                     return;
                 }
                 if (_wakeBtn.gameObject.activeSelf &&
                     RectTransformUtility.RectangleContainsScreenPoint(_wakeBtn.rectTransform, pos, null))
                 {
+                    SfxLib.Play(SfxLib.Kind.UiClick, 0.7f);
                     _mc.ToggleWakeup();
                     RefreshWake();
                     Highlight(_sel); // el presupuesto de frames pudo cambiar
@@ -375,15 +393,32 @@ namespace LagFighter
                 }
             }
 
-            if (GameInput.LeftPressed()) Highlight(_sel - 1);
-            if (GameInput.RightPressed()) Highlight(_sel + 1);
-            if (GameInput.UpPressed()) Highlight(_sel - Cols);
-            if (GameInput.DownPressed()) Highlight(_sel + Cols);
+            if (GameInput.LeftPressed()) { Highlight(_sel - 1); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
+            if (GameInput.RightPressed()) { Highlight(_sel + 1); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
+            if (GameInput.UpPressed()) { Highlight(_sel - Cols); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
+            if (GameInput.DownPressed()) { Highlight(_sel + Cols); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
             int num = GameInput.NumberPressed();
-            if (num > 0 && num <= Order.Length) { _mc.PlanAdd(Order[num - 1]); Highlight(num - 1); }
-            else if (GameInput.AddPressed()) { _mc.PlanAdd(Order[_sel]); Highlight(_sel); }
-            if (GameInput.UndoPressed()) { _mc.PlanUndo(); Highlight(_sel); }
+            if (num > 0 && num <= Order.Length) { TryAdd(Order[num - 1]); Highlight(num - 1); }
+            else if (GameInput.AddPressed()) { TryAdd(Order[_sel]); Highlight(_sel); }
+            if (GameInput.UndoPressed()) { TryUndo(); Highlight(_sel); }
             if (GameInput.EndTurnPressed()) _mc.PlanConfirm();
+        }
+
+        static Color HoverTint(Image btn, Color baseC, Vector2 mp)
+            => RectTransformUtility.RectangleContainsScreenPoint(btn.rectTransform, mp, null)
+                ? Color.Lerp(baseC, Color.white, 0.22f) : baseC;
+
+        // agrega/borra con su blip solo si la acción realmente pasó
+        void TryAdd(int mi)
+        {
+            if (_mc.PlanFits(mi)) SfxLib.Play(SfxLib.Kind.UiClick, 0.6f);
+            _mc.PlanAdd(mi);
+        }
+
+        void TryUndo()
+        {
+            if (_mc.GetPlan(_mc.Picker).Count > 0) SfxLib.Play(SfxLib.Kind.UiCancel, 0.7f);
+            _mc.PlanUndo();
         }
 
         Image MakeImage(RectTransform parent, string name, Vector2 anchor, Vector2 pos, Vector2 size, Color color)

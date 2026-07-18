@@ -140,16 +140,58 @@ namespace LagFighter
                     var c = ball.GetComponent<Collider>();
                     if (c != null) Destroy(c);
                     ball.GetComponent<Renderer>().material = new Material(VizLib.BaseMat) { color = new Color(0.5f, 0.8f, 1f, 0.9f) };
+                    ball.AddComponent<HadoukenLook>().Build();
                     _projPool.Add(ball);
                 }
                 var go = _projPool[used++];
+                bool fresh = !go.activeSelf; // reciclado del pool: no arrastrar el trail viejo
                 go.SetActive(true);
                 go.transform.position = new Vector3(p.X, (SimConfig.ProjY0 + SimConfig.ProjY1) * 0.5f, 0f);
+                if (fresh) go.GetComponent<HadoukenLook>().ResetTrail();
                 float pulse = 0.42f + Mathf.Sin(Time.time * 14f) * 0.04f;
                 go.transform.localScale = new Vector3(pulse, pulse, pulse);
             }
             for (int i = used; i < _projPool.Count; i++)
                 _projPool[i].SetActive(false);
+        }
+    }
+
+    // Vestimenta del hadouken: cubo interior girando + estela. Mismo lenguaje
+    // de cubitos que los blockmen y los sparks; cero assets.
+    public class HadoukenLook : MonoBehaviour
+    {
+        Transform _core;
+        TrailRenderer _trail;
+
+        public void Build()
+        {
+            var core = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            core.name = "Core";
+            var col = core.GetComponent<Collider>();
+            if (col != null) Destroy(col);
+            core.transform.SetParent(transform, false);
+            core.transform.localScale = new Vector3(0.55f, 0.55f, 0.55f);
+            var r = core.GetComponent<Renderer>();
+            r.material = new Material(VizLib.BaseMat) { color = new Color(0.85f, 0.97f, 1f, 0.95f) };
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            _core = core.transform;
+
+            _trail = gameObject.AddComponent<TrailRenderer>();
+            _trail.time = 0.22f;
+            _trail.startWidth = 0.30f;
+            _trail.endWidth = 0.02f;
+            _trail.numCapVertices = 2;
+            _trail.material = new Material(VizLib.BaseMat) { color = Color.white };
+            _trail.startColor = new Color(0.5f, 0.8f, 1f, 0.55f);
+            _trail.endColor = new Color(0.5f, 0.8f, 1f, 0f);
+            _trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
+
+        public void ResetTrail() { if (_trail != null) _trail.Clear(); }
+
+        void Update()
+        {
+            if (_core != null) _core.Rotate(140f * Time.deltaTime, 200f * Time.deltaTime, 0f);
         }
     }
 

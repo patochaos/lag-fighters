@@ -42,8 +42,8 @@ namespace LagFighter
         Image _optBtn, _optPanel;
         Text _optBtnLabel;
         bool _optOpen;
-        Image _boxBtn, _voiceBtn;
-        Text _boxBtnLabel, _voiceBtnLabel;
+        Image _boxBtn, _voiceBtn, _sfxBtn;
+        Text _boxBtnLabel, _voiceBtnLabel, _sfxBtnLabel;
         static readonly float[] Speeds = { 0.5f, 1f, 2f };
         readonly Image[] _speedBtns = new Image[3];
         readonly Text[] _speedLabels = new Text[3];
@@ -54,10 +54,24 @@ namespace LagFighter
         bool _logOpen;
         readonly List<string> _logLines = new List<string>();
 
-        Text _lagMsg;
-        float _lagMsgTimer;
+        // carteles grandes en dos slots: 0 = combate (COUNTER, K.O.), 1 = sistema
+        // (subidas de lag). Separados para que no se pisen entre sí.
+        readonly Text[] _bigMsg = new Text[2];
+        readonly float[] _bigMsgTimer = new float[2];
         readonly Text[] _limbLabel = new Text[2];
         TimelineRow _row0, _row1;
+
+        // animación de pips de vida al romperse (flash + pop + fade)
+        readonly int[] _shownHp = { -1, -1 };
+        readonly float[][] _pipAnim = new float[2][];
+
+        // tip contextual del modo práctica (lo maneja MatchController)
+        Text _tip;
+
+        // botones con hover: tinte + tick al entrar
+        readonly List<Image> _hoverBtns = new List<Image>();
+        readonly List<Color> _hoverBase = new List<Color>();
+        Image _hovered;
 
         // overlay de planificación + flash de ejecución
         Image _planOverlay;
@@ -114,7 +128,7 @@ namespace LagFighter
             // tira de conexión (dist + ping + wifi), estética overlay de stream
             var strip = MakePanel(_canvasRt, "ConnStrip", new Vector2(0.5f, 1f), new Vector2(0f, -28f), new Vector2(430f, 34f), Palette.Neutral);
             _connText = MakeTextP(strip.rectTransform, "Conn", "", new Vector2(0.5f, 0.5f), new Vector2(-24f, 0f), new Vector2(360f, 22f),
-                10, new Color(1f, 1f, 1f, 0.8f), TextAnchor.MiddleCenter);
+                8, new Color(1f, 1f, 1f, 0.8f), TextAnchor.MiddleCenter);
             for (int b = 0; b < 4; b++)
             {
                 _wifiBars[b] = MakeImage(strip.rectTransform, "Wifi" + b, new Vector2(1f, 0f),
@@ -123,11 +137,11 @@ namespace LagFighter
             }
 
             _prompt = MakeTextP(_canvasRt, "Prompt", "", new Vector2(0.5f, 1f), new Vector2(0f, -76f), new Vector2(1500f, 30f),
-                13, Palette.Startup, TextAnchor.MiddleCenter);
+                16, Palette.Startup, TextAnchor.MiddleCenter);
 
             // timer de planificación (online / 1v1): cuenta regresiva al lado del prompt
             _planTimerText = MakeTextP(_canvasRt, "PlanTimer", "", new Vector2(0.5f, 1f), new Vector2(700f, -76f), new Vector2(160f, 30f),
-                14, Palette.Guard, TextAnchor.MiddleRight);
+                16, Palette.Guard, TextAnchor.MiddleRight);
             _planTimerText.rectTransform.pivot = new Vector2(1f, 0.5f);
 
             _turnSummary = MakeText(_canvasRt, "TurnSummary", "", new Vector2(0.5f, 1f), new Vector2(0f, -102f), new Vector2(1400f, 22f),
@@ -138,56 +152,73 @@ namespace LagFighter
             _row1 = new TimelineRow(this, "Row1", y: 246f, height: 52f, dim: true, side: 1);
             _row0 = new TimelineRow(this, "Row0", y: 312f, height: 52f, dim: false, side: 0);
             MakeTextP(_canvasRt, "Row0Label", "VOS", new Vector2(0.5f, 0f), new Vector2(-RowW / 2f - 52f, 312f + 26f), new Vector2(90f, 20f),
-                9, Palette.P1, TextAnchor.MiddleRight);
+                8, Palette.P1, TextAnchor.MiddleRight);
             MakeTextP(_canvasRt, "Row1Label", "RIVAL", new Vector2(0.5f, 0f), new Vector2(-RowW / 2f - 52f, 246f + 26f), new Vector2(90f, 20f),
-                9, Palette.P2, TextAnchor.MiddleRight);
+                8, Palette.P2, TextAnchor.MiddleRight);
 
             _banner = MakeText(_canvasRt, "Banner", "", new Vector2(0.5f, 0.5f), new Vector2(0f, 150f), new Vector2(1200f, 160f),
                 58, Color.white, TextAnchor.MiddleCenter);
             _banner.fontStyle = FontStyle.Bold;
 
-            // cartel grande (IT GETS LAGGIER / COUNTER / K.O.)
-            _lagMsg = MakeTextP(_canvasRt, "LagMsg", "", new Vector2(0.5f, 0.5f), new Vector2(0f, 280f), new Vector2(1600f, 120f),
-                30, new Color(1f, 0.35f, 0.3f), TextAnchor.MiddleCenter);
+            // carteles grandes: slot 0 combate (COUNTER / K.O.), slot 1 sistema (lag)
+            _bigMsg[0] = MakeTextP(_canvasRt, "BigMsg", "", new Vector2(0.5f, 0.5f), new Vector2(0f, 280f), new Vector2(1600f, 120f),
+                32, new Color(1f, 0.35f, 0.3f), TextAnchor.MiddleCenter);
+            _bigMsg[1] = MakeTextP(_canvasRt, "SysMsg", "", new Vector2(0.5f, 0.5f), new Vector2(0f, 396f), new Vector2(1600f, 100f),
+                24, new Color(1f, 0.35f, 0.3f), TextAnchor.MiddleCenter);
+
+            // tip contextual (práctica): entre el menú de plan y las timelines
+            _tip = MakeText(_canvasRt, "Tip", "", new Vector2(0.5f, 0f), new Vector2(0f, 396f), new Vector2(1400f, 24f),
+                16, new Color(0.55f, 1f, 0.65f, 0.9f), TextAnchor.MiddleCenter);
 
             // REPLAY + SKIP, arriba al medio (solo visible durante la repetición)
             _replayPanel = MakePanel(_canvasRt, "ReplayPanel", new Vector2(0.5f, 1f), new Vector2(0f, -120f), new Vector2(430f, 44f), Palette.Damage);
             _replayTitle = MakeTextP(_replayPanel.rectTransform, "T", "► REPLAY", new Vector2(0f, 0.5f), new Vector2(120f, 0f), new Vector2(220f, 24f),
-                13, new Color(1f, 0.4f, 0.35f), TextAnchor.MiddleLeft);
+                16, new Color(1f, 0.4f, 0.35f), TextAnchor.MiddleLeft);
             _skipBtn = MakeImage(_replayPanel.rectTransform, "SkipBtn", new Vector2(1f, 0.5f), new Vector2(-84f, 0f), new Vector2(150f, 32f), new Color(0.1f, 0.12f, 0.16f, 0.95f));
-            MakeTextP(_skipBtn.rectTransform, "T", "SKIP (ESP)", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(146f, 20f),
-                9, new Color(1f, 1f, 1f, 0.85f), TextAnchor.MiddleCenter);
+            MakeTextP(_skipBtn.rectTransform, "T", "SKIP — ESPACIO", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(146f, 20f),
+                8, new Color(1f, 1f, 1f, 0.85f), TextAnchor.MiddleCenter);
             _replayPanel.gameObject.SetActive(false);
+            RegisterHover(_skipBtn);
 
             // ajustes [OPC] colapsados, esquina derecha bajo el bloque del rival
             _optBtn = MakePanel(_canvasRt, "OptBtn", new Vector2(1f, 1f), new Vector2(-28f, -150f), new Vector2(96f, 30f), Palette.Neutral);
             _optBtn.rectTransform.pivot = new Vector2(1f, 1f);
             _optBtnLabel = MakeTextP(_optBtn.rectTransform, "T", "OPC", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(92f, 20f),
-                10, new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleCenter);
+                8, new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleCenter);
+            RegisterHover(_optBtn);
 
-            _optPanel = MakePanel(_canvasRt, "OptPanel", new Vector2(1f, 1f), new Vector2(-28f, -186f), new Vector2(210f, 176f), Palette.Neutral);
+            _optPanel = MakePanel(_canvasRt, "OptPanel", new Vector2(1f, 1f), new Vector2(-28f, -186f), new Vector2(210f, 212f), Palette.Neutral);
             _optPanel.rectTransform.pivot = new Vector2(1f, 1f);
             var opr = _optPanel.rectTransform;
 
             _boxBtn = MakeImage(opr, "BoxBtn", new Vector2(0.5f, 1f), new Vector2(0f, -24f), new Vector2(186f, 30f), new Color(0.1f, 0.12f, 0.16f, 0.95f));
             _boxBtnLabel = MakeTextP(_boxBtn.rectTransform, "T", VizPrefs.ShowBoxes ? "CAJAS: ON" : "CAJAS: OFF",
                 new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(182f, 20f),
-                9, VizPrefs.ShowBoxes ? Palette.Ok : new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleCenter);
+                8, VizPrefs.ShowBoxes ? Palette.Ok : new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleCenter);
+            RegisterHover(_boxBtn);
 
             _voiceBtn = MakeImage(opr, "VoiceBtn", new Vector2(0.5f, 1f), new Vector2(0f, -60f), new Vector2(186f, 30f), new Color(0.1f, 0.12f, 0.16f, 0.95f));
             _voiceBtnLabel = MakeTextP(_voiceBtn.rectTransform, "T", "VOZ: ON", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(182f, 20f),
-                9, Palette.Ok, TextAnchor.MiddleCenter);
+                8, Palette.Ok, TextAnchor.MiddleCenter);
+            RegisterHover(_voiceBtn);
 
-            _logBtn = MakeImage(opr, "LogBtn", new Vector2(0.5f, 1f), new Vector2(0f, -96f), new Vector2(186f, 30f), new Color(0.1f, 0.12f, 0.16f, 0.95f));
+            _sfxBtn = MakeImage(opr, "SfxBtn", new Vector2(0.5f, 1f), new Vector2(0f, -96f), new Vector2(186f, 30f), new Color(0.1f, 0.12f, 0.16f, 0.95f));
+            _sfxBtnLabel = MakeTextP(_sfxBtn.rectTransform, "T", SfxLib.Enabled ? "SFX: ON" : "SFX: OFF",
+                new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(182f, 20f),
+                8, SfxLib.Enabled ? Palette.Ok : new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleCenter);
+            RegisterHover(_sfxBtn);
+
+            _logBtn = MakeImage(opr, "LogBtn", new Vector2(0.5f, 1f), new Vector2(0f, -132f), new Vector2(186f, 30f), new Color(0.1f, 0.12f, 0.16f, 0.95f));
             _logBtnLabel = MakeTextP(_logBtn.rectTransform, "T", "LOG (L)", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(182f, 20f),
-                9, new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleCenter);
+                8, new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleCenter);
+            RegisterHover(_logBtn);
 
-            MakeTextP(opr, "SpeedTag", "VEL", new Vector2(0f, 1f), new Vector2(14f, -146f), new Vector2(50f, 20f),
-                9, new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleLeft);
+            MakeTextP(opr, "SpeedTag", "VEL", new Vector2(0f, 1f), new Vector2(14f, -182f), new Vector2(50f, 20f),
+                8, new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleLeft);
             for (int s = 0; s < Speeds.Length; s++)
             {
                 _speedBtns[s] = MakeImage(opr, "Speed" + s, new Vector2(0f, 1f),
-                    new Vector2(58f + s * 48f, -146f), new Vector2(44f, 26f), new Color(0.1f, 0.12f, 0.16f, 0.95f));
+                    new Vector2(58f + s * 48f, -182f), new Vector2(44f, 26f), new Color(0.1f, 0.12f, 0.16f, 0.95f));
                 _speedBtns[s].rectTransform.pivot = new Vector2(0f, 0.5f);
                 _speedLabels[s] = MakeText(_speedBtns[s].rectTransform, "T", Speeds[s] == 0.5f ? "×½" : $"×{Speeds[s]:0}",
                     new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(42f, 22f), 14, Color.white, TextAnchor.MiddleCenter);
@@ -221,8 +252,36 @@ namespace LagFighter
         {
             var b = MakePanel(_canvasRt, "Btn" + label, new Vector2(0.5f, 0.5f), pos, new Vector2(170f, 44f), accent);
             MakeTextP(b.rectTransform, "T", label, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(166f, 24f),
-                11, Color.white, TextAnchor.MiddleCenter);
+                8, Color.white, TextAnchor.MiddleCenter);
+            RegisterHover(b);
             return b;
+        }
+
+        // ---------- hover de botones: tinte + tick al entrar ----------
+
+        void RegisterHover(Image img)
+        {
+            _hoverBtns.Add(img);
+            _hoverBase.Add(img.color);
+        }
+
+        void UpdateHover()
+        {
+            var mp = GameInput.MousePos();
+            Image now = null;
+            for (int i = 0; i < _hoverBtns.Count; i++)
+            {
+                var b = _hoverBtns[i];
+                if (!b.gameObject.activeInHierarchy) continue;
+                bool over = Inside(b, mp);
+                b.color = over ? Color.Lerp(_hoverBase[i], Color.white, 0.22f) : _hoverBase[i];
+                if (over && now == null) now = b;
+            }
+            if (now != _hovered)
+            {
+                _hovered = now;
+                if (now != null) SfxLib.Play(SfxLib.Kind.UiTick, 0.35f);
+            }
         }
 
         void SetGameOverButtons(bool on)
@@ -256,14 +315,17 @@ namespace LagFighter
             _logText.text = "";
         }
 
-        public void ShowLagMessage(string msg) => ShowBigMessage(msg, new Color(1f, 0.35f, 0.3f));
+        // los avisos de lag van al slot de sistema: no pisan COUNTER/K.O. ni al revés
+        public void ShowLagMessage(string msg) => ShowBigMessage(msg, new Color(1f, 0.35f, 0.3f), 2.6f, 1);
 
-        public void ShowBigMessage(string msg, Color c, float duration = 2.6f)
+        public void ShowBigMessage(string msg, Color c, float duration = 2.6f, int slot = 0)
         {
-            _lagMsg.text = msg;
-            _lagMsg.color = c;
-            _lagMsgTimer = duration;
+            _bigMsg[slot].text = msg;
+            _bigMsg[slot].color = c;
+            _bigMsgTimer[slot] = duration;
         }
+
+        public void SetTip(string s) => _tip.text = s ?? "";
 
         void BuildSide(int i, bool left, string label)
         {
@@ -277,7 +339,7 @@ namespace LagFighter
             var pr = panel.rectTransform;
 
             var nm = MakeTextP(pr, "Name", label, new Vector2(left ? 0f : 1f, 1f), new Vector2(sign * 14f, -8f), new Vector2(200f, 20f),
-                11, color, left ? TextAnchor.UpperLeft : TextAnchor.UpperRight);
+                16, color, left ? TextAnchor.UpperLeft : TextAnchor.UpperRight);
             nm.rectTransform.pivot = new Vector2(left ? 0f : 1f, 1f);
 
             // rounds ganados junto al nombre
@@ -292,6 +354,7 @@ namespace LagFighter
 
             // vida GRANDE
             _pips[i] = new Image[SimConfig.MaxHp];
+            _pipAnim[i] = new float[SimConfig.MaxHp];
             for (int p = 0; p < SimConfig.MaxHp; p++)
             {
                 var pip = MakeImage(pr, $"Pip{p}", new Vector2(left ? 0f : 1f, 1f),
@@ -393,6 +456,7 @@ namespace LagFighter
                 _replayTitle.color = rc;
                 if (GameInput.ClickPressed() && Inside(_skipBtn, GameInput.MousePos()))
                 {
+                    SfxLib.Play(SfxLib.Kind.UiClick, 0.8f);
                     _mc.SkipReplay();
                     return;
                 }
@@ -454,10 +518,36 @@ namespace LagFighter
 
             for (int i = 0; i < 2; i++)
             {
+                // pips: al perder vida el pip "se rompe" (flash blanco + pop + fade),
+                // no se apaga en seco. Si la vida sube (dummy/round nuevo), snap.
+                float hpNow = sim.Fighters[i].Hp;
+                int hpInt = Mathf.CeilToInt(hpNow);
+                if (_shownHp[i] < 0 || hpInt > _shownHp[i])
+                {
+                    _shownHp[i] = hpInt;
+                    for (int p = 0; p < SimConfig.MaxHp; p++) _pipAnim[i][p] = 0f;
+                }
+                else if (hpInt < _shownHp[i])
+                {
+                    for (int p = Mathf.Max(0, hpInt); p < _shownHp[i] && p < SimConfig.MaxHp; p++)
+                        _pipAnim[i][p] = 0.5f;
+                    _shownHp[i] = hpInt;
+                }
                 for (int p = 0; p < SimConfig.MaxHp; p++)
                 {
-                    var c = _pips[i][p].color;
-                    c.a = p < sim.Fighters[i].Hp ? 1f : 0.13f;
+                    var c = Palette.Side(i);
+                    float a = p < hpNow ? 1f : 0.13f;
+                    float t = _pipAnim[i][p];
+                    if (t > 0f)
+                    {
+                        _pipAnim[i][p] = t - Time.deltaTime;
+                        float k = Mathf.Clamp01(t / 0.5f);
+                        c = Color.Lerp(c, Color.white, k);
+                        a = Mathf.Lerp(0.13f, 1f, k);
+                        _pips[i][p].rectTransform.localScale = Vector3.one * (1f + 0.45f * k);
+                    }
+                    else _pips[i][p].rectTransform.localScale = Vector3.one;
+                    c.a = a;
                     _pips[i][p].color = c;
                 }
 
@@ -505,9 +595,37 @@ namespace LagFighter
 
             UpdateTimelineInteraction(flow);
             UpdateConnStrip(sim);
+            UpdateWallGlow(sim);
             UpdateBigMessage();
             UpdateOptions();
             UpdateBanner(sim, flow);
+            UpdateHover();
+        }
+
+        // esquina: la pared pulsa con el color del jugador acorralado
+        void UpdateWallGlow(MatchSim sim)
+        {
+            for (int w = 0; w < 2; w++)
+            {
+                var r = ArenaRefs.Walls[w];
+                if (r == null) continue;
+                float best = 0f;
+                int who = -1;
+                for (int i = 0; i < 2; i++)
+                {
+                    float x = sim.Fighters[i].X;
+                    if ((w == 0 && x > 0f) || (w == 1 && x < 0f)) continue;
+                    float t = Mathf.Clamp01((Mathf.Abs(x) - (SimConfig.StageHalfWidth - 1.1f)) / 1.1f);
+                    if (t > best) { best = t; who = i; }
+                }
+                var target = ArenaRefs.WallBase;
+                if (who >= 0 && best > 0.01f)
+                {
+                    float pulse = 0.45f + 0.3f * Mathf.PingPong(Time.time * 2.4f, 1f);
+                    target = Color.Lerp(ArenaRefs.WallBase, Palette.Side(who), best * pulse);
+                }
+                r.material.color = target;
+            }
         }
 
         // scrub (arrastrar) y borrar orden (click derecho) sobre la fila del picker
@@ -582,12 +700,15 @@ namespace LagFighter
 
         void UpdateBigMessage()
         {
-            if (_lagMsgTimer <= 0f) return;
-            _lagMsgTimer -= Time.deltaTime;
-            var lc = _lagMsg.color;
-            lc.a = Mathf.Clamp01(_lagMsgTimer / 0.5f);
-            _lagMsg.color = lc;
-            if (_lagMsgTimer <= 0f) _lagMsg.text = "";
+            for (int s = 0; s < 2; s++)
+            {
+                if (_bigMsgTimer[s] <= 0f) continue;
+                _bigMsgTimer[s] -= Time.deltaTime;
+                var lc = _bigMsg[s].color;
+                lc.a = Mathf.Clamp01(_bigMsgTimer[s] / 0.5f);
+                _bigMsg[s].color = lc;
+                if (_bigMsgTimer[s] <= 0f) _bigMsg[s].text = "";
+            }
         }
 
         void UpdateOptions()
@@ -597,6 +718,7 @@ namespace LagFighter
 
             if (click && Inside(_optBtn, mp))
             {
+                SfxLib.Play(SfxLib.Kind.UiClick, 0.7f);
                 _optOpen = !_optOpen;
                 _optPanel.gameObject.SetActive(_optOpen);
                 _optBtnLabel.color = _optOpen ? Palette.Ok : new Color(1f, 1f, 1f, 0.75f);
@@ -605,6 +727,7 @@ namespace LagFighter
             bool toggleBoxes = GameInput.BoxesPressed() || (click && _optOpen && Inside(_boxBtn, mp));
             if (toggleBoxes)
             {
+                SfxLib.Play(SfxLib.Kind.UiClick, 0.7f);
                 VizPrefs.ShowBoxes = !VizPrefs.ShowBoxes;
                 _boxBtnLabel.text = VizPrefs.ShowBoxes ? "CAJAS: ON" : "CAJAS: OFF";
                 _boxBtnLabel.color = VizPrefs.ShowBoxes ? Palette.Ok : new Color(1f, 1f, 1f, 0.5f);
@@ -612,14 +735,24 @@ namespace LagFighter
 
             if (click && _optOpen && Inside(_voiceBtn, mp))
             {
+                SfxLib.Play(SfxLib.Kind.UiClick, 0.7f);
                 Announcer.Enabled = !Announcer.Enabled;
                 _voiceBtnLabel.text = Announcer.Enabled ? "VOZ: ON" : "VOZ: OFF";
                 _voiceBtnLabel.color = Announcer.Enabled ? Palette.Ok : new Color(1f, 1f, 1f, 0.5f);
             }
 
+            if (click && _optOpen && Inside(_sfxBtn, mp))
+            {
+                SfxLib.Enabled = !SfxLib.Enabled;
+                _sfxBtnLabel.text = SfxLib.Enabled ? "SFX: ON" : "SFX: OFF";
+                _sfxBtnLabel.color = SfxLib.Enabled ? Palette.Ok : new Color(1f, 1f, 1f, 0.5f);
+                SfxLib.Play(SfxLib.Kind.UiClick, 0.7f); // suena solo si quedó ON
+            }
+
             bool logToggle = GameInput.LogPressed() || (click && _optOpen && Inside(_logBtn, mp));
             if (logToggle)
             {
+                SfxLib.Play(SfxLib.Kind.UiClick, 0.7f);
                 _logOpen = !_logOpen;
                 _logPanel.gameObject.SetActive(_logOpen);
                 _logBtnLabel.color = _logOpen ? Palette.Ok : new Color(1f, 1f, 1f, 0.75f);
@@ -628,10 +761,15 @@ namespace LagFighter
             for (int s = 0; s < Speeds.Length; s++)
             {
                 bool on = Mathf.Approximately(_mc.PlaybackSpeed, Speeds[s]);
-                _speedBtns[s].color = on ? new Color(0.2f, 0.4f, 0.6f, 0.95f) : new Color(0.1f, 0.12f, 0.16f, 0.95f);
+                var c = on ? new Color(0.2f, 0.4f, 0.6f, 0.95f) : new Color(0.1f, 0.12f, 0.16f, 0.95f);
+                if (_optOpen && Inside(_speedBtns[s], mp)) c = Color.Lerp(c, Color.white, 0.22f); // hover
+                _speedBtns[s].color = c;
                 _speedLabels[s].color = on ? Color.white : new Color(1f, 1f, 1f, 0.55f);
                 if (click && _optOpen && Inside(_speedBtns[s], mp))
+                {
+                    SfxLib.Play(SfxLib.Kind.UiClick, 0.7f);
                     _mc.SetPlaybackSpeed(Speeds[s]);
+                }
             }
         }
 
@@ -647,9 +785,9 @@ namespace LagFighter
                 var mp = GameInput.MousePos();
                 if (GameInput.ClickPressed())
                 {
-                    if (Inside(_btnRematch, mp)) _mc.RequestRematch();
-                    else if (_btnReplay.gameObject.activeSelf && Inside(_btnReplay, mp)) _mc.RequestReplay();
-                    else if (Inside(_btnMenu, mp)) _mc.GoToModeSelect();
+                    if (Inside(_btnRematch, mp)) { SfxLib.Play(SfxLib.Kind.UiClick, 0.8f); _mc.RequestRematch(); }
+                    else if (_btnReplay.gameObject.activeSelf && Inside(_btnReplay, mp)) { SfxLib.Play(SfxLib.Kind.UiClick, 0.8f); _mc.RequestReplay(); }
+                    else if (Inside(_btnMenu, mp)) { SfxLib.Play(SfxLib.Kind.UiClick, 0.8f); _mc.GoToModeSelect(); }
                 }
             }
             else
@@ -724,6 +862,10 @@ namespace LagFighter
             readonly bool _dim;
             readonly List<Image> _chips = new List<Image>();
             readonly List<Text> _labels = new List<Text>();
+            // sub-franjas S/A/R al pie de cada ficha: se lee en qué frame pega
+            readonly List<Image> _phS = new List<Image>();
+            readonly List<Image> _phA = new List<Image>();
+            readonly List<Image> _phR = new List<Image>();
 
             public RectTransform AreaRt => _area;
 
@@ -748,13 +890,13 @@ namespace LagFighter
                 _chipParent.offsetMin = _chipParent.offsetMax = Vector2.zero;
 
                 _hidden = hud.MakeTextP(_area, "Hidden", "? ? ?", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(300f, 24f),
-                    12, new Color(1f, 1f, 1f, 0.3f), TextAnchor.MiddleCenter);
+                    16, new Color(1f, 1f, 1f, 0.3f), TextAnchor.MiddleCenter);
 
                 // highlight del espacio nuevo cuando sube el lag (pulsa en ámbar)
                 _lagSeg = hud.MakeImage(_area, "LagSeg", new Vector2(0f, 0.5f), Vector2.zero, new Vector2(0f, height), Palette.Guard);
                 _lagSeg.rectTransform.pivot = new Vector2(0f, 0.5f);
                 _lagLabel = hud.MakeTextP(_lagSeg.rectTransform, "L", "", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(400f, 20f),
-                    9, Palette.Guard, TextAnchor.MiddleCenter);
+                    8, Palette.Guard, TextAnchor.MiddleCenter);
                 _lagSeg.gameObject.SetActive(false);
 
                 _stunSeg = hud.MakeImage(_area, "StunSeg", new Vector2(0f, 0.5f), Vector2.zero, new Vector2(0f, height - 4f), Color.white);
@@ -826,6 +968,26 @@ namespace LagFighter
                         if (_dim) c = new Color(c.r, c.g, c.b, 0.8f);
                         chip.color = c;
                         _labels[used - 1].text = ChipLabel(mi);
+
+                        // fases dentro de la ficha (solo moves con ventana activa):
+                        // el mismo amarillo/rojo/azul del panel de info
+                        int ci = used - 1;
+                        bool phased = m.Active > 0;
+                        _phS[ci].gameObject.SetActive(phased);
+                        _phA[ci].gameObject.SetActive(phased);
+                        _phR[ci].gameObject.SetActive(phased);
+                        if (phased)
+                        {
+                            float wS = w * m.Startup / m.Total;
+                            float wA = w * m.Active / m.Total;
+                            float wR = w - wS - wA;
+                            _phS[ci].rectTransform.anchoredPosition = new Vector2(0f, 2f);
+                            _phS[ci].rectTransform.sizeDelta = new Vector2(wS, 5f);
+                            _phA[ci].rectTransform.anchoredPosition = new Vector2(wS, 2f);
+                            _phA[ci].rectTransform.sizeDelta = new Vector2(wA, 5f);
+                            _phR[ci].rectTransform.anchoredPosition = new Vector2(wS + wA, 2f);
+                            _phR[ci].rectTransform.sizeDelta = new Vector2(Mathf.Max(0f, wR), 5f);
+                        }
                         x += m.Total * px;
                     }
                 }
@@ -843,9 +1005,19 @@ namespace LagFighter
                     t.fontStyle = FontStyle.Bold;
                     _chips.Add(img);
                     _labels.Add(t);
+                    _phS.Add(PhaseBar(img, new Color(0.95f, 0.85f, 0.25f, 0.9f)));
+                    _phA.Add(PhaseBar(img, new Color(0.95f, 0.3f, 0.22f, 0.95f)));
+                    _phR.Add(PhaseBar(img, new Color(0.3f, 0.55f, 0.95f, 0.9f)));
                 }
                 _chips[i].gameObject.SetActive(true);
                 return _chips[i];
+            }
+
+            Image PhaseBar(Image chip, Color c)
+            {
+                var bar = _hud.MakeImage(chip.rectTransform, "Ph", new Vector2(0f, 0f), Vector2.zero, Vector2.zero, c);
+                bar.rectTransform.pivot = new Vector2(0f, 0f);
+                return bar;
             }
         }
 

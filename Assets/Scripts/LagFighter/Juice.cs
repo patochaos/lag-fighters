@@ -9,7 +9,25 @@ namespace LagFighter
     // del avance de ticks; no toca la sim).
     public static class SfxLib
     {
-        public enum Kind { Hit, Counter, Block, Ko, Fireball, TurnStart, Glitch }
+        public enum Kind { Hit, Counter, Block, Ko, Fireball, TurnStart, Glitch, UiTick, UiClick, UiCancel }
+
+        // master de SFX (botón en OPC, persiste). La VOZ tiene su propio toggle.
+        static bool _enabled = true;
+        static bool _prefLoaded;
+        public static bool Enabled
+        {
+            get
+            {
+                if (!_prefLoaded) { _prefLoaded = true; _enabled = PlayerPrefs.GetInt("lf_sfx", 1) == 1; }
+                return _enabled;
+            }
+            set
+            {
+                _prefLoaded = true;
+                _enabled = value;
+                PlayerPrefs.SetInt("lf_sfx", value ? 1 : 0);
+            }
+        }
 
         static AudioSource _source;
         static AudioClip[] _clips;
@@ -25,7 +43,7 @@ namespace LagFighter
             var rng = new System.Random(7);
             Func<float> noise = () => (float)(rng.NextDouble() * 2.0 - 1.0);
 
-            _clips = new AudioClip[7];
+            _clips = new AudioClip[10];
             _clips[(int)Kind.Hit] = Make("hit", 0.11f, t =>
                 Mathf.Sin(t * 140f * Mathf.PI * 2f) * 0.9f * Mathf.Exp(-t * 28f) + noise() * 0.45f * Mathf.Exp(-t * 40f));
             _clips[(int)Kind.Counter] = Make("counter", 0.14f, t =>
@@ -41,6 +59,15 @@ namespace LagFighter
             // estática entrecortada: la conexión empeorando (subida de lag)
             _clips[(int)Kind.Glitch] = Make("glitch", 0.45f, t =>
                 (Mathf.Sin(t * 30f * Mathf.PI * 2f) > 0f ? 1f : 0.15f) * noise() * 0.5f * Mathf.Exp(-t * 4f));
+            // blips de UI: tick suave (hover/navegar), click (agregar/confirmar),
+            // cancel grave (borrar/deshacer)
+            _clips[(int)Kind.UiTick] = Make("uitick", 0.035f, t =>
+                Mathf.Sin(t * 880f * Mathf.PI * 2f) * 0.3f * Mathf.Exp(-t * 60f));
+            _clips[(int)Kind.UiClick] = Make("uiclick", 0.06f, t =>
+                Mathf.Sin(t * 620f * Mathf.PI * 2f) * 0.45f * Mathf.Exp(-t * 40f) +
+                Mathf.Sin(t * 930f * Mathf.PI * 2f) * 0.2f * Mathf.Exp(-t * 55f));
+            _clips[(int)Kind.UiCancel] = Make("uicancel", 0.07f, t =>
+                Mathf.Sin(t * 300f * Mathf.PI * 2f) * 0.4f * Mathf.Exp(-t * 35f));
         }
 
         static AudioClip Make(string name, float dur, Func<float, float> wave)
@@ -57,6 +84,7 @@ namespace LagFighter
 
         public static void Play(Kind kind, float volume = 1f)
         {
+            if (!Enabled) return;
             EnsureInit();
             _source.PlayOneShot(_clips[(int)kind], volume);
         }
@@ -75,6 +103,7 @@ namespace LagFighter
         public static bool Enabled = true;
         static AudioClip _clip;
         static bool _loaded;
+        static AudioSource _src; // fuente propia: el pitch aleatorio no toca los SFX
 
         public static void Play(float volume = 0.85f)
         {
@@ -84,7 +113,17 @@ namespace LagFighter
                 _clip = Resources.Load<AudioClip>("LagFighter/announcer");
                 _loaded = true;
             }
-            if (_clip != null) SfxLib.PlayClip(_clip, volume);
+            if (_clip == null) return;
+            if (_src == null)
+            {
+                var go = new GameObject("LagFighter.Announcer");
+                UnityEngine.Object.DontDestroyOnLoad(go);
+                _src = go.AddComponent<AudioSource>();
+                _src.spatialBlend = 0f;
+            }
+            // ±8% de pitch por reproducción: disimula que es siempre el mismo mp3
+            _src.pitch = 0.92f + UnityEngine.Random.value * 0.16f;
+            _src.PlayOneShot(_clip, volume);
         }
     }
 

@@ -143,6 +143,54 @@ namespace LagFighter
         }
     }
 
+    // Cursor pixel-art generado en runtime (cero assets): flecha blanca con
+    // borde oscuro, a tono con la estética Press Start 2P.
+    public static class CursorFX
+    {
+        // '#' = relleno claro, 'X' = borde oscuro, '.' = transparente
+        static readonly string[] Arrow =
+        {
+            "X...........",
+            "XX..........",
+            "X#X.........",
+            "X##X........",
+            "X###X.......",
+            "X####X......",
+            "X#####X.....",
+            "X######X....",
+            "X#######X...",
+            "X########X..",
+            "X#####XXXXX.",
+            "X##X##X.....",
+            "X#X.X##X....",
+            "XX..X##X....",
+            ".....X##X...",
+            ".....X##X...",
+            "......XX....",
+        };
+
+        public static void Apply()
+        {
+            const int S = 24;
+            var tex = new Texture2D(S, S, TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Point;
+            var clear = new Color(0f, 0f, 0f, 0f);
+            var fill = new Color(0.95f, 0.97f, 1f);
+            var edge = new Color(0.04f, 0.05f, 0.09f);
+            for (int y = 0; y < S; y++)
+                for (int x = 0; x < S; x++)
+                    tex.SetPixel(x, y, clear);
+            for (int r = 0; r < Arrow.Length; r++)
+                for (int c = 0; c < Arrow[r].Length; c++)
+                {
+                    if (Arrow[r][c] == '.') continue;
+                    tex.SetPixel(c, S - 1 - r, Arrow[r][c] == '#' ? fill : edge);
+                }
+            tex.Apply();
+            Cursor.SetCursor(tex, Vector2.zero, CursorMode.Auto);
+        }
+    }
+
     // Rango del movimiento hovereado, dibujado EN el escenario frente al
     // peleador que planifica (hitboxes, línea del proyectil, arco del salto,
     // pasos de movimiento). La framedata como intuición espacial.

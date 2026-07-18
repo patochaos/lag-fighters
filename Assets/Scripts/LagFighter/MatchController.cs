@@ -105,8 +105,20 @@ namespace LagFighter
             new GameObject("LagFighter.Match").AddComponent<MatchController>();
         }
 
+        // Tips de la primera vez, solo en Práctica. Avanzan con lo que hacés
+        // (primera orden, cada turno confirmado) y no vuelven (PlayerPrefs).
+        static readonly string[] Tips =
+        {
+            "TIP: pasá el mouse por las cartas para ver qué hacen · click las agrega al turno (probá CAMINAR y después GOLPE A)",
+            "TIP: el fantasma es tu plan · arrastrá tu barra de abajo para verlo cuadro a cuadro · click derecho en una ficha la borra",
+            "TIP: H muestra las cajas de golpe · el panel derecho da startup / activo / recovery de cada movimiento",
+            "TIP: \"pegaría N si no se mueve\" es contra un rival quieto — en VS IA va a reaccionar · M vuelve al menú",
+        };
+        int _tipStage = -1;
+
         void Start()
         {
+            CursorFX.Apply();
             ArenaBuilder.Build();
             Sim = new MatchSim();
             _views[0] = FighterView.Create(0, this);
@@ -130,6 +142,8 @@ namespace LagFighter
             _awaitingCode = false;
             if (Mode == GameMode.Online) NetLobby.I.Leave(); // suelta la sala y corta polls
             State = Flow.ModeSelect;
+            _tipStage = -1;
+            _hud.SetTip("");
             _menu.Close();
             _ghost.Clear();
             _modeMenu.Open();
@@ -145,7 +159,21 @@ namespace LagFighter
             SelectedAIProfile = aiProfile;
             SelectedAIDifficulty = aiDifficulty;
             _modeMenu.Close();
+            _tipStage = mode == GameMode.Practice && PlayerPrefs.GetInt("lf_tips", 0) == 0 ? 0 : -1;
+            _hud.SetTip(_tipStage >= 0 ? Tips[0] : "");
             ResetMatch();
+        }
+
+        void AdvanceTip()
+        {
+            if (_tipStage < 0) return;
+            _tipStage++;
+            if (_tipStage >= Tips.Length)
+            {
+                _tipStage = -1;
+                PlayerPrefs.SetInt("lf_tips", 1); // no molestar nunca más
+            }
+            _hud.SetTip(_tipStage >= 0 ? Tips[_tipStage] : "");
         }
 
         void ResetMatch()
@@ -324,6 +352,7 @@ namespace LagFighter
         {
             if (!PlanFits(moveIndex)) return;
             _plans[Picker].Add(moveIndex);
+            if (_tipStage == 0) AdvanceTip(); // primera orden puesta: siguiente tip
             UpdateGhost();
         }
 
@@ -353,6 +382,7 @@ namespace LagFighter
 
         public void PlanConfirm()
         {
+            if (_tipStage >= 1) AdvanceTip(); // cada turno confirmado avanza el tutorial
             if (Mode == GameMode.PvP && Picker == 0)
             {
                 BeginHandoff(1);

@@ -134,7 +134,7 @@ namespace LagFighter
             band.GetComponent<Image>().color = new Color(0f, 0f, 0f, hasSplash ? 0.62f : 0.25f);
             band.GetComponent<Image>().raycastTarget = false;
 
-            _stepTitle = Txt(rootRt, "Step", "", new Vector2(0f, 175f), 15, new Color(1f, 1f, 1f, 0.85f), FontStyle.Normal);
+            _stepTitle = Txt(rootRt, "Step", "", new Vector2(0f, 175f), 16, new Color(1f, 1f, 1f, 0.85f), FontStyle.Normal);
             _stepTitle.font = UIFonts.Pixel;
 
             // Perfil IA usa seis cartas en una grilla 3x2.
@@ -150,7 +150,7 @@ namespace LagFighter
                 _cards[i] = card.GetComponent<Image>();
                 _cards[i].raycastTarget = false;
 
-                var k = Txt(rt, "K", (i + 1).ToString(), new Vector2(-118f, 32f), 12, new Color(1f, 1f, 1f, 0.5f), FontStyle.Normal);
+                var k = Txt(rt, "K", (i + 1).ToString(), new Vector2(-118f, 32f), 8, new Color(1f, 1f, 1f, 0.5f), FontStyle.Normal);
                 k.font = UIFonts.Pixel;
                 _cardLabels[i] = Txt(rt, "L", "", new Vector2(0f, 0f), 15, Color.white, FontStyle.Normal);
                 _cardLabels[i].font = UIFonts.Pixel;
@@ -196,7 +196,7 @@ namespace LagFighter
             _root.SetActive(true);
             _active = true;
             _step = 0;
-            _sel = 0;
+            _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_lag", 0), 0, LagOptions.Length - 1); // arranca donde quedaste
             Layout();
         }
 
@@ -244,7 +244,7 @@ namespace LagFighter
                 _cards[i].rectTransform.anchoredPosition = new Vector2(x, y);
                 _cardLabels[i].text = _step == 0 ? LagOptions[i].label : _step == 1 ? Modes[i].label :
                     _step == 2 ? Sides[i].label : _step == 3 ? AIProfiles[i].label : AIDifficulties[i].label;
-                _cardLabels[i].fontSize = count >= 4 ? 23 : 28;
+                _cardLabels[i].fontSize = count >= 4 ? 16 : 24;
             }
             _desc.rectTransform.anchoredPosition = new Vector2(0f, count > 4 ? -145f : -86f);
             if (count > 0) Highlight(_sel);
@@ -266,20 +266,24 @@ namespace LagFighter
 
         void Confirm(int idx)
         {
+            SfxLib.Play(SfxLib.Kind.UiClick, 0.8f);
             if (_step == 0)
             {
                 _lagChoice = idx == 1;
+                PlayerPrefs.SetInt("lf_menu_lag", idx);
                 _step = 1;
-                _sel = 1; // VS IA por defecto
+                // el menú recuerda tu último modo (VS IA la primera vez)
+                _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_mode", 1), 0, Modes.Length - 1);
                 Layout();
                 return;
             }
             if (_step == 1)
             {
+                PlayerPrefs.SetInt("lf_menu_mode", idx);
                 if (Modes[idx].mode == GameMode.VsAI)
                 {
                     _step = 3;
-                    _sel = 0; // RANDOM por defecto
+                    _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_profile", 0), 0, AIProfiles.Length - 1);
                     Layout();
                     return;
                 }
@@ -335,11 +339,13 @@ namespace LagFighter
             if (_step == 3)
             {
                 _aiProfileChoice = AIProfiles[idx].profile;
+                PlayerPrefs.SetInt("lf_menu_profile", idx);
                 _step = 4;
-                _sel = 1; // NORMAL por defecto
+                _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_diff", 1), 0, AIDifficulties.Length - 1);
                 Layout();
                 return;
             }
+            PlayerPrefs.SetInt("lf_menu_diff", idx);
             _mc.StartMatch(GameMode.VsAI, _lagChoice, 0, _aiProfileChoice, AIDifficulties[idx].difficulty);
         }
 
@@ -387,7 +393,7 @@ namespace LagFighter
                 for (int i = 0; i < OptionCount; i++)
                 {
                     if (!RectTransformUtility.RectangleContainsScreenPoint(_cards[i].rectTransform, mp, null)) continue;
-                    if (i != _sel) Highlight(i);
+                    if (i != _sel) { Highlight(i); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
                     break;
                 }
             }
@@ -403,10 +409,10 @@ namespace LagFighter
                 }
             }
 
-            if (GameInput.LeftPressed()) Highlight(_sel - 1);
-            if (GameInput.RightPressed()) Highlight(_sel + 1);
-            if (_step == 3 && GameInput.UpPressed()) Highlight(_sel - 3);
-            if (_step == 3 && GameInput.DownPressed()) Highlight(_sel + 3);
+            if (GameInput.LeftPressed()) { Highlight(_sel - 1); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
+            if (GameInput.RightPressed()) { Highlight(_sel + 1); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
+            if (_step == 3 && GameInput.UpPressed()) { Highlight(_sel - 3); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
+            if (_step == 3 && GameInput.DownPressed()) { Highlight(_sel + 3); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
             int n = GameInput.NumberPressed();
             if (n >= 1 && n <= OptionCount) { Confirm(n - 1); return; }
             if (GameInput.ConfirmPressed()) Confirm(_sel);
