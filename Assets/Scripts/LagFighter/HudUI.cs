@@ -119,12 +119,13 @@ namespace LagFighter
             _turnSummary = MakeText(_canvasRt, "TurnSummary", "", new Vector2(0.5f, 1f), new Vector2(0f, -102f), new Vector2(1400f, 22f),
                 16, new Color(0.85f, 0.9f, 1f, 0.8f), TextAnchor.MiddleCenter);
 
-            // timelines del turno (fila propia abajo, rival arriba)
-            _row1 = new TimelineRow(this, "Row1", y: 262f, height: 40f, dim: true, side: 1);
-            _row0 = new TimelineRow(this, "Row0", y: 316f, height: 40f, dim: false, side: 0);
-            MakeTextP(_canvasRt, "Row0Label", "VOS", new Vector2(0.5f, 0f), new Vector2(-RowW / 2f - 52f, 316f + 20f), new Vector2(90f, 20f),
+            // timelines del turno (fila propia abajo, rival arriba) — LAS
+            // protagonistas: acá se cargan los movimientos, que se vean bien
+            _row1 = new TimelineRow(this, "Row1", y: 246f, height: 52f, dim: true, side: 1);
+            _row0 = new TimelineRow(this, "Row0", y: 312f, height: 52f, dim: false, side: 0);
+            MakeTextP(_canvasRt, "Row0Label", "VOS", new Vector2(0.5f, 0f), new Vector2(-RowW / 2f - 52f, 312f + 26f), new Vector2(90f, 20f),
                 9, Palette.P1, TextAnchor.MiddleRight);
-            MakeTextP(_canvasRt, "Row1Label", "RIVAL", new Vector2(0.5f, 0f), new Vector2(-RowW / 2f - 52f, 262f + 20f), new Vector2(90f, 20f),
+            MakeTextP(_canvasRt, "Row1Label", "RIVAL", new Vector2(0.5f, 0f), new Vector2(-RowW / 2f - 52f, 246f + 26f), new Vector2(90f, 20f),
                 9, Palette.P2, TextAnchor.MiddleRight);
 
             _banner = MakeText(_canvasRt, "Banner", "", new Vector2(0.5f, 0.5f), new Vector2(0f, 150f), new Vector2(1200f, 160f),
@@ -698,7 +699,7 @@ namespace LagFighter
                     14, Color.white, TextAnchor.MiddleCenter);
                 _stunLabel.fontStyle = FontStyle.Bold;
 
-                _playhead = hud.MakeImage(_area, "Playhead", new Vector2(0f, 0.5f), Vector2.zero, new Vector2(3f, height), Color.white);
+                _playhead = hud.MakeImage(_area, "Playhead", new Vector2(0f, 0.5f), Vector2.zero, new Vector2(4f, height), Color.white);
                 _playhead.rectTransform.pivot = new Vector2(0.5f, 0.5f);
             }
 
@@ -769,7 +770,7 @@ namespace LagFighter
                 {
                     var img = _hud.MakeImage(_chipParent, "Chip", new Vector2(0f, 0.5f), Vector2.zero, Vector2.one, Color.white);
                     img.rectTransform.pivot = new Vector2(0f, 0.5f);
-                    var t = _hud.MakeText(img.rectTransform, "L", "", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(60f, 26f), 18, Color.white, TextAnchor.MiddleCenter);
+                    var t = _hud.MakeText(img.rectTransform, "L", "", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(64f, 30f), 21, Color.white, TextAnchor.MiddleCenter);
                     t.fontStyle = FontStyle.Bold;
                     _chips.Add(img);
                     _labels.Add(t);

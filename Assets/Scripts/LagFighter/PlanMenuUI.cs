@@ -14,7 +14,7 @@ namespace LagFighter
     public class PlanMenuUI : MonoBehaviour
     {
         const int Cols = 7;
-        const float CardW = 196f, CardH = 118f, Gap = 6f;
+        const float CardW = 168f, CardH = 44f, Gap = 6f;
 
         // orden de display: movimiento arriba, acción abajo
         static readonly int[] Order =
@@ -30,11 +30,15 @@ namespace LagFighter
         MatchController _mc;
         Font _font;
         GameObject _root;
-        Image[] _cardBg, _cardHeader, _cardOverlay;
+        Image[] _cardBg, _cardEdge, _cardOverlay;
+        Text[] _cardName;
         RectTransform[] _cardRt;
         Image _undoBtn, _doneBtn, _wakeBtn;
         Text _wakeLabel;
-        Text _detailTitle, _detail, _status;
+        // panel de info a la derecha de la grilla: se llena con el hover
+        Text _detailTitle, _detailFrames, _detailTag, _detail, _status;
+        Image _segBg, _segS, _segA, _segR;
+        float _segW;
         int _sel;
         bool _active;
         Vector2 _lastMouse;
@@ -114,7 +118,8 @@ namespace LagFighter
                 new Vector2(totalW + 28f, totalH + 28f), new Color(0.04f, 0.05f, 0.07f, 0.85f));
 
             _cardBg = new Image[Order.Length];
-            _cardHeader = new Image[Order.Length];
+            _cardEdge = new Image[Order.Length];
+            _cardName = new Text[Order.Length];
             _cardOverlay = new Image[Order.Length];
             _cardRt = new RectTransform[Order.Length];
 
@@ -127,43 +132,25 @@ namespace LagFighter
                 float y = totalH / 2f - CardH / 2f - row * (CardH + Gap);
                 var cat = CategoryColor(mi);
 
+                // carta compacta: solo el nombre, grande. La data vive en el
+                // panel de info de la derecha (se llena con el hover).
                 var card = MakeImage(panel.rectTransform, "Card" + pos, new Vector2(0.5f, 0.5f), new Vector2(x, y),
                     new Vector2(CardW, CardH), new Color(0.12f, 0.13f, 0.17f, 0.98f));
                 _cardBg[pos] = card;
                 _cardRt[pos] = card.rectTransform;
 
-                // franja superior de categoría con el nombre
-                var header = MakeImage(card.rectTransform, "Header", new Vector2(0.5f, 1f), new Vector2(0f, -13f),
-                    new Vector2(CardW, 26f), new Color(cat.r, cat.g, cat.b, 0.85f));
-                _cardHeader[pos] = header;
-                var name = MakeText(header.rectTransform, "Name", m.Name.ToUpperInvariant(), new Vector2(0.5f, 0.5f), Vector2.zero,
-                    new Vector2(CardW - 30f, 22f), 9, Color.white, TextAnchor.MiddleCenter);
-                name.font = UIFonts.Pixel;
+                // borde izquierdo con el color de la categoría
+                _cardEdge[pos] = MakeImage(card.rectTransform, "Edge", new Vector2(0f, 0.5f), new Vector2(3f, 0f),
+                    new Vector2(6f, CardH - 6f), new Color(cat.r, cat.g, cat.b, 0.9f));
+
+                _cardName[pos] = MakeText(card.rectTransform, "Name", m.Name.ToUpperInvariant(), new Vector2(0.5f, 0.5f), new Vector2(6f, 0f),
+                    new Vector2(CardW - 26f, 30f), 11, new Color(1f, 1f, 1f, 0.92f), TextAnchor.MiddleCenter);
+                _cardName[pos].font = UIFonts.Pixel;
 
                 string key = pos < 9 ? (pos + 1).ToString() : pos == 9 ? "0" : "";
-                var keyT = MakeText(header.rectTransform, "Key", key, new Vector2(0f, 0.5f), new Vector2(10f, 0f),
-                    new Vector2(20f, 20f), 9, new Color(1f, 1f, 1f, 0.65f), TextAnchor.MiddleLeft);
+                var keyT = MakeText(card.rectTransform, "Key", key, new Vector2(0f, 1f), new Vector2(14f, -10f),
+                    new Vector2(20f, 16f), 8, new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleLeft);
                 keyT.font = UIFonts.Pixel;
-
-                // mini-barra de framedata: startup/activo/recovery a escala
-                float barY = -34f, barW = CardW - 22f;
-                MakeImage(card.rectTransform, "BarBg", new Vector2(0.5f, 1f), new Vector2(0f, barY), new Vector2(barW, 9f), new Color(0f, 0f, 0f, 0.55f));
-                float px = barW / m.Total;
-                float sx = -barW / 2f;
-                MakeSeg(card.rectTransform, sx, barY, m.Startup * px, new Color(0.95f, 0.85f, 0.25f, 0.95f));
-                MakeSeg(card.rectTransform, sx + m.Startup * px, barY, m.Active * px, new Color(0.95f, 0.3f, 0.22f, 0.95f));
-                MakeSeg(card.rectTransform, sx + (m.Startup + m.Active) * px, barY, m.Recovery * px, new Color(0.3f, 0.55f, 0.95f, 0.95f));
-
-                MakeText(card.rectTransform, "Frames", $"{m.Startup} / {m.Active} / {m.Recovery}   ·   {m.Total}f",
-                    new Vector2(0.5f, 1f), new Vector2(0f, -52f), new Vector2(CardW - 10f, 18f), 13,
-                    new Color(0.95f, 0.88f, 0.55f), TextAnchor.MiddleCenter);
-
-                string dmg = m.TotalDamage > 0f ? $"{m.TotalDamage:0} DMG" + (m.Hits.Length > 1 ? $" ({m.Hits.Length} hits)" : "") : " ";
-                MakeText(card.rectTransform, "Dmg", dmg, new Vector2(0.5f, 1f), new Vector2(0f, -72f),
-                    new Vector2(CardW - 10f, 18f), 14, Color.white, TextAnchor.MiddleCenter).fontStyle = FontStyle.Bold;
-
-                MakeText(card.rectTransform, "Tag", CardTag(mi), new Vector2(0.5f, 0f), new Vector2(0f, 13f),
-                    new Vector2(CardW - 8f, 16f), 11, new Color(cat.r * 0.6f + 0.4f, cat.g * 0.6f + 0.4f, cat.b * 0.6f + 0.4f), TextAnchor.MiddleCenter);
 
                 // overlay de "no te entra en el turno" (tapa toda la carta)
                 _cardOverlay[pos] = MakeImage(card.rectTransform, "Overlay", new Vector2(0.5f, 0.5f), Vector2.zero,
@@ -171,45 +158,62 @@ namespace LagFighter
                 _cardOverlay[pos].gameObject.SetActive(false);
             }
 
-            float sideX = totalW / 2f + 84f;
-            float sideY = 26f + totalH / 2f + 12f;
-            _undoBtn = MakeImage(rootRt, "UndoBtn", new Vector2(0.5f, 0f), new Vector2(-sideX, sideY + 32f), new Vector2(120f, 48f), new Color(0.4f, 0.2f, 0.2f, 0.95f));
-            MakeText(_undoBtn.rectTransform, "T", "← BORRAR", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(116f, 30f), 15, Color.white, TextAnchor.MiddleCenter).fontStyle = FontStyle.Bold;
-            _doneBtn = MakeImage(rootRt, "DoneBtn", new Vector2(0.5f, 0f), new Vector2(sideX, sideY + 32f), new Vector2(120f, 48f), new Color(0.18f, 0.45f, 0.22f, 0.95f));
-            MakeText(_doneBtn.rectTransform, "T", "¡LISTO!", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(116f, 30f), 15, Color.white, TextAnchor.MiddleCenter).fontStyle = FontStyle.Bold;
+            // LISTO y BORRAR apilados a la izquierda de la grilla
+            float sideX = totalW / 2f + 96f;
+            _doneBtn = MakeImage(rootRt, "DoneBtn", new Vector2(0.5f, 0f), new Vector2(-sideX, 118f), new Vector2(150f, 54f), new Color(0.18f, 0.45f, 0.22f, 0.95f));
+            MakeText(_doneBtn.rectTransform, "T", "¡LISTO!", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(146f, 30f), 16, Color.white, TextAnchor.MiddleCenter).fontStyle = FontStyle.Bold;
+            _undoBtn = MakeImage(rootRt, "UndoBtn", new Vector2(0.5f, 0f), new Vector2(-sideX, 62f), new Vector2(150f, 44f), new Color(0.4f, 0.2f, 0.2f, 0.95f));
+            MakeText(_undoBtn.rectTransform, "T", "← BORRAR", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(146f, 30f), 14, Color.white, TextAnchor.MiddleCenter).fontStyle = FontStyle.Bold;
 
             // wakeup option: solo aparece si arrancás el turno derribado
-            _wakeBtn = MakeImage(rootRt, "WakeBtn", new Vector2(0.5f, 0f), new Vector2(-sideX, sideY + 100f), new Vector2(150f, 58f), new Color(0.5f, 0.32f, 0.1f, 0.95f));
-            _wakeLabel = MakeText(_wakeBtn.rectTransform, "T", "", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(146f, 50f), 14, Color.white, TextAnchor.MiddleCenter);
+            _wakeBtn = MakeImage(rootRt, "WakeBtn", new Vector2(0.5f, 0f), new Vector2(-sideX, 190f), new Vector2(160f, 56f), new Color(0.5f, 0.32f, 0.1f, 0.95f));
+            _wakeLabel = MakeText(_wakeBtn.rectTransform, "T", "", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(156f, 50f), 13, Color.white, TextAnchor.MiddleCenter);
             _wakeLabel.fontStyle = FontStyle.Bold;
             _wakeBtn.gameObject.SetActive(false);
 
-            // panel de detalle: qué hace la carta seleccionada, legible de verdad
-            // (título con el color de la categoría + descripción grande, fondo propio)
-            float detailY = 26f + totalH + 34f;
-            var detailBg = MakeImage(rootRt, "DetailBg", new Vector2(0.5f, 0f), new Vector2(0f, detailY + 46f),
-                new Vector2(totalW + 28f, 92f), new Color(0.04f, 0.05f, 0.07f, 0.92f));
-            var dbr = detailBg.rectTransform;
+            // panel de info a la DERECHA de la grilla: nombre, framedata con
+            // mini-barra S/A/R, tag y descripción del movimiento hovereado.
+            // Nunca tapa la timeline: vive en el espacio muerto del costado.
+            var infoBg = MakeImage(rootRt, "InfoBg", new Vector2(0.5f, 0f), new Vector2(sideX + 96f, 26f + (totalH + 28f) / 2f),
+                new Vector2(330f, totalH + 28f), new Color(0.04f, 0.05f, 0.07f, 0.94f));
+            var ibr = infoBg.rectTransform;
 
-            _detailTitle = MakeText(dbr, "Title", "", new Vector2(0f, 1f), new Vector2(18f, -22f),
-                new Vector2(620f, 24f), 12, Color.white, TextAnchor.MiddleLeft);
+            _detailTitle = MakeText(ibr, "Title", "", new Vector2(0f, 1f), new Vector2(14f, -18f),
+                new Vector2(302f, 22f), 10, Color.white, TextAnchor.MiddleLeft);
             _detailTitle.font = UIFonts.Pixel;
             _detailTitle.rectTransform.pivot = new Vector2(0f, 0.5f);
 
-            _detail = MakeText(dbr, "Detail", "", new Vector2(0f, 1f), new Vector2(18f, -58f),
-                new Vector2(totalW - 20f, 30f), 19, new Color(1f, 1f, 1f, 0.95f), TextAnchor.MiddleLeft);
-            _detail.rectTransform.pivot = new Vector2(0f, 0.5f);
+            _detailFrames = MakeText(ibr, "Frames", "", new Vector2(0f, 1f), new Vector2(14f, -42f),
+                new Vector2(302f, 20f), 14, new Color(0.95f, 0.88f, 0.55f), TextAnchor.MiddleLeft);
+            _detailFrames.rectTransform.pivot = new Vector2(0f, 0.5f);
 
-            _status = MakeText(dbr, "Status", "", new Vector2(1f, 1f), new Vector2(-18f, -22f),
+            // mini-barra S/A/R (amarillo/rojo/azul, mismo lenguaje del HUD)
+            _segW = 302f;
+            _segBg = MakeImage(ibr, "SegBg", new Vector2(0f, 1f), new Vector2(14f, -58f), new Vector2(_segW, 8f), new Color(0f, 0f, 0f, 0.55f));
+            _segBg.rectTransform.pivot = new Vector2(0f, 0.5f);
+            _segS = MakeImage(ibr, "SegS", new Vector2(0f, 1f), new Vector2(14f, -58f), new Vector2(0f, 8f), new Color(0.95f, 0.85f, 0.25f, 0.95f));
+            _segS.rectTransform.pivot = new Vector2(0f, 0.5f);
+            _segA = MakeImage(ibr, "SegA", new Vector2(0f, 1f), new Vector2(14f, -58f), new Vector2(0f, 8f), new Color(0.95f, 0.3f, 0.22f, 0.95f));
+            _segA.rectTransform.pivot = new Vector2(0f, 0.5f);
+            _segR = MakeImage(ibr, "SegR", new Vector2(0f, 1f), new Vector2(14f, -58f), new Vector2(0f, 8f), new Color(0.3f, 0.55f, 0.95f, 0.95f));
+            _segR.rectTransform.pivot = new Vector2(0f, 0.5f);
+
+            _detailTag = MakeText(ibr, "Tag", "", new Vector2(0f, 1f), new Vector2(14f, -76f),
+                new Vector2(302f, 18f), 8, Color.white, TextAnchor.MiddleLeft);
+            _detailTag.font = UIFonts.Pixel;
+            _detailTag.rectTransform.pivot = new Vector2(0f, 0.5f);
+
+            _detail = MakeText(ibr, "Desc", "", new Vector2(0f, 1f), new Vector2(14f, -88f),
+                new Vector2(302f, 40f), 13, new Color(1f, 1f, 1f, 0.85f), TextAnchor.UpperLeft);
+            _detail.rectTransform.pivot = new Vector2(0f, 1f);
+            _detail.horizontalOverflow = HorizontalWrapMode.Wrap; // que envuelva, no que desborde
+
+            // estado del plan, arriba de la grilla a la derecha
+            _status = MakeText(rootRt, "Status", "", new Vector2(0.5f, 0f), new Vector2(totalW / 2f + 14f, 26f + totalH + 44f),
                 new Vector2(900f, 22f), 14, new Color(0.5f, 1f, 0.6f), TextAnchor.MiddleRight);
             _status.rectTransform.pivot = new Vector2(1f, 0.5f);
             MakeText(rootRt, "Help", "click/1-9 agrega · Backspace borra · arrastrá tu timeline = scrub del ghost · click derecho en ficha = borrarla · ESPACIO cierra",
                 new Vector2(0.5f, 0f), new Vector2(0f, 6f), new Vector2(1300f, 20f), 13, new Color(1f, 1f, 1f, 0.45f), TextAnchor.MiddleCenter);
-        }
-
-        void MakeSeg(RectTransform parent, float x, float y, float w, Color c)
-        {
-            MakeImage(parent, "Seg", new Vector2(0.5f, 1f), new Vector2(x + w / 2f, y), new Vector2(Mathf.Max(0f, w - 1f), 9f), c);
         }
 
         public void Open(int picker)
@@ -258,15 +262,29 @@ namespace LagFighter
                 bool fits = _mc.PlanFits(Order[i]);
                 bool sel = i == _sel;
                 _cardBg[i].color = sel ? new Color(0.22f, 0.3f, 0.42f, 1f) : new Color(0.12f, 0.13f, 0.17f, 0.98f);
-                var hc = _cardHeader[i].color;
-                hc.a = sel ? 1f : 0.85f;
-                _cardHeader[i].color = hc;
+                _cardName[i].color = sel ? Color.white : new Color(1f, 1f, 1f, 0.85f);
                 _cardOverlay[i].gameObject.SetActive(!fits);
             }
-            var m = MoveCatalog.All[Order[_sel]];
-            var cat = CategoryColor(Order[_sel]);
-            _detailTitle.text = $"{m.Name.ToUpperInvariant()}  ·  {CardTag(Order[_sel]).ToUpperInvariant()}";
+
+            // panel de info: toda la data que antes vivía apretada en la carta
+            int mi = Order[_sel];
+            var m = MoveCatalog.All[mi];
+            var cat = CategoryColor(mi);
+            _detailTitle.text = m.Name.ToUpperInvariant();
             _detailTitle.color = new Color(cat.r * 0.5f + 0.5f, cat.g * 0.5f + 0.5f, cat.b * 0.5f + 0.5f);
+
+            string dmg = m.TotalDamage > 0f ? $"   ·   {m.TotalDamage:0} DMG" + (m.Hits.Length > 1 ? $" ({m.Hits.Length} hits)" : "") : "";
+            _detailFrames.text = $"{m.Startup} / {m.Active} / {m.Recovery}  ·  {m.Total}f{dmg}";
+
+            float px = _segW / m.Total;
+            _segS.rectTransform.sizeDelta = new Vector2(m.Startup * px, 8f);
+            _segA.rectTransform.anchoredPosition = new Vector2(14f + m.Startup * px, -58f);
+            _segA.rectTransform.sizeDelta = new Vector2(m.Active * px, 8f);
+            _segR.rectTransform.anchoredPosition = new Vector2(14f + (m.Startup + m.Active) * px, -58f);
+            _segR.rectTransform.sizeDelta = new Vector2(m.Recovery * px, 8f);
+
+            _detailTag.text = CardTag(mi).ToUpperInvariant();
+            _detailTag.color = new Color(cat.r * 0.6f + 0.4f, cat.g * 0.6f + 0.4f, cat.b * 0.6f + 0.4f);
             _detail.text = m.Desc;
 
             // el rango del movimiento se dibuja EN el escenario (Into the Breach)
