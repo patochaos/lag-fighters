@@ -2,6 +2,36 @@
 
 Cada subida a GitHub agrega acá sus change notes.
 
+## 0.4.2 — 2026-07-18 (pulido UI/UX y arte — la sim no cambia)
+
+### Legibilidad
+- **Sombra de contacto** bajo cada peleador: se achica y desvanece con la
+  altura — por fin se lee dónde cae un salto.
+- **Fases S/A/R dentro de las fichas** de la timeline (amarillo/rojo/azul):
+  se ve en qué frame exacto pega cada orden del turno.
+- **Glow de esquina**: la pared pulsa con el color del jugador acorralado.
+- Pips de vida que **se rompen** (flash + pop + fade) en vez de apagarse.
+- Carteles grandes en dos slots: los avisos de lag ya no pisan COUNTER/K.O.
+
+### Juice de UI
+- Hover con tinte + **blips sintetizados** en todos los botones y cartas;
+  sonidos al agregar/borrar órdenes y confirmar turno.
+- Toggle **SFX ON/OFF** en OPC (persiste). Announcer con pitch aleatorio.
+- Cursor pixel-art procedural, a tono con la Press Start 2P.
+
+### Arte
+- Luces de acento celeste/naranja por lado: los blockmen despegan del fondo.
+- Hadouken con núcleo cúbico rotante y estela.
+- Festejo de KO: saltitos del ganador, burst dorado y público eufórico.
+
+### Flujo
+- El menú de modos **recuerda tu última elección** (lag/modo/perfil/dificultad).
+- Con plan vacío el botón dice **PASAR (quieto, bloquea)**; SKIP aclara
+  ESPACIO; la ayuda del plan quedó en dos líneas.
+- **Tips de primera vez solo en Práctica** (4, avanzan con lo que hacés y no
+  vuelven nunca).
+- Tipografía pixel normalizada a 8/16/24/32 px.
+
 ## 0.4.1 — 2026-07-18 (ONLINE + timers + parry anti-chip)
 
 - **Modo ONLINE**: sala con código de invitación de 4 letras (sin cuentas,
