@@ -429,6 +429,13 @@ namespace LagFighter
                         SfxLib.Play(SfxLib.Kind.Block, 1f);
                         _hitstop = Mathf.Max(_hitstop, 0.08f);
                         break;
+                    case EvKind.GuardCrush:
+                        _views[1 - ev.Attacker].FlashHit();
+                        SfxLib.Play(SfxLib.Kind.Counter);
+                        _hitstop = Mathf.Max(_hitstop, 0.14f);
+                        CamFx()?.Shake(0.11f);
+                        _hud.ShowBigMessage("¡GUARDIA ROTA!", new Color(1f, 0.85f, 0.2f));
+                        break;
                 }
                 _hud.OnSimEvent(ev);
             }

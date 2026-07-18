@@ -3,7 +3,7 @@
 Estado: la build standalone funciona y el loop core está sano. Este plan es
 propuesta — nada está ejecutado. Ordenado por prioridad sugerida.
 
-## 1. Guard gauge (la pregunta de Patricio) — PRÓXIMA SESIÓN
+## 1. Guard gauge (la pregunta de Patricio) — ✅ HECHO (2026-07-17)
 
 Decisión de diseño: **NO** media vida por bloquear (mataría el bloqueo: nadie
 bloquearía y el neutral se vuelve adivinanza pura). **SÍ** block meter:
@@ -15,6 +15,11 @@ bloquearía y el neutral se vuelve adivinanza pura). **SÍ** block meter:
 - UI: barrita amarilla bajo los pips + "¡GUARDIA ROTA!" + framedata visible.
 - El bloqueo queda con dos counters: Agarre (puntual) y crush (estructural).
 - Tunear valores con el lab AI vs AI (agregar guard-crush a las stats).
+
+Implementado tal cual: barra 100, crush 50f + renace al 50%, regen 6/seg
+fuera de guardia/blockstun, guard damage visible en las cartas. Lab: la IA
+casi no cruje (no tortuguea); contra bloqueo permanente, 7 jabs = crush y
+~1 HP por ciclo. Stats de crush agregadas al harness.
 
 ## 2. Profundidad de pelea (corto plazo, baratas)
 

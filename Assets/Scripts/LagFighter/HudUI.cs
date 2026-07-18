@@ -17,6 +17,8 @@ namespace LagFighter
         RectTransform _canvasRt;
         readonly Image[][] _pips = new Image[2][];
         readonly Image[][] _winPips = new Image[2][];
+        readonly Image[] _guardFill = new Image[2];
+        const float GuardBarW = SimConfig.MaxHp * 46f - 8f;
         Text _banner, _prompt, _dist;
         string _bannerOverride = "";
         Image _boxBtn;
@@ -94,9 +96,12 @@ namespace LagFighter
                 12, new Color(1f, 1f, 1f, 0.6f), TextAnchor.MiddleCenter);
         }
 
-        public void ShowLagMessage(string msg)
+        public void ShowLagMessage(string msg) => ShowBigMessage(msg, new Color(1f, 0.35f, 0.3f));
+
+        public void ShowBigMessage(string msg, Color c)
         {
             _lagMsg.text = msg;
+            _lagMsg.color = c;
             _lagMsgTimer = 2.6f;
         }
 
@@ -117,6 +122,14 @@ namespace LagFighter
                 pip.rectTransform.pivot = anchor;
                 _pips[i][p] = pip;
             }
+
+            // barra de guardia (amarilla) bajo los pips de vida
+            var gbg = MakeImage(_canvasRt, label + "GuardBg", anchor,
+                new Vector2(sign * 40f, -74f), new Vector2(GuardBarW, 7f), new Color(0f, 0f, 0f, 0.5f));
+            gbg.rectTransform.pivot = anchor;
+            _guardFill[i] = MakeImage(_canvasRt, label + "Guard", anchor,
+                new Vector2(sign * 40f, -74f), new Vector2(GuardBarW, 7f), new Color(1f, 0.85f, 0.25f));
+            _guardFill[i].rectTransform.pivot = anchor;
 
             // rounds ganados (al mejor de 3)
             _winPips[i] = new Image[MatchController.RoundsToWin];
@@ -175,6 +188,9 @@ namespace LagFighter
                 case EvKind.Whiff:
                     Feedback(atk, $"{mv}: AL AIRE", new Color(1f, 1f, 1f, 0.55f));
                     break;
+                case EvKind.GuardCrush:
+                    Feedback(atk, $"{mv}: ¡ROMPIÓ LA GUARDIA! · {adv}", new Color(1f, 0.85f, 0.2f));
+                    break;
             }
         }
 
@@ -198,6 +214,13 @@ namespace LagFighter
                     c.a = p < sim.Fighters[i].Hp ? 1f : 0.15f;
                     _pips[i][p].color = c;
                 }
+
+                // guardia: se encoge y por debajo del 25% parpadea en rojo
+                float g = sim.Fighters[i].Guard / SimConfig.GuardMax;
+                _guardFill[i].rectTransform.sizeDelta = new Vector2(GuardBarW * g, 7f);
+                _guardFill[i].color = g <= 0.25f
+                    ? Color.Lerp(new Color(1f, 0.85f, 0.25f), new Color(1f, 0.2f, 0.15f), Mathf.PingPong(Time.time * 4f, 1f))
+                    : new Color(1f, 0.85f, 0.25f);
                 if (_fbTimer[i] > 0f)
                 {
                     _fbTimer[i] -= Time.deltaTime;

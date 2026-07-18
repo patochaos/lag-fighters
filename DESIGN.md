@@ -69,6 +69,15 @@ barras y termina parpadeando en rojo (con "ping" falso). La timeline re-escala
 - **Guardia automática (sin botón)**: bloqueás en neutral, esperando o caminando
   atrás, en el piso. Bloquear = BLOCKSTUN (te come turno). En el aire y en
   dash/walk-forward NO se bloquea.
+- **Guard gauge** (2026-07-17): barra de 100 por jugador. Cada bloqueo la come
+  según el golpe: A −15 · B −30 · patadas aéreas −15 · hadouken −20 ·
+  shoryu −35 · tatsu −15/hit. Regenera ~6/seg SOLO cuando no estás bloqueando
+  ni en blockstun. En 0 → **GUARD CRUSH**: stun de 50f sin daño (+~32f de
+  ventaja: garantiza un golpe), la barra renace al 50%. El bloqueo queda con
+  dos counters: agarre (puntual) y crush (estructural). Verificado en el lab:
+  7 jabs bloqueados seguidos = crush; el turtle absoluto pierde ~1 HP por
+  ciclo. UI: barrita amarilla bajo los pips (parpadea en rojo <25%) +
+  "¡GUARDIA ROTA!" en grande.
 - **Estados**: HITSTUN / BLOCKSTUN / KNOCKDOWN con frames visibles en el HUD.
   Cancelan el comando actual, comen turno, y apenas terminan la cola sigue con
   lo que quedaba. Golpe aéreo = knockdown. Counter (pegar en startup) = +1 dmg.
