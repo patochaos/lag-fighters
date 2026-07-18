@@ -131,6 +131,32 @@ ser **el overlay de un netplay de los 2000 en decadencia**:
 Orden recomendado: 1 → 2 → 4 → 3 (el scrub es lo más caro; identidad y
 world-space feedback son el 80% de la percepción con el 40% del esfuerzo).
 
+## 4.5 Assets ya preparados (prep adelantada, 2026-07-17)
+
+- **Fuente pixel**: `Assets/Resources/LagFighter/PressStart2P.ttf` (Google
+  Fonts, licencia OFL). Cargar con
+  `Resources.Load<Font>("LagFighter/PressStart2P")` en la fase UI-1.
+  Nota: es una fuente SOLO mayúsculas y muy ancha — usar tamaños chicos
+  (10-18px) y `ToUpperInvariant()` en labels; para bloques largos de texto
+  (descripciones) evaluar mantener una secundaria más legible.
+- **Paleta oficial** (fase UI-1 la centraliza en una clase `Palette`):
+
+| Rol | Color | Hex aprox |
+|---|---|---|
+| P1 / VOS | celeste | #40B3F2 |
+| P2 / RIVAL | naranja | #F27340 |
+| Startup / atención | amarillo | #F2D940 |
+| Activo / daño / hitbox | rojo | #F24D38 |
+| Recovery / block | azul | #4D8CE6 |
+| Agarre | magenta | #E640C4 |
+| Vida / OK | verde | #59D96A |
+| Guard gauge | ámbar | #FFD940 |
+| Neutral / apagado | gris | #737880 |
+| Fondos de panel | negro 75% + borde 1px del color de sección | — |
+
+- Hover en menús (cartas del plan y modos): ya implementado — mostrar
+  descripción sin comprometer la elección.
+
 ## 5. Notas técnicas
 
 - Seguir con uGUI por código está bien para todo esto; no migrar a UI Toolkit

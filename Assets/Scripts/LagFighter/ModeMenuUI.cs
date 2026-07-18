@@ -32,6 +32,7 @@ namespace LagFighter
         int _step; // 0 = lag mode, 1 = modo de juego
         bool _lagChoice;
         bool _active;
+        Vector2 _lastMouse;
 
         public static ModeMenuUI Create(MatchController mc)
         {
@@ -205,6 +206,19 @@ namespace LagFighter
         void Update()
         {
             if (!_active) return;
+
+            // hover muestra la descripción de cada opción; click la confirma
+            var mp = GameInput.MousePos();
+            if ((mp - _lastMouse).sqrMagnitude > 4f)
+            {
+                _lastMouse = mp;
+                for (int i = 0; i < OptionCount; i++)
+                {
+                    if (!RectTransformUtility.RectangleContainsScreenPoint(_cards[i].rectTransform, mp, null)) continue;
+                    if (i != _sel) Highlight(i);
+                    break;
+                }
+            }
 
             if (GameInput.ClickPressed())
             {

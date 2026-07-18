@@ -35,6 +35,7 @@ namespace LagFighter
         Text _detail, _status;
         int _sel;
         bool _active;
+        Vector2 _lastMouse;
 
         public static PlanMenuUI Create(MatchController mc)
         {
@@ -246,6 +247,20 @@ namespace LagFighter
         void Update()
         {
             if (!_active) return;
+
+            // hover: pasar el mouse por una carta ya muestra qué hace,
+            // sin tener que apretarla (apretar = agregarla al plan)
+            var mp = GameInput.MousePos();
+            if ((mp - _lastMouse).sqrMagnitude > 4f)
+            {
+                _lastMouse = mp;
+                for (int i = 0; i < _cardRt.Length; i++)
+                {
+                    if (!RectTransformUtility.RectangleContainsScreenPoint(_cardRt[i], mp, null)) continue;
+                    if (i != _sel) Highlight(i);
+                    break;
+                }
+            }
 
             if (GameInput.ClickPressed())
             {
