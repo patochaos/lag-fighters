@@ -2,6 +2,46 @@
 
 Cada subida a GitHub agrega acá sus change notes.
 
+## 0.2.0 — 2026-07-17 (el plan completo, salvo el segundo personaje)
+
+Todo `PLAN.md` implementado en una sesión, con tests y lab verdes.
+
+### Gameplay
+- **Pérdida de miembros** (la idea fundacional): daño localizado por altura
+  del golpe, 3 HP por miembro. Sin brazo: ni A ni Hadouken. Sin pierna: ni
+  B/Tatsu/baja, las patadas aéreas no salen, velocidad 65%. El bloque del
+  rig literalmente se cae; órdenes huérfanas degradan a Esperar.
+- **Agacharse + alto/bajo posicional**: hurtbox 0.9 — el jab y el hadouken
+  pasan por arriba (esquivar no gasta guardia). Nueva **Patada baja**
+  (+2 hit / −3 block, pega bajo, agachado todo el move).
+- **Esquina real**: el pushback contra la pared se transfiere al atacante.
+- **Wakeup options**: RÁPIDO (−16f) / QUEDARSE (+16f), secreto hasta
+  ejecutar, en el turn log (replay determinista intacto).
+- Fix: el Shoryuken tenía el primer frame vulnerable (off-by-one, lo pescó
+  el nuevo test de framedata). Invuln real 1–10.
+
+### Modos
+- **1v1 con picks secretos**: pantalla "PASÁ EL TECLADO" entre pickers.
+- **POR CÓDIGO** (online asincrónico sin servidores): cada turno se
+  intercambia un código corto por chat (clipboard); la sim determinista
+  garantiza la misma pelea en ambas puntas.
+
+### UX / Presentación
+- Velocidad de playback ×0.5/×1/×2 · resumen post-turno · log de turnos
+  colapsable (L).
+- Counter hit visible (flash naranja + cartel) · KO en cámara lenta ·
+  hit-sparks de cubitos · trails en frames activos · intro de round ·
+  stage con skyline y público de bloques · announcer solo en KO/guard
+  crush con toggle VOZ.
+
+### Técnica
+- `Tools/`: SimTests (16 tests de framedata con dotnet), SimHarness (lab
+  con stats de guard crush), verify.ps1 (compile + tests + lab), y
+  CompileCheck versionados en el repo.
+- BuildScript: target WebGL (gzip + decompression fallback) para itch.io.
+- splash.png 8.9 → 2.2 MB. `.plastic/` fuera de git.
+- Documentación: README, GDD, DESIGN y PLAN al día.
+
 ## 0.1.0 — 2026-07-17 (primer push)
 
 Primer prototipo jugable completo del concepto "footsies por turnos

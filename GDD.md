@@ -103,9 +103,44 @@ startup/active/recovery. HP total: 6.
 | 12 | Esperar | 12 | — | — | neutral, **bloquea** |
 | 13 | Tatsumaki | 12/18/16 | 1+1 | −15/hit | viaja +1.6, atraviesa hadoukens (8..40), 2° hit derriba, hitbox baja |
 | 14 | Agarre | 6/4/20 | 1 | — | rompe guardia, KD; pierde vs aéreos/caídos; tech espejo |
+| 15 | Agacharse | 14 | — | — | **bloquea** con hurtbox 0.9: jab y hadouken pasan por arriba |
+| 16 | Patada baja | 8/4/16 | 1 | −15 | pega BAJO, **+2 hit / −3 block**, agachado todo el move; es patada |
 
 Reglas extra: golpe a alguien en el aire = hard KD 60f. Proyectil: 1 por vez,
 3 u/s, choca con el proyectil rival.
+
+### 3.4b Alto/bajo posicional (agacharse)
+
+No hay flags de nivel: es geometría. Agacharse baja la hurtbox a 0.9, así
+que el jab (Y desde 1.0) y el hadouken (Y desde 0.95) **pasan por arriba**
+— esquivar no gasta guardia, bloquear sí. El counter del agachado: sweep,
+patada baja, tatsu y agarre le pegan igual. El mixup queda: contra parado →
+jab/hadouken; contra agachado → sweep/agarre/baja; contra los dos → salto.
+
+### 3.4c Pérdida de miembros
+
+La idea fundacional. Cada golpe conectado hace daño localizado según su
+altura: bajo 1.0 come **pierna**, arriba come **brazo** (3 HP por miembro).
+
+- **Brazo en 0**: el bloque del rig vuela; ni Golpe A ni Hadouken.
+- **Pierna en 0**: ni Patada B, ni Tatsumaki, ni Patada baja; las patadas
+  aéreas no salen (saltás igual); caminar y dash rinden 65%.
+
+Las órdenes ya planificadas con un miembro perdido degradan a Esperar
+(determinista: el replay y el online por código no se rompen). Los miembros
+vuelven al empezar cada round.
+
+### 3.4d Wakeup options
+
+Derribado al planificar, elegís **RÁPIDO** (−16f de knockdown) o **QUEDARSE**
+(+16f, para que el meaty del rival pegue al aire). La elección es secreta
+hasta que el turno se ejecuta y viaja en el turn log (replay exacto). La IA
+se levanta rápido el 65% de las veces.
+
+### 3.4e Esquina
+
+El pushback que aplasta al defensor contra la pared se transfiere al
+atacante (como en SF): la esquina aprieta pero no es una trituradora infinita.
 
 ### 3.5 Escenario
 
@@ -132,20 +167,33 @@ corrido (replay determinista desde el log de turnos); `R` es revancha.
 - **Práctica**: dummy quieto, no bloquea, revive al morir.
 - **VS IA**: `SimpleAI` planifica en secreto — zonea, castiga knockdowns,
   mezcla footsies y cada tanto apuesta un shoryuken.
-- **1v1 local**: hotseat; planifica P1, después P2, y se ejecuta.
+- **1v1 local**: hotseat con **picks secretos** — entre pickers hay una
+  pantalla "PASÁ EL TECLADO" que oculta filas y ghost.
+- **POR CÓDIGO** (online asincrónico, sin servidores): elegís lado, planificás
+  y el juego copia tu código de turno al portapapeles (`TurnCode`: LF +
+  base64 de lado/turno/wakeup/cola). Se lo mandás al rival por WhatsApp/
+  Discord, pegás el suyo con ESPACIO y la sim determinista garantiza que
+  ambos ven exactamente la misma pelea. Valida lado, turno y movimientos.
 
-Menú inicial en dos pasos: modo → NORMAL o LAG MODE.
+Menú inicial: NORMAL o LAG MODE → modo (→ lado, si es POR CÓDIGO).
 
 ## 5. Presentación
 
 - **Blockman procedural**: peleadores de bloques 3D armados por código
-  (`FighterView`), rig de piezas separadas (pensado para pérdida de miembros).
-- **Juice cosmético que nunca toca la sim**: hitstop, screen shake, flashes.
+  (`FighterView`), rig de piezas separadas — y las piezas efectivamente se
+  caen (pérdida de miembros).
+- **Juice cosmético que nunca toca la sim**: hitstop, screen shake, flashes,
+  **hit-sparks de cubitos**, **trails** en mano/pie durante frames activos,
+  **KO en cámara lenta** (timeScale 0.3 por 1.5s).
 - **Sonido sintetizado en runtime** (`SfxLib`): cero assets de audio.
-- **HUD**: pips de vida, barra de guardia, timelines del turno con fichas por
-  comando y el stun arrastrado marcado al inicio, feedback con framedata,
-  indicador de distancia, toggle de cajas (H).
-- Splash screen y cartel estilo "wifi agonizante" para Lag Mode.
+  Announcer (mp3) SOLO en KO y guard crush, toggle VOZ en el HUD.
+- **HUD**: pips de vida, barra de guardia (parpadea en rojo <25%), estado de
+  miembros, timelines del turno con fichas y stun arrastrado, feedback con
+  framedata, resumen post-turno, log de turnos colapsable (L), velocidad de
+  playback ×0.5/×1/×2, indicador de distancia, toggle de cajas (H).
+- Intro de round ("ROUND N — ¡PELEA!"), stage con líneas de piso, skyline
+  determinista y público de bloques saltando; splash screen y wifi
+  agonizante en Lag Mode.
 
 ## 6. Arquitectura técnica
 
@@ -167,9 +215,12 @@ estado. Esto habilita:
 - **Ghost preview** (`PlanPreview`): clona la sim y simula tu plan contra un
   rival quieto.
 - **Replay exacto**: re-simular el log de turnos reproduce la pelea idéntica.
-- **Lab de balance headless**: miles de peleas IA vs IA con `dotnet`, sin
-  Unity (stats por movimiento: usos, conecta%, dmg/uso, crushes, techs).
-- **Futuro netcode lockstep / asincrónico**: intercambiar colas basta.
+- **Lab de balance headless** (`Tools/SimHarness`): miles de peleas IA vs IA
+  con `dotnet`, sin Unity (stats por movimiento: usos, conecta%, dmg/uso,
+  crushes, techs) + **tests de framedata** (`Tools/SimTests`, 16 tests) +
+  `Tools/verify.ps1` que corre todo.
+- **Online asincrónico ya andando**: el modo POR CÓDIGO intercambia colas
+  serializadas (`TurnCode`) — cero netcode real.
 
 La escena no tiene nada: `MatchController.Boot()` (RuntimeInitializeOnLoadMethod)
 construye todo por código al dar Play.

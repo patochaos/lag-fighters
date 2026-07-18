@@ -18,7 +18,7 @@ advantage) + *Your Only Move Is HUSTLE* (framedata visible, ghost, replay).
   prompt lo muestra ("VENTAJA +50f, rival derribado") → okizeme natural.
 - Counter hit: pegarle a alguien en el startup de su ataque = +1 daño y más stun.
 
-### Comandos (12) — `MoveCatalog` en `Sim.cs` (sabor Ryu vs Ken)
+### Comandos (16) — `MoveCatalog` en `Sim.cs` (sabor Ryu vs Ken)
 
 Balanceado contra la framedata real de ST Ryu (supercombo.gg, 2026-07-17):
 
@@ -38,8 +38,32 @@ Balanceado contra la framedata real de ST Ryu (supercombo.gg, 2026-07-17):
 | 12 | Esperar | 12f | neutral, **bloquea** (no meter órdenes = bloquear) |
 | 13 | Tatsumaki | 12/18/16 = 46f | viaja +1.6, 2 hits, el 2° derriba; **atraviesa hadoukens** (girando 8..40); hitbox baja: los saltos la pasan |
 | 14 | Agarre | 6/4/20 = 30f | **rompe guardia**, tira 1.2 + KD 45f; los saltos y caídos lo ignoran; **agarre vs agarre = TECH** |
+| 15 | Agacharse | 14f | **bloquea** con hurtbox 0.9: jab y hadouken **pasan por arriba** (posicional, sin flags); sweep/baja/agarre pegan |
+| 16 | Patada baja | 8/4/16 | 1 dmg, pega BAJO (Y 0.25–0.8), **+2 hit / −3 block**, agachado todo el move; es patada (sin pierna no sale) |
 
 Golpe aéreo = hard KD 60f (un turno entero de okizeme — vigilar si es mucho).
+Shoryuken: invuln real frames 1–10 (fix 2026-07-17: el primer frame estaba
+vulnerable por off-by-one; lo pescó el test de framedata).
+
+### Sistemas agregados el 2026-07-17 (plan de mejoras)
+
+- **Esquina real**: el pushback que aplasta al defensor contra la pared se
+  transfiere al atacante (bloqueado, conectado y crush), como en SF.
+- **Wakeup options**: derribado al planificar elegís RÁPIDO (−16f de KD) o
+  QUEDARSE (+16f, baitea el meaty). Elección secreta hasta ejecutar, va al
+  turn log (replay determinista); la IA elige 65% rápido.
+- **Counter hit visible**: flash naranja largo + cartel "¡COUNTER!".
+- **Pérdida de miembros** (la idea fundacional): daño localizado por altura
+  del golpe (bajo `LimbSplitY`=1.0 → pierna; arriba → brazo), 3 HP por
+  miembro. Sin brazo: ni A ni Hadouken. Sin pierna: ni B ni Tatsu ni patada
+  baja, las patadas aéreas no salen y caminar/dash rinde 65%. El bloque del
+  rig desaparece. Órdenes planificadas con miembro perdido degradan a Esperar.
+- **UX de lectura**: velocidad de playback ×0.5/×1/×2 (solo presentación),
+  resumen post-turno en el prompt ("pegaste N · recibiste M · perdiste K
+  órdenes"), log de turnos lateral colapsable (tecla L).
+- **Presentación**: KO en cámara lenta, hit-sparks de cubitos, trails en
+  frames activos, intro "ROUND N — ¡PELEA!", stage con skyline + público de
+  bloques, announcer SOLO en KO/guard crush con toggle VOZ.
 
 ### Lag Mode
 
@@ -61,10 +85,11 @@ barras y termina parpadeando en rojo (con "ping" falso). La timeline re-escala
   distancia bajo el prompt.
 - Menú de planificación: grilla 7x2 (movimiento arriba, acción abajo) con
   franja de color por categoría y mini-barra S/A/R por carta.
-- **Lab de balance**: harness AI vs AI headless en el scratchpad
-  (`simharness/`) — compila Sim.cs+SimpleAI.cs sin Unity y corre miles de
-  peleas con stats por movimiento (usos, conecta%, dmg/uso, KOs, trades,
-  techs). Usarlo tras cada cambio de framedata.
+- **Lab de balance**: harness AI vs AI headless en `Tools/SimHarness` —
+  compila Sim.cs+SimpleAI.cs sin Unity y corre miles de peleas con stats por
+  movimiento (usos, conecta%, dmg/uso, crushes, techs). Usarlo tras cada
+  cambio de framedata. `Tools/SimTests` tiene los tests de framedata y
+  `Tools/verify.ps1` corre todo junto.
 
 - **Guardia automática (sin botón)**: bloqueás en neutral, esperando o caminando
   atrás, en el piso. Bloquear = BLOCKSTUN (te come turno). En el aire y en
@@ -93,7 +118,10 @@ barras y termina parpadeando en rojo (con "ping" falso). La timeline re-escala
 - `MatchController.cs`: Planning → Executing → (KO | EndTurn → Planning).
   Log de turnos (`_turnLog`) → **replay completo con V** re-simulando.
 - Modos: Práctica (dummy quieto, revive) / VS IA (planifica en secreto) / 1v1
-  local hotseat.
+  local hotseat con **picks secretos** (pantalla "pasá el teclado") / **POR
+  CÓDIGO**: online asincrónico sin servidores — cada turno se intercambia un
+  código corto (`TurnCode`: LF+base64 de lado/turno/wakeup/cola) por chat y
+  la sim determinista garantiza que ambos ven la misma pelea.
 - UI: cartas con framedata (PlanMenuUI), timelines de 60f con fichas por
   comando y bloque de stun arrastrado al inicio (HudUI) — la fila rival se
   revela al ejecutar. Hurt/hitboxes con toggle (Viz.cs). Blockman procedural
