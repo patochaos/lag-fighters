@@ -38,8 +38,8 @@ Balanceado contra la framedata real de ST Ryu (supercombo.gg, 2026-07-17):
 | 12 | Esperar | 12f | neutral, **bloquea** (no meter órdenes = bloquear) |
 | 13 | Tatsumaki | 12/18/16 = 46f | viaja +1.6, 2 hits, el 2° derriba; **atraviesa hadoukens** (girando 8..40); hitbox baja: los saltos la pasan |
 | 14 | Agarre | 6/4/20 = 30f | **rompe guardia**, tira 1.2 + KD 45f; los saltos y caídos lo ignoran; **agarre vs agarre = TECH** |
-| 15 | Agacharse | 14f | **bloquea** con hurtbox 0.9: jab y hadouken **pasan por arriba** (posicional, sin flags); sweep/baja/agarre pegan |
-| 16 | Patada baja | 8/4/16 | 1 dmg, pega BAJO (Y 0.25–0.8), **+2 hit / −3 block**, agachado todo el move; es patada (sin pierna no sale) |
+| 15 | Agacharse (OFF) | 14f | **bloquea** con hurtbox 0.9: jab y hadouken **pasan por arriba**; sweep/baja/agarre pegan. Desactivado: `SimConfig.CrouchEnabled` |
+| 16 | Patada baja (OFF) | 8/4/16 | 1 dmg, pega BAJO, **+2 hit / −3 block**, agachado todo el move. Desactivado con el agachado |
 
 Golpe aéreo = hard KD 60f (un turno entero de okizeme — vigilar si es mucho).
 Shoryuken: invuln real frames 1–10 (fix 2026-07-17: el primer frame estaba
@@ -53,11 +53,14 @@ vulnerable por off-by-one; lo pescó el test de framedata).
   QUEDARSE (+16f, baitea el meaty). Elección secreta hasta ejecutar, va al
   turn log (replay determinista); la IA elige 65% rápido.
 - **Counter hit visible**: flash naranja largo + cartel "¡COUNTER!".
-- **Pérdida de miembros** (la idea fundacional): daño localizado por altura
-  del golpe (bajo `LimbSplitY`=1.0 → pierna; arriba → brazo), 3 HP por
-  miembro. Sin brazo: ni A ni Hadouken. Sin pierna: ni B ni Tatsu ni patada
-  baja, las patadas aéreas no salen y caminar/dash rinde 65%. El bloque del
-  rig desaparece. Órdenes planificadas con miembro perdido degradan a Esperar.
+- **Pérdida de miembros** — implementada y **DESACTIVADA a pedido**
+  (2026-07-17, mismo día): daño localizado por altura (bajo `LimbSplitY`=1.0
+  → pierna; arriba → brazo), 3 HP por miembro; sin brazo ni A ni Hadouken;
+  sin pierna ni B/Tatsu/baja, aéreas no salen, velocidad 65%; el bloque del
+  rig desaparece; órdenes huérfanas degradan a Esperar. **Para reactivar:
+  `SimConfig.LimbsEnabled = true`** (los tests se reactivan solos). Ídem
+  agachado: `SimConfig.CrouchEnabled` + descomentar cartas en
+  `PlanMenuUI.Order` y opciones en `SimpleAI`.
 - **UX de lectura**: velocidad de playback ×0.5/×1/×2 (solo presentación),
   resumen post-turno en el prompt ("pegaste N · recibiste M · perdiste K
   órdenes"), log de turnos lateral colapsable (tecla L).

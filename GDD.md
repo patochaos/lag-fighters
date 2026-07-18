@@ -103,13 +103,16 @@ startup/active/recovery. HP total: 6.
 | 12 | Esperar | 12 | — | — | neutral, **bloquea** |
 | 13 | Tatsumaki | 12/18/16 | 1+1 | −15/hit | viaja +1.6, atraviesa hadoukens (8..40), 2° hit derriba, hitbox baja |
 | 14 | Agarre | 6/4/20 | 1 | — | rompe guardia, KD; pierde vs aéreos/caídos; tech espejo |
-| 15 | Agacharse | 14 | — | — | **bloquea** con hurtbox 0.9: jab y hadouken pasan por arriba |
-| 16 | Patada baja | 8/4/16 | 1 | −15 | pega BAJO, **+2 hit / −3 block**, agachado todo el move; es patada |
+| 15 | Agacharse (OFF) | 14 | — | — | **bloquea** con hurtbox 0.9: jab y hadouken pasan por arriba |
+| 16 | Patada baja (OFF) | 8/4/16 | 1 | −15 | pega BAJO, **+2 hit / −3 block**, agachado todo el move; es patada |
 
 Reglas extra: golpe a alguien en el aire = hard KD 60f. Proyectil: 1 por vez,
 3 u/s, choca con el proyectil rival.
 
-### 3.4b Alto/bajo posicional (agacharse)
+### 3.4b Alto/bajo posicional (agacharse) — DESACTIVADO
+
+*Implementado y apagado por flag (`SimConfig.CrouchEnabled = false`) hasta
+nuevo aviso; el diseño queda documentado para cuando vuelva.*
 
 No hay flags de nivel: es geometría. Agacharse baja la hurtbox a 0.9, así
 que el jab (Y desde 1.0) y el hadouken (Y desde 0.95) **pasan por arriba**
@@ -117,7 +120,10 @@ que el jab (Y desde 1.0) y el hadouken (Y desde 0.95) **pasan por arriba**
 patada baja, tatsu y agarre le pegan igual. El mixup queda: contra parado →
 jab/hadouken; contra agachado → sweep/agarre/baja; contra los dos → salto.
 
-### 3.4c Pérdida de miembros
+### 3.4c Pérdida de miembros — DESACTIVADA
+
+*Implementada y apagada por flag (`SimConfig.LimbsEnabled = false`) hasta
+nuevo aviso; el diseño queda documentado para cuando vuelva.*
 
 La idea fundacional. Cada golpe conectado hace daño localizado según su
 altura: bajo 1.0 come **pierna**, arriba come **brazo** (3 HP por miembro).

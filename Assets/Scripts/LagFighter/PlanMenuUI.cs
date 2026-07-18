@@ -21,9 +21,10 @@ namespace LagFighter
         {
             MoveCatalog.WalkF, MoveCatalog.WalkB, MoveCatalog.DashF, MoveCatalog.DashB,
             MoveCatalog.JumpF, MoveCatalog.JumpN, MoveCatalog.JumpB,
-            MoveCatalog.AttackA, MoveCatalog.AttackB, MoveCatalog.LowKick, MoveCatalog.Tatsu,
-            MoveCatalog.Hadouken, MoveCatalog.Shoryuken, MoveCatalog.Grab,
-            MoveCatalog.Wait, MoveCatalog.Crouch,
+            MoveCatalog.AttackA, MoveCatalog.AttackB, MoveCatalog.Tatsu, MoveCatalog.Hadouken,
+            MoveCatalog.Shoryuken, MoveCatalog.Grab, MoveCatalog.Wait,
+            // agachado desactivado — reactivar junto con SimConfig.CrouchEnabled:
+            // MoveCatalog.LowKick, MoveCatalog.Crouch,
         };
 
         MatchController _mc;

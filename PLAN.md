@@ -32,13 +32,14 @@ crush (~1 HP por ciclo); la IA casi no cruje porque no tortuguea.
   (itch.io)`, gzip + decompression fallback). Nota: en WebGL el modo POR
   CÓDIGO puede requerir pegar a mano (los browsers capan el clipboard).
 
-## 5. Contenido — ✅ HECHO (salvo segundo personaje, excluido)
+## 5. Contenido — implementado, luego DESACTIVADO a pedido
 
-- **Pérdida de miembros**: daño localizado por altura (3 HP por miembro);
-  sin brazo → ni A ni hadouken; sin pierna → ni B/tatsu/baja, patadas
-  aéreas no salen, velocidad 65%. El bloque del rig vuela.
-- **Agacharse + alto/bajo posicional**: hurtbox 0.9, jab y hadouken pasan
-  por arriba; Patada baja (+2/−3) pega bajo desde cuclillas.
+- **Pérdida de miembros** y **Agacharse + Patada baja**: implementados
+  completos con tests, y **apagados el mismo día a pedido de Patricio**.
+  El código quedó entero detrás de `SimConfig.LimbsEnabled` /
+  `SimConfig.CrouchEnabled` (false); para volver a probarlos, flipear los
+  flags y descomentar las cartas en `PlanMenuUI.Order` + opciones de
+  `SimpleAI`. Los tests se reactivan solos.
 - ~~Segundo personaje~~ — EXCLUIDO por ahora (requiere MoveCatalog por
   peleador; refactor chico, anotado para cuando haya feedback de testers).
 

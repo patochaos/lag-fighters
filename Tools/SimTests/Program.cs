@@ -52,11 +52,23 @@ class Tests
         LaEsquinaEmpujaAlAtacante();
         AgarreVsAgarreEsTech();
         WakeupAjustaElKnockdown();
-        TresJabsArrancanElBrazo();
-        GolpesBajosArrancanLaPierna();
-        ElJabPasaSobreElAgachado();
-        ElHadoukenPasaSobreElAgachado();
-        LaPatadaBajaPegaAlAgachado();
+        if (SimConfig.LimbsEnabled)
+        {
+            TresJabsArrancanElBrazo();
+            GolpesBajosArrancanLaPierna();
+        }
+        else Console.WriteLine("  --  miembros: desactivado (SimConfig.LimbsEnabled), tests salteados");
+        if (SimConfig.CrouchEnabled)
+        {
+            ElJabPasaSobreElAgachado();
+            ElHadoukenPasaSobreElAgachado();
+            LaPatadaBajaPegaAlAgachado();
+        }
+        else
+        {
+            Console.WriteLine("  --  agachado: desactivado (SimConfig.CrouchEnabled), tests salteados");
+            ElAgachadoDesactivadoDegradaAEsperar();
+        }
         CodigoDeTurnoIdaYVuelta();
         MismaEntradaMismaPelea();
 
@@ -260,6 +272,18 @@ class Tests
         var ev = Find(Run(s, 30), EvKind.Hit, 0);
         Check(ev.HasValue && ev.Value.FrameAdv == 2,
             "la patada baja pega al agachado y es +2", ev.HasValue ? $"adv {ev.Value.FrameAdv}" : "no pegó");
+    }
+
+    // Con el agachado desactivado, un código async con Crouch/LowKick no debe
+    // romper nada: la orden degrada a Esperar.
+    static void ElAgachadoDesactivadoDegradaAEsperar()
+    {
+        var s = NewSim(-2f, 2f, p1Blocks: true);
+        s.SetQueue(0, new List<int> { MoveCatalog.Crouch, MoveCatalog.LowKick });
+        s.SetQueue(1, new List<int>());
+        s.Step();
+        Check(s.CurrentMove(0) != null && s.CurrentMove(0).Id == "wait" && !s.IsCrouching(0),
+            "agachado off: Crouch/LowKick degradan a Esperar");
     }
 
     // Online asincrónico: el código de turno serializa y deserializa exacto,

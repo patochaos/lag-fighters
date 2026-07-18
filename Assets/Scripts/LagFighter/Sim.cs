@@ -42,6 +42,14 @@ namespace LagFighter
         public const int GuardCrushStun = 50;
         public const float GuardCrushRespawn = 50f; // la barra renace al 50%
 
+        // ---- features DESACTIVADAS a pedido de Patricio (2026-07-17) ----
+        // El código de pérdida de miembros y agachado sigue completo abajo;
+        // para reactivar: poner estos flags en true y descomentar las cartas
+        // en PlanMenuUI.Order y las opciones de SimpleAI. Los tests de
+        // Tools/SimTests se reactivan solos al flipear los flags.
+        public static readonly bool LimbsEnabled = false;
+        public static readonly bool CrouchEnabled = false;
+
         // pérdida de miembros: daño localizado por altura del golpe.
         // Bajo LimbSplitY pega a la pierna, arriba al brazo. Cada parte tiene
         // su HP; en 0 el miembro VUELA (y con él, sus movimientos).
@@ -308,8 +316,13 @@ namespace LagFighter
 
         // Pérdida de miembros: sin brazo no hay A ni Hadouken; sin pierna no
         // hay B ni Tatsumaki (y las patadas aéreas no salen: saltás igual).
+        // Con el agachado desactivado, sus movimientos degradan a Esperar
+        // (protege también contra códigos async de builds con el flag prendido).
         public bool MoveAllowed(int i, int moveIndex)
         {
+            if (!SimConfig.CrouchEnabled && (moveIndex == MoveCatalog.Crouch || moveIndex == MoveCatalog.LowKick))
+                return false;
+            if (!SimConfig.LimbsEnabled) return true;
             var f = Fighters[i];
             if (f.ArmHp <= 0f && (moveIndex == MoveCatalog.AttackA || moveIndex == MoveCatalog.Hadouken))
                 return false;
@@ -671,6 +684,7 @@ namespace LagFighter
                 MoveIndex = p.MoveIndex, FrameAdv = def.StunEndTick - p.AttackerFree });
 
             // daño localizado: bajo la cintura come pierna, arriba come brazo
+            if (!SimConfig.LimbsEnabled) return;
             if (p.HitY < SimConfig.LimbSplitY)
             {
                 if (def.LegHp > 0f)
