@@ -2,6 +2,35 @@
 
 Cada subida a GitHub agrega acá sus change notes.
 
+## 0.3.0 — 2026-07-17 (primer playtest + build web)
+
+Ajustes tras el primer playtest de Patricio, y la primera build WebGL.
+
+### Balance / features
+- **Pérdida de miembros y agachado DESACTIVADOS** (a pedido): el código
+  queda completo detrás de `SimConfig.LimbsEnabled` / `CrouchEnabled`
+  (false) — flipear los flags y descomentar cartas/IA para reactivar.
+  Los códigos async con esos movimientos degradan a Esperar (no rompen).
+- **Lag Mode más suave**: sube 50% cada 3 turnos (60 → 90 → 135 → 202 →
+  303) en vez de duplicarse cada 4.
+
+### UX
+- **Replay obligatorio del round**: al terminar cada round, gane quien
+  gane, corre la repetición de la pelea entera de corrido antes del
+  banner. V en el game over la repite; los botones de velocidad aplican.
+- Cajas (hurt/hitboxes) OFF por defecto.
+- La explicación de la carta seleccionada ahora es un panel legible:
+  título con el color de la categoría + tag, descripción grande a la
+  izquierda, contador de frames a la derecha.
+- Restyle de HUD/menús con fuente pixel (PressStart2P), hover en cartas,
+  scrub del ghost arrastrando la timeline, click derecho borra fichas,
+  rango del movimiento dibujado en el escenario, panel OPC colapsable.
+- El aviso "perdés Nf por el stun" usa los frames reales del turno con lag.
+
+### Build
+- **Primera build WebGL** (16.6 MB, gzip + decompression fallback) lista
+  para itch.io; target nuevo en BuildScript (menú o batchmode).
+
 ## 0.2.0 — 2026-07-17 (el plan completo, salvo el segundo personaje)
 
 Todo `PLAN.md` implementado en una sesión, con tests y lab verdes.
