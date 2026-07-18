@@ -21,8 +21,8 @@ namespace LagFighter
         const float GuardBarW = SimConfig.MaxHp * 46f - 8f;
         Text _banner, _prompt, _dist, _turnSummary;
         string _bannerOverride = "";
-        Image _boxBtn;
-        Text _boxBtnLabel;
+        Image _boxBtn, _voiceBtn;
+        Text _boxBtnLabel, _voiceBtnLabel;
 
         // velocidad de playback (x0.5 / x1 / x2) — solo presentación
         static readonly float[] Speeds = { 0.5f, 1f, 2f };
@@ -77,8 +77,12 @@ namespace LagFighter
             _turnSummary = MakeText(_canvasRt, "TurnSummary", "", new Vector2(0.5f, 1f), new Vector2(0f, -102f), new Vector2(1400f, 22f),
                 17, new Color(0.85f, 0.9f, 1f, 0.85f), TextAnchor.MiddleCenter);
 
-            _boxBtn = MakeImage(_canvasRt, "BoxBtn", new Vector2(0.5f, 1f), new Vector2(0f, -116f), new Vector2(150f, 32f), new Color(0.12f, 0.14f, 0.18f, 0.9f));
+            _boxBtn = MakeImage(_canvasRt, "BoxBtn", new Vector2(0.5f, 1f), new Vector2(-80f, -128f), new Vector2(150f, 32f), new Color(0.12f, 0.14f, 0.18f, 0.9f));
             _boxBtnLabel = MakeText(_boxBtn.rectTransform, "T", "CAJAS: ON", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(146f, 24f),
+                14, new Color(0.5f, 1f, 0.6f), TextAnchor.MiddleCenter);
+
+            _voiceBtn = MakeImage(_canvasRt, "VoiceBtn", new Vector2(0.5f, 1f), new Vector2(80f, -128f), new Vector2(150f, 32f), new Color(0.12f, 0.14f, 0.18f, 0.9f));
+            _voiceBtnLabel = MakeText(_voiceBtn.rectTransform, "T", "VOZ: ON", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(146f, 24f),
                 14, new Color(0.5f, 1f, 0.6f), TextAnchor.MiddleCenter);
 
             // timelines del turno (fila propia abajo, rival arriba)
@@ -362,6 +366,15 @@ namespace LagFighter
                 VizPrefs.ShowBoxes = !VizPrefs.ShowBoxes;
                 _boxBtnLabel.text = VizPrefs.ShowBoxes ? "CAJAS: ON" : "CAJAS: OFF";
                 _boxBtnLabel.color = VizPrefs.ShowBoxes ? new Color(0.5f, 1f, 0.6f) : new Color(1f, 1f, 1f, 0.5f);
+            }
+
+            // toggle del announcer (KO / guard crush)
+            if (GameInput.ClickPressed() &&
+                RectTransformUtility.RectangleContainsScreenPoint(_voiceBtn.rectTransform, GameInput.MousePos(), null))
+            {
+                Announcer.Enabled = !Announcer.Enabled;
+                _voiceBtnLabel.text = Announcer.Enabled ? "VOZ: ON" : "VOZ: OFF";
+                _voiceBtnLabel.color = Announcer.Enabled ? new Color(0.5f, 1f, 0.6f) : new Color(1f, 1f, 1f, 0.5f);
             }
 
             // velocidad de playback: highlight del activo + clicks

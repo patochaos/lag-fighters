@@ -47,6 +47,7 @@ namespace LagFighter
         public readonly StunKind[] TurnStartStunKind = new StunKind[2];
         float _roundTimer;
         float _hitstop;
+        float _koTimer; // KO en cámara lenta (cosmético: timeScale, la sim ya terminó)
         int _lastProjCount;
 
         // velocidad de playback (solo presentación, la sim no cambia)
@@ -94,6 +95,8 @@ namespace LagFighter
 
         public void GoToModeSelect()
         {
+            Time.timeScale = 1f;
+            _koTimer = 0f;
             State = Flow.ModeSelect;
             _menu.Close();
             _ghost.Clear();
@@ -120,6 +123,8 @@ namespace LagFighter
         {
             Sim = new MatchSim();
             if (Mode == GameMode.Practice) Sim.Fighters[1].BlockEnabled = false; // el dummy no bloquea
+            Time.timeScale = 1f;
+            _koTimer = 0f;
             _acc = 0f;
             _hitstop = 0f;
             _lastProjCount = 0;
@@ -133,6 +138,8 @@ namespace LagFighter
             _views[0].OnMatchReset();
             _views[1].OnMatchReset();
             _hud.OnMatchReset();
+            if (Mode != GameMode.Practice)
+                _hud.ShowBigMessage($"ROUND {_wins[0] + _wins[1] + 1}\n<size=34>¡PELEA!</size>", new Color(1f, 0.9f, 0.4f));
             StartPlanning();
         }
 
@@ -342,6 +349,18 @@ namespace LagFighter
         {
             if (State == Flow.ModeSelect) return;
 
+            // KO slow-mo: cámara lenta cosmética antes de cerrar el round
+            if (_koTimer > 0f)
+            {
+                _koTimer -= Time.unscaledDeltaTime;
+                if (_koTimer <= 0f)
+                {
+                    Time.timeScale = 1f;
+                    OnRoundEnd();
+                }
+                return;
+            }
+
             if (GameInput.MenuPressed()) { GoToModeSelect(); return; }
             if (State == Flow.GameOver && GameInput.ReplayPressed()) { StartReplay(); return; }
             if (GameInput.RestartPressed()) { ResetMatch(); return; }
@@ -383,7 +402,11 @@ namespace LagFighter
                     }
                     else
                     {
-                        OnRoundEnd();
+                        // KO en cámara lenta: el caído cae despacio, después el banner
+                        _koTimer = 1.5f;
+                        Time.timeScale = 0.3f;
+                        _hud.ShowBigMessage("K.O.", new Color(1f, 0.3f, 0.25f));
+                        Announcer.Play();
                         return;
                     }
                 }
@@ -492,23 +515,28 @@ namespace LagFighter
 
         CameraFX _camFx;
 
+        Vector3 ContactPos(int defender) => _views[defender].transform.position + new Vector3(0f, 1.25f, 0f);
+
         void DispatchEvents()
         {
             foreach (var ev in Sim.LastEvents)
             {
+                int def = 1 - ev.Attacker;
                 switch (ev.Kind)
                 {
                     case EvKind.Hit:
                         _turnDmg[ev.Attacker] += ev.Damage;
                         _turnHitCount[ev.Attacker]++;
-                        _views[1 - ev.Attacker].FlashHit(ev.Counter);
+                        _views[def].FlashHit(ev.Counter);
+                        SparkFX.Burst(ContactPos(def), ev.Counter ? new Color(1f, 0.55f, 0.1f) : Color.white, ev.Counter ? 14 : 9);
                         SfxLib.Play(ev.Counter ? SfxLib.Kind.Counter : SfxLib.Kind.Hit);
                         _hitstop = Mathf.Max(_hitstop, ev.Counter ? 0.13f : 0.075f);
                         CamFx()?.Shake(ev.Counter ? 0.1f : 0.05f);
                         if (ev.Counter) _hud.ShowBigMessage("¡COUNTER!", new Color(1f, 0.55f, 0.15f));
                         break;
                     case EvKind.Blocked:
-                        _views[1 - ev.Attacker].FlashBlock();
+                        _views[def].FlashBlock();
+                        SparkFX.Burst(ContactPos(def), new Color(0.45f, 0.75f, 1f), 6, 2.2f);
                         SfxLib.Play(SfxLib.Kind.Block, 0.8f);
                         _hitstop = Mathf.Max(_hitstop, 0.04f);
                         break;
@@ -517,11 +545,13 @@ namespace LagFighter
                         _hitstop = Mathf.Max(_hitstop, 0.08f);
                         break;
                     case EvKind.GuardCrush:
-                        _views[1 - ev.Attacker].FlashHit();
+                        _views[def].FlashHit();
+                        SparkFX.Burst(ContactPos(def), new Color(1f, 0.85f, 0.2f), 18, 4f);
                         SfxLib.Play(SfxLib.Kind.Counter);
                         _hitstop = Mathf.Max(_hitstop, 0.14f);
                         CamFx()?.Shake(0.11f);
                         _hud.ShowBigMessage("¡GUARDIA ROTA!", new Color(1f, 0.85f, 0.2f));
+                        Announcer.Play(0.7f);
                         break;
                 }
                 _hud.OnSimEvent(ev);

@@ -56,6 +56,78 @@ namespace LagFighter
             EnsureInit();
             _source.PlayOneShot(_clips[(int)kind], volume);
         }
+
+        public static void PlayClip(AudioClip clip, float volume = 1f)
+        {
+            EnsureInit();
+            _source.PlayOneShot(clip, volume);
+        }
+    }
+
+    // Announcer: el mp3 de Resources vuelve, pero SOLO en momentos (KO, guard
+    // crush) y con toggle en el HUD. En el menú molestaba.
+    public static class Announcer
+    {
+        public static bool Enabled = true;
+        static AudioClip _clip;
+        static bool _loaded;
+
+        public static void Play(float volume = 0.85f)
+        {
+            if (!Enabled) return;
+            if (!_loaded)
+            {
+                _clip = Resources.Load<AudioClip>("LagFighter/announcer");
+                _loaded = true;
+            }
+            if (_clip != null) SfxLib.PlayClip(_clip, volume);
+        }
+    }
+
+    // Hit-sparks: ráfaga de cubitos que salen despedidos del punto de contacto.
+    // Mismo lenguaje visual que los blockmen; cero assets de partículas.
+    public static class SparkFX
+    {
+        public static void Burst(Vector3 pos, Color color, int count = 9, float speed = 3.2f)
+        {
+            var rng = new System.Random((int)(Time.realtimeSinceStartup * 1000f));
+            for (int i = 0; i < count; i++)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = "Spark";
+                var col = go.GetComponent<Collider>();
+                if (col != null) UnityEngine.Object.Destroy(col);
+                float s = 0.05f + (float)rng.NextDouble() * 0.06f;
+                go.transform.position = pos;
+                go.transform.localScale = new Vector3(s, s, s);
+                go.transform.rotation = UnityEngine.Random.rotation;
+                var r = go.GetComponent<Renderer>();
+                r.material = new Material(VizLib.BaseMat) { color = color };
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+                var shard = go.AddComponent<SparkShard>();
+                float ang = (float)rng.NextDouble() * Mathf.PI * 2f;
+                float up = 0.4f + (float)rng.NextDouble() * 1.2f;
+                shard.Vel = new Vector3(Mathf.Cos(ang), up, Mathf.Sin(ang) * 0.35f).normalized
+                            * speed * (0.55f + (float)rng.NextDouble() * 0.7f);
+            }
+        }
+    }
+
+    public class SparkShard : MonoBehaviour
+    {
+        public Vector3 Vel;
+        float _life = 0.5f;
+
+        void Update()
+        {
+            float dt = Time.deltaTime;
+            _life -= dt;
+            if (_life <= 0f) { Destroy(gameObject); return; }
+            Vel += Vector3.down * (9f * dt);
+            transform.position += Vel * dt;
+            transform.localScale *= 1f - 3.4f * dt;
+        }
     }
 
     // Sacudida de cámara al conectar golpes. Se agrega a la Main Camera.

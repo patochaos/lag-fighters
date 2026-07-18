@@ -15,6 +15,7 @@ namespace LagFighter
         Transform _torso, _head, _armF, _armB, _legF, _legB;
         readonly List<Renderer> _tintRenderers = new List<Renderer>();
         readonly List<Color> _origColors = new List<Color>();
+        TrailRenderer _trailArm, _trailLeg;
         float _flash;
         Color _flashColor;
         float _faceYaw;
@@ -66,6 +67,28 @@ namespace LagFighter
             _armB = Part(ArmBPos, new Vector3(0.15f, 0.15f, 0.5f), dark);
             _legF = Part(LegFPos, new Vector3(0.17f, 0.95f, 0.2f), dark);
             _legB = Part(LegBPos, new Vector3(0.17f, 0.95f, 0.2f), dark);
+
+            if (!_ghostMode)
+            {
+                _trailArm = MakeTrail(_armF, baseColor);
+                _trailLeg = MakeTrail(_legF, baseColor);
+            }
+        }
+
+        // Trail en la mano/pie de adelante: solo emite durante frames activos.
+        TrailRenderer MakeTrail(Transform limb, Color baseColor)
+        {
+            var tr = limb.gameObject.AddComponent<TrailRenderer>();
+            tr.time = 0.16f;
+            tr.startWidth = 0.11f;
+            tr.endWidth = 0.01f;
+            tr.numCapVertices = 2;
+            tr.material = new Material(VizLib.BaseMat) { color = new Color(1f, 1f, 1f, 0.55f) };
+            tr.startColor = Color.Lerp(baseColor, Color.white, 0.6f);
+            tr.endColor = new Color(baseColor.r, baseColor.g, baseColor.b, 0f);
+            tr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            tr.emitting = false;
+            return tr;
         }
 
         Transform Part(Vector3 pos, Vector3 scale, Color color)
@@ -246,6 +269,16 @@ namespace LagFighter
             _legB.localPosition = legB;
             _legF.localRotation = legFRot;
             _legB.localRotation = legBRot;
+
+            // trails encendidos solo en la ventana activa de un ataque
+            if (_trailArm != null)
+            {
+                bool active = m != null && !stunned && m.Hits.Length > 0 &&
+                              phase >= m.Startup && phase < m.Startup + m.Active;
+                bool armMove = m != null && (m.Anim == AnimKind.AttackA || m.Anim == AnimKind.Dragon || m.Anim == AnimKind.Grab);
+                _trailArm.emitting = active && armMove;
+                _trailLeg.emitting = active && !armMove;
+            }
 
             _flash = Mathf.Max(0f, _flash - dt * 4f);
             for (int i = 0; i < _tintRenderers.Count; i++)
