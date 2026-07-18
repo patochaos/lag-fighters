@@ -9,6 +9,7 @@ class Program
     static void Main(string[] args)
     {
         if (args.Length > 0 && args[0] == "crushtest") { CrushTest(); return; }
+        if (args.Length > 0 && args[0] == "cornertest") { CornerTest(); return; }
         int matches = args.Length > 0 ? int.Parse(args[0]) : 3000;
         int n = MoveCatalog.All.Length;
         var uses = new int[n];
@@ -81,6 +82,29 @@ class Program
             double dpu = uses[i] > 0 ? dmg[i] / uses[i] : 0;
             Console.WriteLine($"{mdef.Name,-18}{uses[i],8}{hits[i],7}{blocks[i],7}{whiffs[i],7}{crushes[i],7}{hitPct,6:0.0}%{dpu,9:0.00}");
         }
+    }
+
+    // Esquina real: P1 pegado a la pared. El pushback del golpe conectado
+    // no puede mover a P1 → el sobrante tiene que empujar a P0 hacia atrás.
+    static void CornerTest()
+    {
+        var sim = new MatchSim();
+        sim.Fighters[1].X = SimConfig.StageHalfWidth; // contra la pared
+        sim.Fighters[0].X = SimConfig.StageHalfWidth - 1.0f;
+        sim.Fighters[1].BlockEnabled = false; // que el golpe conecte limpio
+
+        sim.SetQueue(0, new List<int> { MoveCatalog.AttackA });
+        sim.SetQueue(1, new List<int>());
+        float x0Before = sim.Fighters[0].X;
+        for (int t = 0; t < 30; t++)
+        {
+            sim.Step();
+            foreach (var ev in sim.LastEvents)
+                Console.WriteLine($"  t{sim.Tick,3} {ev.Kind} | P0 {sim.Fighters[0].X:0.00} (antes {x0Before:0.00}) · P1 {sim.Fighters[1].X:0.00} (pared {SimConfig.StageHalfWidth})");
+        }
+        Console.WriteLine(sim.Fighters[0].X < x0Before - 0.05f
+            ? "OK: el pushback de la esquina empujó al atacante hacia atrás"
+            : "FALLO: el atacante no retrocedió");
     }
 
     // Escenario determinista: P0 presiona con jabs, P1 bloquea siempre (Esperar).

@@ -286,6 +286,15 @@ namespace LagFighter
             Fighters[i].QueueIndex = 0;
         }
 
+        // Wakeup option: ajusta el knockdown arrastrado (rápido = delta negativo,
+        // quedarse = positivo). Se aplica al arrancar la ejecución del turno.
+        public void AdjustKnockdown(int i, int delta)
+        {
+            var f = Fighters[i];
+            if (delta == 0 || f.Stun != StunKind.Knockdown || !IsStunned(i)) return;
+            f.StunEndTick = Math.Max(Tick, f.StunEndTick + delta);
+        }
+
         public int OnTurnEnd(int i)
         {
             var f = Fighters[i];
@@ -547,6 +556,19 @@ namespace LagFighter
             };
         }
 
+        // Esquina real: si el empuje aplasta al defensor contra la pared, el
+        // sobrante se transfiere al atacante hacia atrás (como en SF). Sin esto
+        // la esquina es más letal de lo que debería: el pushback muere ahí.
+        void PushDefender(int attacker, int face, float push)
+        {
+            var def = Fighters[1 - attacker];
+            float target = def.X + face * push;
+            float clamped = Math.Max(-SimConfig.StageHalfWidth, Math.Min(SimConfig.StageHalfWidth, target));
+            def.X = clamped;
+            float excess = Math.Abs(target - clamped);
+            if (excess > 0f) Fighters[attacker].X -= face * excess;
+        }
+
         void ApplyContact(PendingHit p)
         {
             int d = 1 - p.Attacker;
@@ -563,7 +585,7 @@ namespace LagFighter
                     def.MoveIndex = -1;
                     def.Stun = StunKind.Hitstun;
                     def.StunEndTick = Tick + SimConfig.GuardCrushStun;
-                    def.X += face * p.Push;
+                    PushDefender(p.Attacker, face, p.Push);
                     LastEvents.Add(new SimEvent { Attacker = p.Attacker, Kind = EvKind.GuardCrush, MoveIndex = p.MoveIndex,
                         FrameAdv = def.StunEndTick - p.AttackerFree });
                     return;
@@ -571,7 +593,7 @@ namespace LagFighter
                 def.MoveIndex = -1; // el paso atrás / espera se corta en blockstun
                 def.Stun = StunKind.Blockstun;
                 def.StunEndTick = Tick + p.Blockstun;
-                def.X += face * p.Push * 0.6f;
+                PushDefender(p.Attacker, face, p.Push * 0.6f);
                 LastEvents.Add(new SimEvent { Attacker = p.Attacker, Kind = EvKind.Blocked, MoveIndex = p.MoveIndex,
                     FrameAdv = def.StunEndTick - p.AttackerFree });
                 return;
@@ -583,7 +605,7 @@ namespace LagFighter
             if (p.AirHit) stun = Math.Max(stun, 60); // caída del aire = hard knockdown
 
             def.Hp = Math.Max(0f, def.Hp - dmg);
-            def.X += face * p.Push;
+            PushDefender(p.Attacker, face, p.Push);
             def.MoveIndex = -1;
             def.Stun = kd ? StunKind.Knockdown : StunKind.Hitstun;
             def.StunEndTick = Tick + stun;

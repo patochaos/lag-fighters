@@ -89,7 +89,12 @@ namespace LagFighter
             transform.position = new Vector3(_mc.Sim.Fighters[_index].X, 0f, 0f);
         }
 
-        public void FlashHit() { _flash = 1f; _flashColor = Color.white; }
+        public void FlashHit(bool counter = false)
+        {
+            // counter hit: flash naranja y más largo, se distingue de un golpe normal
+            _flash = counter ? 1.4f : 1f;
+            _flashColor = counter ? new Color(1f, 0.45f, 0.05f) : Color.white;
+        }
         public void FlashBlock() { _flash = 0.7f; _flashColor = new Color(0.4f, 0.8f, 1f); }
 
         void Update()

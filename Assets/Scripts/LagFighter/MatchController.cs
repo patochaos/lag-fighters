@@ -33,8 +33,14 @@ namespace LagFighter
         public int CurrentTurnFrames => SimConfig.TurnFrames << LagLevel;
         int _prevLagLevel;
 
+        // Wakeup options: al planificar derribado elegís levantarte rápido
+        // (menos knockdown) o quedarte (más, para que el meaty whiffee).
+        // Es información secreta hasta que el turno se ejecuta.
+        public const int WakeQuickDelta = -16, WakeStayDelta = 16;
+        readonly bool[] _wakeQuick = { true, true };
+
         readonly List<int>[] _plans = { new List<int>(), new List<int>() };
-        readonly List<(List<int> q0, List<int> q1)> _turnLog = new List<(List<int>, List<int>)>();
+        readonly List<(List<int> q0, List<int> q1, int w0, int w1)> _turnLog = new List<(List<int>, List<int>, int, int)>();
         int _replayTurn;
         readonly int[] _wins = new int[2];
         public readonly int[] TurnStartStun = new int[2];        // stun arrastrado al arrancar el turno
@@ -132,10 +138,14 @@ namespace LagFighter
                 SfxLib.Play(SfxLib.Kind.Ko, 0.5f);
             }
             CaptureTurnStartStun();
+            _wakeQuick[0] = _wakeQuick[1] = true;
             _plans[0].Clear();
             _plans[1].Clear();
             if (Mode != GameMode.PvP)
-                _plans[1] = Mode == GameMode.Practice ? new List<int>() : _ai.Plan(Sim, 1, CurrentTurnFrames);
+            {
+                if (Mode == GameMode.VsAI && WakeupAvailable(1)) _wakeQuick[1] = _ai.QuickRise();
+                _plans[1] = Mode == GameMode.Practice ? new List<int>() : _ai.Plan(Sim, 1, CurrentTurnFrames - WakeDelta(1));
+            }
             Picker = 0;
             State = Flow.Planning;
             _menu.Open(Picker);
@@ -191,8 +201,27 @@ namespace LagFighter
             return f;
         }
 
+        // ---------- wakeup options ----------
+
+        public bool WakeupAvailable(int i) => TurnStartStunKind[i] == StunKind.Knockdown && TurnStartStun[i] > 0;
+        public bool WakeQuickChoice(int i) => _wakeQuick[i];
+        public int WakeDelta(int i) => WakeupAvailable(i) ? (_wakeQuick[i] ? WakeQuickDelta : WakeStayDelta) : 0;
+        public int EffectiveStartStun(int i) => Mathf.Max(0, TurnStartStun[i] + WakeDelta(i));
+
+        public void ToggleWakeup()
+        {
+            _wakeQuick[Picker] = !_wakeQuick[Picker];
+            // si el plan ya no entra con menos frames, se recorta desde el final
+            while (_plans[Picker].Count > 0 && PlanFramesUsed(Picker) > PlanFramesAvailable(Picker))
+                _plans[Picker].RemoveAt(_plans[Picker].Count - 1);
+            UpdateGhost();
+        }
+
+        // la timeline muestra el stun base (info pública); tu propia fila, tu elección
+        public int DisplayStun(int i) => State == Flow.Planning && i == Picker ? EffectiveStartStun(i) : TurnStartStun[i];
+
         // el stun arrastrado te come frames del turno: solo se planifica lo que entra
-        public int PlanFramesAvailable(int i) => CurrentTurnFrames - TurnStartStun[i];
+        public int PlanFramesAvailable(int i) => CurrentTurnFrames - EffectiveStartStun(i);
         public bool PlanFits(int moveIndex) => PlanFramesUsed(Picker) + MoveCatalog.All[moveIndex].Total <= PlanFramesAvailable(Picker);
 
         public void PlanAdd(int moveIndex)
@@ -224,8 +253,14 @@ namespace LagFighter
 
         void UpdateGhost()
         {
-            _ghost.Show(Sim, Picker, _plans[Picker], CurrentTurnFrames);
-            var g = PlanPreview.Build(Sim, Picker, _plans[Picker], CurrentTurnFrames);
+            var basis = Sim;
+            if (WakeDelta(Picker) != 0)
+            {
+                basis = Sim.Clone(); // el preview arranca con el wakeup elegido
+                basis.AdjustKnockdown(Picker, WakeDelta(Picker));
+            }
+            _ghost.Show(basis, Picker, _plans[Picker], CurrentTurnFrames);
+            var g = PlanPreview.Build(basis, Picker, _plans[Picker], CurrentTurnFrames);
             _menu.SetPrediction(g, PlanFramesUsed(Picker), PlanFramesAvailable(Picker));
         }
 
@@ -233,9 +268,12 @@ namespace LagFighter
 
         void BeginExecution()
         {
+            Sim.AdjustKnockdown(0, WakeDelta(0));
+            Sim.AdjustKnockdown(1, WakeDelta(1));
+            CaptureTurnStartStun(); // las timelines muestran el wakeup real al ejecutar
             Sim.SetQueue(0, _plans[0]);
             Sim.SetQueue(1, _plans[1]);
-            _turnLog.Add((new List<int>(_plans[0]), new List<int>(_plans[1])));
+            _turnLog.Add((new List<int>(_plans[0]), new List<int>(_plans[1]), WakeDelta(0), WakeDelta(1)));
             TurnStartTick = Sim.Tick;
             _acc = 0f;
             _ghost.Clear();
@@ -354,6 +392,8 @@ namespace LagFighter
         void LoadReplayTurn()
         {
             var t = _turnLog[_replayTurn];
+            Sim.AdjustKnockdown(0, t.w0);
+            Sim.AdjustKnockdown(1, t.w1);
             Sim.SetQueue(0, t.q0);
             Sim.SetQueue(1, t.q1);
             TurnStartTick = Sim.Tick;
@@ -415,10 +455,11 @@ namespace LagFighter
                 switch (ev.Kind)
                 {
                     case EvKind.Hit:
-                        _views[1 - ev.Attacker].FlashHit();
+                        _views[1 - ev.Attacker].FlashHit(ev.Counter);
                         SfxLib.Play(ev.Counter ? SfxLib.Kind.Counter : SfxLib.Kind.Hit);
-                        _hitstop = Mathf.Max(_hitstop, ev.Counter ? 0.11f : 0.075f);
-                        CamFx()?.Shake(ev.Counter ? 0.09f : 0.05f);
+                        _hitstop = Mathf.Max(_hitstop, ev.Counter ? 0.13f : 0.075f);
+                        CamFx()?.Shake(ev.Counter ? 0.1f : 0.05f);
+                        if (ev.Counter) _hud.ShowBigMessage("¡COUNTER!", new Color(1f, 0.55f, 0.15f));
                         break;
                     case EvKind.Blocked:
                         _views[1 - ev.Attacker].FlashBlock();

@@ -259,8 +259,8 @@ namespace LagFighter
 
             bool executing = _mc.State == MatchController.Flow.Executing || _mc.State == MatchController.Flow.Replay;
             float playX = executing ? Mathf.Clamp((_mc.TickFloat - _mc.TurnStartTick) * PxPerFrame, 0f, RowW) : -1f;
-            _row0.UpdateRow(_mc.GetPlan(0), _mc.RowRevealed(0), playX, _mc.TurnStartStun[0], _mc.TurnStartStunKind[0]);
-            _row1.UpdateRow(_mc.GetPlan(1), _mc.RowRevealed(1), playX, _mc.TurnStartStun[1], _mc.TurnStartStunKind[1]);
+            _row0.UpdateRow(_mc.GetPlan(0), _mc.RowRevealed(0), playX, _mc.DisplayStun(0), _mc.TurnStartStunKind[0]);
+            _row1.UpdateRow(_mc.GetPlan(1), _mc.RowRevealed(1), playX, _mc.DisplayStun(1), _mc.TurnStartStunKind[1]);
 
             // distancia, rounds ganados y toggle de cajas
             _dist.text = $"dist {Mathf.Abs(sim.Fighters[1].X - sim.Fighters[0].X):0.00}";

@@ -11,6 +11,10 @@ namespace LagFighter
 
         public SimpleAI(int seed) { _rng = new System.Random(seed); }
 
+        // Wakeup option al estar derribada: suele levantarse rápido, a veces
+        // se queda para que el meaty del rival pegue al aire.
+        public bool QuickRise() => _rng.NextDouble() < 0.65;
+
         public List<int> Plan(MatchSim sim, int me, int turnFrames)
         {
             int opp = 1 - me;

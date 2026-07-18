@@ -30,7 +30,8 @@ namespace LagFighter
         GameObject _root;
         Image[] _cardBg, _cardHeader, _cardOverlay;
         RectTransform[] _cardRt;
-        Image _undoBtn, _doneBtn;
+        Image _undoBtn, _doneBtn, _wakeBtn;
+        Text _wakeLabel;
         Text _detail, _status;
         int _sel;
         bool _active;
@@ -171,6 +172,12 @@ namespace LagFighter
             _doneBtn = MakeImage(rootRt, "DoneBtn", new Vector2(0.5f, 0f), new Vector2(sideX, sideY + 32f), new Vector2(120f, 48f), new Color(0.18f, 0.45f, 0.22f, 0.95f));
             MakeText(_doneBtn.rectTransform, "T", "¡LISTO!", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(116f, 30f), 15, Color.white, TextAnchor.MiddleCenter).fontStyle = FontStyle.Bold;
 
+            // wakeup option: solo aparece si arrancás el turno derribado
+            _wakeBtn = MakeImage(rootRt, "WakeBtn", new Vector2(0.5f, 0f), new Vector2(-sideX, sideY + 100f), new Vector2(150f, 58f), new Color(0.5f, 0.32f, 0.1f, 0.95f));
+            _wakeLabel = MakeText(_wakeBtn.rectTransform, "T", "", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(146f, 50f), 14, Color.white, TextAnchor.MiddleCenter);
+            _wakeLabel.fontStyle = FontStyle.Bold;
+            _wakeBtn.gameObject.SetActive(false);
+
             float topY = 26f + totalH + 40f;
             _detail = MakeText(rootRt, "Detail", "", new Vector2(0.5f, 0f), new Vector2(0f, topY + 26f), new Vector2(1700f, 24f), 16, Color.white, TextAnchor.MiddleCenter);
             _status = MakeText(rootRt, "Status", "", new Vector2(0.5f, 0f), new Vector2(0f, topY), new Vector2(1700f, 22f), 16, new Color(0.5f, 1f, 0.6f), TextAnchor.MiddleCenter);
@@ -187,7 +194,18 @@ namespace LagFighter
         {
             _root.SetActive(true);
             _active = true;
+            RefreshWake();
             Highlight(_sel);
+        }
+
+        void RefreshWake()
+        {
+            bool avail = _mc.WakeupAvailable(_mc.Picker);
+            _wakeBtn.gameObject.SetActive(avail);
+            if (!avail) return;
+            _wakeLabel.text = _mc.WakeQuickChoice(_mc.Picker)
+                ? $"WAKEUP: RÁPIDO\n<size=11>{MatchController.WakeQuickDelta}f de knockdown</size>"
+                : $"WAKEUP: QUEDARSE\n<size=11>+{MatchController.WakeStayDelta}f, baitea el meaty</size>";
         }
 
         public void Close()
@@ -248,6 +266,14 @@ namespace LagFighter
                 if (RectTransformUtility.RectangleContainsScreenPoint(_doneBtn.rectTransform, pos, null))
                 {
                     _mc.PlanConfirm();
+                    return;
+                }
+                if (_wakeBtn.gameObject.activeSelf &&
+                    RectTransformUtility.RectangleContainsScreenPoint(_wakeBtn.rectTransform, pos, null))
+                {
+                    _mc.ToggleWakeup();
+                    RefreshWake();
+                    Highlight(_sel); // el presupuesto de frames pudo cambiar
                     return;
                 }
             }
