@@ -1,4 +1,0 @@
-repository "Lag Fighters/Lag Fighters@3574436749548@cloud"
-  path "/"
-    br "/main"
-    co "/main"

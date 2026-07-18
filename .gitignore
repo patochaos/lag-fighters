@@ -16,6 +16,13 @@ Recordings/
 *.slnx
 *.sln
 *.user
+[Bb]in/
+
+# Herramientas headless del repo (estos csproj SÍ se versionan)
+!Tools/**/*.csproj
+
+# Plastic SCM (estado local del workspace)
+.plastic/
 
 # OS
 Thumbs.db

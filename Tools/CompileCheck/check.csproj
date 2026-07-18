@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Compile-check de los scripts del juego sin abrir Unity:
+       dotnet build Tools/CompileCheck/check.csproj
+       Requiere Unity 6000.5.3f1 instalado (ruta de los DLL) y Library/
+       generada por el editor al menos una vez. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9</LangVersion>
+    <DefineConstants>ENABLE_INPUT_SYSTEM</DefineConstants>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+    <NoWarn>CS0169;CS0649;CS1701;MSB3277</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\Assets\Scripts\LagFighter\**\*.cs" />
+    <Reference Include="C:\Program Files\Unity\Hub\Editor\6000.5.3f1\Editor\Data\Managed\UnityEngine\*.dll" />
+    <Reference Include="..\..\Library\ScriptAssemblies\*.dll" />
+    <Reference Remove="..\..\Library\ScriptAssemblies\Assembly-CSharp.dll" />
+    <Reference Remove="..\..\Library\ScriptAssemblies\Assembly-CSharp-Editor.dll" />
+  </ItemGroup>
+</Project>
