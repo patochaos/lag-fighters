@@ -2,6 +2,32 @@
 
 Cada subida a GitHub agrega acá sus change notes.
 
+## 0.4.3 — 2026-07-18 (menú simplificado + replay con lag teatral)
+
+### Menú
+- **Fix**: ONLINE mostraba FÁCIL/NORMAL en vez de CREAR SALA/UNIRSE (el paso
+  caía en el caso equivocado del selector de labels).
+- **VS IA entra directo** a pelear contra Adaptive en Normal; **IA CUSTOM**
+  abre el submenú de perfil + dificultad para quien quiera tunear.
+- **Retirados 1v1 LOCAL y POR CÓDIGO** (injugables). Quedan PRÁCTICA /
+  VS IA / IA CUSTOM / ONLINE. La maquinaria interna sigue por si vuelven.
+- **ESC vuelve atrás** en todos los pasos del menú.
+
+### Replay
+- **Lag teatral**: la repetición se comporta como un stream con mala
+  conexión — se traba ("|| LAG...", glitch, estática), acumula deuda y corre
+  a ×2.6 hasta alcanzarse; ratos "a los saltos" a ~5 fps; ping falso en rojo
+  con wifi en pánico; mini-rewind al descongelar (el teleport de netplay);
+  el audio se ahoga durante el tirón. En Lag Mode escala con el nivel
+  alcanzado. Todo con flags independientes (`ReplayLagFX`) y sin tocar la
+  re-simulación determinista.
+- **Botones LAG / NORMAL / RÁPIDO** arriba al medio durante el replay:
+  con lag teatral, limpio, o limpio a ×2 — conmutables en vivo.
+
+### Varios
+- El velo azul de planificación bajó a una insinuación (alfa 0.08 → 0.03).
+- Carta CAMINAR +: tag "PASO CORTO · ajuste fino" (aclara su rol vs dash).
+
 ## 0.4.2 — 2026-07-18 (pulido UI/UX y arte — la sim no cambia)
 
 ### Legibilidad
