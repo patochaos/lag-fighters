@@ -8,6 +8,19 @@ namespace LagFighter
 {
     public enum GameMode { Practice, VsAI, PvP, Async, Online }
 
+    // Flags del lag TEATRAL del replay (solo presentación, la re-simulación es
+    // idéntica). Apagar acá lo que no convenza — cada efecto es independiente.
+    public static class ReplayLagFX
+    {
+        public static bool Enabled = true;      // master: false = replay limpio
+        public static bool Stutter = true;      // congelar + rubber-banding ×2.6
+        public static bool Choppy = true;       // ratos a ~5 fps (a los saltos) en vez de congelar
+        public static bool PingSpike = true;    // ping falso en rojo + wifi en pánico durante el tirón
+        public static bool Rewind = true;       // mini-rewind (~hasta 6f) al descongelar: el teleport de netplay
+        public static bool AudioDrop = true;    // el audio se ahoga mientras está trabado
+        public static bool ScaleWithLag = true; // en Lag Mode, más tirones según el nivel alcanzado en el round
+    }
+
     // Flujo por turnos programados:
     //  - Planning: en pausa, cada jugador arma su cola de hasta 240 frames
     //    (la IA planifica en secreto). Ghost de preview del plan propio.
@@ -77,6 +90,11 @@ namespace LagFighter
         float _replayGlitchIn;  // segundos hasta el próximo tirón
         float _replayFreeze;    // lo que queda congelado
         float _replayDebt;      // tiempo congelado a recuperar en fast-forward
+        float _choppyTimer;     // rato "a los saltos": suelta el tiempo en tandas de ~0.18s
+        float _choppyAcc;
+        float _replayIntensity = 1f;   // >1 en Lag Mode según el nivel alcanzado
+        MatchSim _rewindSnap;          // foto reciente de la sim para el mini-rewind
+        int _suppressEventsUntil = -1; // re-step tras rewind: no re-disparar sfx/sparks ya vistos
         readonly int[] _wins = new int[2];
         public readonly int[] TurnStartStun = new int[2];        // stun arrastrado al arrancar el turno
         public readonly StunKind[] TurnStartStunKind = new StunKind[2];
@@ -560,6 +578,10 @@ namespace LagFighter
 
         void Update()
         {
+            // que el audio nunca quede ahogado si el replay se cortó a mitad de un tirón
+            if (State != Flow.Replay && AudioListener.volume < 1f)
+                AudioListener.volume = 1f;
+
             if (State == Flow.ModeSelect) return;
 
             // KO slow-mo: cámara lenta cosmética antes de cerrar el round
@@ -737,9 +759,16 @@ namespace LagFighter
             Sim = new MatchSim();
             if (Mode == GameMode.Practice) Sim.Fighters[1].BlockEnabled = false;
             _replayTurn = 0;
-            _replayGlitchIn = Random.Range(1.5f, 3f);
+            // en Lag Mode el replay hereda lo rota que terminó la conexión
+            int maxLvl = LagLevelForTurn(_turnLog.Count);
+            _replayIntensity = ReplayLagFX.ScaleWithLag && LagMode ? 1f + 0.6f * maxLvl : 1f;
+            _replayGlitchIn = Random.Range(1.5f, 3f) / _replayIntensity;
             _replayFreeze = 0f;
             _replayDebt = 0f;
+            _choppyTimer = 0f;
+            _choppyAcc = 0f;
+            _rewindSnap = null;
+            _suppressEventsUntil = -1;
             _acc = 0f;
             TurnNumber = 0;
             _views[0].OnMatchReset();
@@ -762,6 +791,19 @@ namespace LagFighter
             CaptureTurnStartStun();
         }
 
+        // Fin del tirón: si hay foto reciente del MISMO turno, retrocede unos
+        // frames y los re-simula — el "teleport" clásico de netplay. Los eventos
+        // re-simulados no re-disparan juice, y la deuda cubre el tiempo perdido.
+        void EndStall()
+        {
+            if (!ReplayLagFX.Rewind || _rewindSnap == null) return;
+            if (_rewindSnap.Tick < TurnStartTick || _rewindSnap.Tick >= Sim.Tick) return;
+            _suppressEventsUntil = Sim.Tick;
+            _replayDebt += (Sim.Tick - _rewindSnap.Tick) * SimConfig.TickDuration;
+            Sim = _rewindSnap;
+            _rewindSnap = null;
+        }
+
         void CaptureTurnStartStun()
         {
             for (int i = 0; i < 2; i++)
@@ -775,30 +817,59 @@ namespace LagFighter
         {
             if (_hitstop > 0f) { _hitstop -= Time.deltaTime * PlaybackSpeed; return; }
 
-            // ---- lag teatral: congelar → deuda → fast-forward hasta alcanzarse ----
+            // ---- lag teatral (flags en ReplayLagFX): congelar/saltos → deuda →
+            // fast-forward hasta alcanzarse, con rewind y ping falso opcionales ----
             float dt = Time.deltaTime;
-            if (_replayFreeze > 0f)
-            {
-                _replayFreeze -= dt;
-                _replayDebt += dt;
-                _hud.SetReplayStalled(true);
-                return; // trabado: el playhead no avanza, la sim tampoco
-            }
-            _hud.SetReplayStalled(false);
-            _replayGlitchIn -= dt;
-            if (_replayGlitchIn <= 0f)
-            {
-                _replayGlitchIn = Random.Range(1.6f, 4f);
-                _replayFreeze = Random.Range(0.15f, 0.55f);
-                _hud.GlitchBurst(_replayFreeze + 0.25f);
-                SfxLib.Play(SfxLib.Kind.Glitch, 0.35f);
-                return;
-            }
             float lagMult = 1f;
-            if (_replayDebt > 0f)
+            if (ReplayLagFX.Enabled)
             {
-                lagMult = 2.6f; // rubber-banding: corre a recuperar lo congelado
-                _replayDebt = Mathf.Max(0f, _replayDebt - dt * (lagMult - 1f));
+                if (_replayFreeze > 0f)
+                {
+                    _replayFreeze -= dt;
+                    _replayDebt += dt;
+                    _hud.SetReplayStalled(true);
+                    if (ReplayLagFX.AudioDrop) AudioListener.volume = 0.3f; // el audio se ahoga
+                    if (_replayFreeze <= 0f) EndStall();
+                    return; // trabado: el playhead no avanza, la sim tampoco
+                }
+                _hud.SetReplayStalled(false);
+                if (ReplayLagFX.AudioDrop && AudioListener.volume < 1f)
+                    AudioListener.volume = Mathf.MoveTowards(AudioListener.volume, 1f, 3f * dt);
+
+                if (_choppyTimer > 0f)
+                {
+                    // "a los saltos": el tiempo se junta y se suelta en tandas (~5 fps)
+                    _choppyTimer -= dt;
+                    _choppyAcc += dt;
+                    if (_choppyAcc < 0.18f && _choppyTimer > 0f) return;
+                    dt = _choppyAcc;
+                    _choppyAcc = 0f;
+                }
+                else if (ReplayLagFX.Stutter || ReplayLagFX.Choppy)
+                {
+                    _replayGlitchIn -= dt;
+                    if (_replayGlitchIn <= 0f)
+                    {
+                        _replayGlitchIn = Random.Range(1.6f, 4f) / _replayIntensity;
+                        bool freeze = ReplayLagFX.Stutter &&
+                                      (!ReplayLagFX.Choppy || Random.value < 0.55f);
+                        if (freeze)
+                        {
+                            _replayFreeze = Random.Range(0.15f, 0.55f) * Mathf.Min(_replayIntensity, 1.6f);
+                            _hud.GlitchBurst(_replayFreeze + 0.25f);
+                            SfxLib.Play(SfxLib.Kind.Glitch, 0.35f);
+                            return;
+                        }
+                        _choppyTimer = Random.Range(0.7f, 1.4f) * Mathf.Min(_replayIntensity, 1.5f);
+                        _hud.GlitchBurst(0.3f);
+                        SfxLib.Play(SfxLib.Kind.Glitch, 0.25f);
+                    }
+                }
+                if (_replayDebt > 0f)
+                {
+                    lagMult = 2.6f; // rubber-banding: corre a recuperar lo congelado
+                    _replayDebt = Mathf.Max(0f, _replayDebt - dt * (lagMult - 1f));
+                }
             }
 
             _acc += dt * PlaybackSpeed * lagMult;
@@ -806,7 +877,11 @@ namespace LagFighter
             {
                 _acc -= SimConfig.TickDuration;
                 Sim.Step();
-                DispatchEvents();
+                // foto periódica para el mini-rewind (solo mientras hay flag)
+                if (ReplayLagFX.Rewind && Sim.Tick % 6 == 0) _rewindSnap = Sim.Clone();
+                // tras un rewind, lo re-simulado ya se vio: sin sfx/sparks dobles
+                if (Sim.Tick > _suppressEventsUntil) DispatchEvents();
+                else _lastProjCount = Sim.Projectiles.Count;
 
                 if (Sim.Over)
                 {

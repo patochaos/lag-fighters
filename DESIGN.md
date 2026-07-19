@@ -88,10 +88,18 @@ partir del turno siguiente.
 
 ### Presentación / testeo
 
-- **Lag teatral del replay** (2026-07-18): la repetición se traba al azar
-  (0.15–0.55s, cartel "|| LAG...", glitch bars, sfx de estática) y después
-  corre a ×2.6 hasta recuperar la deuda de tiempo, como un stream con mala
-  conexión. Solo maquilla el reloj de playback; la re-simulación es idéntica.
+- **Lag teatral del replay** (2026-07-18): la repetición se comporta como un
+  stream con mala conexión. Solo maquilla el reloj de playback; la
+  re-simulación es idéntica. Flags independientes en `ReplayLagFX`
+  (MatchController.cs) para apagar lo que no convenza:
+  `Stutter` (congela 0.15–0.55s con "|| LAG...", glitch bars y estática, y
+  después corre a ×2.6 hasta recuperar la deuda) · `Choppy` (ratos a ~5 fps,
+  a los saltos) · `PingSpike` (ping falso 1800–4800ms en rojo + wifi en
+  pánico) · `Rewind` (al descongelar retrocede hasta 6f del mismo turno y los
+  re-simula sin re-disparar juice: el teleport de netplay) · `AudioDrop` (el
+  audio se ahoga al 30% durante el tirón) · `ScaleWithLag` (en Lag Mode la
+  frecuencia/duración escala con el nivel alcanzado en el round) ·
+  `Enabled` (master).
 - Rounds al mejor de 3 (marcadores dorados junto a los pips; V repite el
   último round, R es revancha). **20 turnos por round** (2026-07-18): al
   agotarse → TIME OVER y gana el que tiene más vida (empate posible). El

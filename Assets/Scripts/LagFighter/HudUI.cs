@@ -89,6 +89,8 @@ namespace LagFighter
         Image _replayPanel, _skipBtn;
         Text _replayTitle;
         bool _replayStalled;
+        int _fakePing;      // ping spike falso durante el tirón del replay
+        bool _connSpiked;
 
         // caches para no armar strings por frame (WebGL sufre el GC)
         float _lastConnDist = -1f;
@@ -329,6 +331,7 @@ namespace LagFighter
             if (on == _replayStalled) return;
             _replayStalled = on;
             _replayTitle.text = on ? "|| LAG..." : "► REPLAY";
+            if (on) _fakePing = Random.Range(1800, 4800); // cada tirón, su spike
         }
 
         public void ShowBigMessage(string msg, Color c, float duration = 2.6f, int slot = 0)
@@ -686,6 +689,26 @@ namespace LagFighter
 
         void UpdateConnStrip(MatchSim sim)
         {
+            // tirón del replay: ping spike en rojo y wifi en pánico
+            if (_replayStalled && ReplayLagFX.PingSpike)
+            {
+                if (!_connSpiked)
+                {
+                    _connSpiked = true;
+                    _connText.text = $"PING {_fakePing}MS · PACKET LOSS";
+                    _connText.color = new Color(1f, 0.35f, 0.3f);
+                }
+                for (int b = 0; b < 4; b++)
+                    _wifiBars[b].color = new Color(0.95f, 0.25f, 0.2f, Random.value < 0.5f ? 0.7f : 0.12f);
+                return;
+            }
+            if (_connSpiked)
+            {
+                _connSpiked = false;
+                _connText.color = new Color(1f, 1f, 1f, 0.8f);
+                _lastConnDist = -1f; // forzar rearmado del texto normal
+            }
+
             float dist = Mathf.Abs(sim.Fighters[1].X - sim.Fighters[0].X);
             int lvl = _mc.LagLevel;
             // armar el string solo cuando cambia algo (GC por frame en WebGL)
