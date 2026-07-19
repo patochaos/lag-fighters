@@ -148,7 +148,11 @@ namespace LagFighter
             }
 
             // luces de acento por lado (celeste P1 / naranja P2): despegan a los
-            // blockmen del fondo gris y refuerzan la identidad de cada esquina
+            // blockmen del fondo gris y refuerzan la identidad de cada esquina.
+            // En WebGL NO: las point lights piden la variante _ADDITIONAL_LIGHTS
+            // del Lit, que la build web strippea, y el forward pass entero deja
+            // de dibujar lo opaco (arena y peleadores invisibles).
+            if (Application.platform == RuntimePlatform.WebGLPlayer) return;
             for (int s = 0; s < 2; s++)
             {
                 var accGo = new GameObject(s == 0 ? "AccentLightP1" : "AccentLightP2");

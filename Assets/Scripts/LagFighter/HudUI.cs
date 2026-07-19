@@ -148,9 +148,10 @@ namespace LagFighter
             _prompt = MakeTextP(_canvasRt, "Prompt", "", new Vector2(0.5f, 1f), new Vector2(0f, -76f), new Vector2(1500f, 30f),
                 16, Palette.Startup, TextAnchor.MiddleCenter);
 
-            // timer de planificación (online / 1v1): cuenta regresiva al lado del prompt
-            _planTimerText = MakeTextP(_canvasRt, "PlanTimer", "", new Vector2(0.5f, 1f), new Vector2(700f, -76f), new Vector2(160f, 30f),
-                16, Palette.Guard, TextAnchor.MiddleRight);
+            // timer de planificación (online / 1v1): grande, a la izquierda del
+            // bloque del rival (antes quedaba ABAJO del panel y la vida lo tapaba)
+            _planTimerText = MakeTextP(_canvasRt, "PlanTimer", "", new Vector2(1f, 1f), new Vector2(-352f, -40f), new Vector2(200f, 44f),
+                22, Palette.Guard, TextAnchor.MiddleRight);
             _planTimerText.rectTransform.pivot = new Vector2(1f, 0.5f);
 
             _turnSummary = MakeText(_canvasRt, "TurnSummary", "", new Vector2(0.5f, 1f), new Vector2(0f, -102f), new Vector2(1400f, 22f),
