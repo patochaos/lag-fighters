@@ -79,13 +79,19 @@ Al subir aparece el cartel ("IT GETS LAGGIER…", "EL WIFI ESTÁ LLORANDO",
 barras y termina parpadeando en rojo (con "ping" falso). La timeline re-escala
 (RowW / CurrentTurnFrames). El lag level se resetea por round.
 
-En **VS IA**, después se elige perfil (RANDOM por defecto, Zoner, Aggressive,
-Defensive, Trickster o Adaptive) y dificultad (Fácil, Normal por defecto o
-Difícil). RANDOM fija un perfil para toda la partida; Adaptive aprende solo de
-planes ya revelados y aplica lo observado a partir del turno siguiente.
+**VS IA** entra directo a pelear contra ADAPTIVE en NORMAL (pedido 2026-07-18:
+cero fricción para el caso común). **IA CUSTOM** abre el submenú de perfil
+(RANDOM, Zoner, Aggressive, Defensive, Trickster o Adaptive) y dificultad
+(Fácil, Normal por defecto o Difícil). RANDOM fija un perfil para toda la
+partida; Adaptive aprende solo de planes ya revelados y aplica lo observado a
+partir del turno siguiente.
 
 ### Presentación / testeo
 
+- **Lag teatral del replay** (2026-07-18): la repetición se traba al azar
+  (0.15–0.55s, cartel "|| LAG...", glitch bars, sfx de estática) y después
+  corre a ×2.6 hasta recuperar la deuda de tiempo, como un stream con mala
+  conexión. Solo maquilla el reloj de playback; la re-simulación es idéntica.
 - Rounds al mejor de 3 (marcadores dorados junto a los pips; V repite el
   último round, R es revancha). **20 turnos por round** (2026-07-18): al
   agotarse → TIME OVER y gana el que tiene más vida (empate posible). El

@@ -99,7 +99,7 @@ namespace LagFighter
                 case MoveCatalog.AttackB: return "DERRIBA · −10 block";
                 case MoveCatalog.DashF: return "cierra distancia · no bloquea";
                 case MoveCatalog.DashB: return "el bait · no bloquea";
-                default: return "avanza · no bloquea";
+                default: return "PASO CORTO · ajuste fino"; // caminar +: la mitad del dash
             }
         }
 

@@ -88,6 +88,7 @@ namespace LagFighter
         // cartel de replay + botón SKIP (el replay corre siempre, saltearlo es opcional)
         Image _replayPanel, _skipBtn;
         Text _replayTitle;
+        bool _replayStalled;
 
         // caches para no armar strings por frame (WebGL sufre el GC)
         float _lastConnDist = -1f;
@@ -116,7 +117,8 @@ namespace LagFighter
         void BuildAll()
         {
             // overlay frío de planificación: primero, así queda detrás de todo
-            _planOverlay = MakeImage(_canvasRt, "PlanOverlay", new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.25f, 0.5f, 0.9f, 0.08f));
+            // (alfa bajito: es una insinuación de "tiempo pausado", no un filtro)
+            _planOverlay = MakeImage(_canvasRt, "PlanOverlay", new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.25f, 0.5f, 0.9f, 0.03f));
             var por = _planOverlay.rectTransform;
             por.anchorMin = Vector2.zero;
             por.anchorMax = Vector2.one;
@@ -318,6 +320,17 @@ namespace LagFighter
         // los avisos de lag van al slot de sistema: no pisan COUNTER/K.O. ni al revés
         public void ShowLagMessage(string msg) => ShowBigMessage(msg, new Color(1f, 0.35f, 0.3f), 2.6f, 1);
 
+        // lag teatral del replay: franjas de glitch prestadas del efecto de subida
+        // de lag, y el cartel del replay pasa a "|| LAG..." mientras está trabado
+        public void GlitchBurst(float dur) => _lagFxTimer = Mathf.Max(_lagFxTimer, dur);
+
+        public void SetReplayStalled(bool on)
+        {
+            if (on == _replayStalled) return;
+            _replayStalled = on;
+            _replayTitle.text = on ? "|| LAG..." : "► REPLAY";
+        }
+
         public void ShowBigMessage(string msg, Color c, float duration = 2.6f, int slot = 0)
         {
             _bigMsg[slot].text = msg;
@@ -449,6 +462,7 @@ namespace LagFighter
             // cartel REPLAY + SKIP mientras corre la repetición
             bool replaying = flow == MatchController.Flow.Replay;
             if (_replayPanel.gameObject.activeSelf != replaying) _replayPanel.gameObject.SetActive(replaying);
+            if (!replaying && _replayStalled) SetReplayStalled(false);
             if (replaying)
             {
                 var rc = _replayTitle.color;

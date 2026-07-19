@@ -15,10 +15,14 @@ namespace LagFighter
             ("LAG MODE", "Cada 3 turnos el lag sube 50%: 60 → 90 → 135 → 202 → 303 frames. It gets laggier."),
         };
 
+        // VS IA entra directo (Adaptive/Normal); IA CUSTOM abre el submenú
+        // de perfil + dificultad para quien quiera tunear.
+        const int QuickAIIdx = 1, CustomAIIdx = 2;
         static readonly (string label, string desc, GameMode mode)[] Modes =
         {
             ("PRÁCTICA", "Solo vos y un dummy quieto. Probá comandos, distancias y framedata.", GameMode.Practice),
-            ("VS IA", "La CPU planifica su turno en secreto, igual que vos.", GameMode.VsAI),
+            ("VS IA", "Directo a pelear: la IA adaptativa en dificultad normal planifica en secreto, igual que vos.", GameMode.VsAI),
+            ("IA CUSTOM", "Elegí perfil de IA (Zoner, Aggressive, Trickster…) y dificultad.", GameMode.VsAI),
             ("1v1 LOCAL", "Misma PC: planifica J1, pantalla de 'pasá el teclado', planifica J2.", GameMode.PvP),
             ("POR CÓDIGO", "Pelea por chat: cada turno intercambian un código corto y ambos ven la misma pelea. Sin servidores.", GameMode.Async),
             ("ONLINE", "Sala con código de invitación: uno crea, el otro se une. Turnos con timer de 30s.", GameMode.Online),
@@ -212,8 +216,8 @@ namespace LagFighter
             _stepTitle.text = _step == 0 ? "¿CUÁNTO LAG QUERÉS?" :
                               _step == 1 ? (_lagChoice ? "LAG MODE — elegí rival" : "NORMAL — elegí rival") :
                               _step == 2 ? "POR CÓDIGO — ¿de qué lado jugás?" :
-                              _step == 3 ? "VS IA — ELEGÍ UN PERFIL" :
-                              _step == 4 ? "VS IA — ELEGÍ DIFICULTAD" :
+                              _step == 3 ? "IA CUSTOM — ELEGÍ UN PERFIL" :
+                              _step == 4 ? "IA CUSTOM — ELEGÍ DIFICULTAD" :
                               _step == 5 ? "ONLINE — SALA CON CÓDIGO" :
                               _step == 6 ? "ESCRIBÍ EL CÓDIGO DE LA SALA" :
                               "ESPERANDO AL RIVAL…";
@@ -282,7 +286,12 @@ namespace LagFighter
             if (_step == 1)
             {
                 PlayerPrefs.SetInt("lf_menu_mode", idx);
-                if (Modes[idx].mode == GameMode.VsAI)
+                if (idx == QuickAIIdx) // VS IA directo: adaptativa en normal, a pelear
+                {
+                    _mc.StartMatch(GameMode.VsAI, _lagChoice, 0, AIProfile.Adaptive, AIDifficulty.Normal);
+                    return;
+                }
+                if (idx == CustomAIIdx)
                 {
                     _step = 3;
                     _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_profile", 0), 0, AIProfiles.Length - 1);

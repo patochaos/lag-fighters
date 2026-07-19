@@ -69,6 +69,14 @@ namespace LagFighter
         readonly List<int>[] _plans = { new List<int>(), new List<int>() };
         readonly List<(List<int> q0, List<int> q1, int w0, int w1)> _turnLog = new List<(List<int>, List<int>, int, int)>();
         int _replayTurn;
+
+        // Lag TEATRAL del replay (solo presentación): cada tanto la repetición
+        // se traba como un stream con mala conexión, acumula "deuda" de tiempo
+        // y después corre acelerada hasta alcanzarse. La sim re-simula idéntico;
+        // acá solo se maquilla el reloj de playback.
+        float _replayGlitchIn;  // segundos hasta el próximo tirón
+        float _replayFreeze;    // lo que queda congelado
+        float _replayDebt;      // tiempo congelado a recuperar en fast-forward
         readonly int[] _wins = new int[2];
         public readonly int[] TurnStartStun = new int[2];        // stun arrastrado al arrancar el turno
         public readonly StunKind[] TurnStartStunKind = new StunKind[2];
@@ -729,6 +737,9 @@ namespace LagFighter
             Sim = new MatchSim();
             if (Mode == GameMode.Practice) Sim.Fighters[1].BlockEnabled = false;
             _replayTurn = 0;
+            _replayGlitchIn = Random.Range(1.5f, 3f);
+            _replayFreeze = 0f;
+            _replayDebt = 0f;
             _acc = 0f;
             TurnNumber = 0;
             _views[0].OnMatchReset();
@@ -764,7 +775,33 @@ namespace LagFighter
         {
             if (_hitstop > 0f) { _hitstop -= Time.deltaTime * PlaybackSpeed; return; }
 
-            _acc += Time.deltaTime * PlaybackSpeed;
+            // ---- lag teatral: congelar → deuda → fast-forward hasta alcanzarse ----
+            float dt = Time.deltaTime;
+            if (_replayFreeze > 0f)
+            {
+                _replayFreeze -= dt;
+                _replayDebt += dt;
+                _hud.SetReplayStalled(true);
+                return; // trabado: el playhead no avanza, la sim tampoco
+            }
+            _hud.SetReplayStalled(false);
+            _replayGlitchIn -= dt;
+            if (_replayGlitchIn <= 0f)
+            {
+                _replayGlitchIn = Random.Range(1.6f, 4f);
+                _replayFreeze = Random.Range(0.15f, 0.55f);
+                _hud.GlitchBurst(_replayFreeze + 0.25f);
+                SfxLib.Play(SfxLib.Kind.Glitch, 0.35f);
+                return;
+            }
+            float lagMult = 1f;
+            if (_replayDebt > 0f)
+            {
+                lagMult = 2.6f; // rubber-banding: corre a recuperar lo congelado
+                _replayDebt = Mathf.Max(0f, _replayDebt - dt * (lagMult - 1f));
+            }
+
+            _acc += dt * PlaybackSpeed * lagMult;
             while (_acc >= SimConfig.TickDuration)
             {
                 _acc -= SimConfig.TickDuration;
