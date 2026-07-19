@@ -17,14 +17,14 @@ namespace LagFighter
 
         // VS IA entra directo (Adaptive/Normal); IA CUSTOM abre el submenú
         // de perfil + dificultad para quien quiera tunear.
+        // 1v1 LOCAL y POR CÓDIGO retirados del menú (2026-07-18, injugables);
+        // la maquinaria sigue en MatchController y TurnCode la usa ONLINE.
         const int QuickAIIdx = 1, CustomAIIdx = 2;
         static readonly (string label, string desc, GameMode mode)[] Modes =
         {
             ("PRÁCTICA", "Solo vos y un dummy quieto. Probá comandos, distancias y framedata.", GameMode.Practice),
             ("VS IA", "Directo a pelear: la IA adaptativa en dificultad normal planifica en secreto, igual que vos.", GameMode.VsAI),
             ("IA CUSTOM", "Elegí perfil de IA (Zoner, Aggressive, Trickster…) y dificultad.", GameMode.VsAI),
-            ("1v1 LOCAL", "Misma PC: planifica J1, pantalla de 'pasá el teclado', planifica J2.", GameMode.PvP),
-            ("POR CÓDIGO", "Pelea por chat: cada turno intercambian un código corto y ambos ven la misma pelea. Sin servidores.", GameMode.Async),
             ("ONLINE", "Sala con código de invitación: uno crea, el otro se une. Turnos con timer de 30s.", GameMode.Online),
         };
 
@@ -32,12 +32,6 @@ namespace LagFighter
         {
             ("CREAR SALA", "Te da un código de 4 letras para pasarle a tu rival por donde sea."),
             ("UNIRSE", "Escribí el código que te pasaron y a pelear."),
-        };
-
-        static readonly (string label, string desc)[] Sides =
-        {
-            ("SOY JUGADOR 1", "El de la izquierda (azul). Arreglen quién es quién antes de empezar."),
-            ("SOY JUGADOR 2", "El de la derecha (naranja)."),
         };
 
         static readonly (string label, string desc, AIProfile profile)[] AIProfiles =
@@ -64,8 +58,9 @@ namespace LagFighter
         Text[] _cardLabels;
         Text _desc, _stepTitle;
         int _sel;
-        int _step; // 0 lag, 1 modo, 2 lado async, 3 perfil IA, 4 dificultad IA,
+        int _step; // 0 lag, 1 modo, 3 perfil IA, 4 dificultad IA,
                    // 5 online (crear/unirse), 6 escribir código, 7 esperando rival
+                   // (el 2 era "lado async"; quedó libre al retirar POR CÓDIGO)
         bool _lagChoice;
         AIProfile _aiProfileChoice = AIProfile.Random;
         bool _active;
@@ -134,7 +129,8 @@ namespace LagFighter
             bandRt.SetParent(rootRt, false);
             bandRt.anchorMin = bandRt.anchorMax = new Vector2(0.5f, 0.5f);
             bandRt.anchoredPosition = new Vector2(0f, -10f);
-            bandRt.sizeDelta = new Vector2(1160f, 500f);
+            bandRt.sizeDelta = new Vector2(1280f, 500f); // 4 cartas en fila = 1200
+
             band.GetComponent<Image>().color = new Color(0f, 0f, 0f, hasSplash ? 0.62f : 0.25f);
             band.GetComponent<Image>().raycastTarget = false;
 
@@ -192,7 +188,7 @@ namespace LagFighter
         }
 
         int OptionCount => _step == 0 ? LagOptions.Length : _step == 1 ? Modes.Length :
-            _step == 2 ? Sides.Length : _step == 3 ? AIProfiles.Length :
+            _step == 3 ? AIProfiles.Length :
             _step == 4 ? AIDifficulties.Length : _step == 5 ? OnlineOptions.Length : 0;
 
         public void Open()
@@ -215,7 +211,6 @@ namespace LagFighter
             int count = OptionCount;
             _stepTitle.text = _step == 0 ? "¿CUÁNTO LAG QUERÉS?" :
                               _step == 1 ? (_lagChoice ? "LAG MODE — elegí rival" : "NORMAL — elegí rival") :
-                              _step == 2 ? "POR CÓDIGO — ¿de qué lado jugás?" :
                               _step == 3 ? "IA CUSTOM — ELEGÍ UN PERFIL" :
                               _step == 4 ? "IA CUSTOM — ELEGÍ DIFICULTAD" :
                               _step == 5 ? "ONLINE — SALA CON CÓDIGO" :
@@ -247,7 +242,7 @@ namespace LagFighter
                 _cards[i].rectTransform.sizeDelta = grid ? new Vector2(280f, 100f) : new Vector2(300f, 110f);
                 _cards[i].rectTransform.anchoredPosition = new Vector2(x, y);
                 _cardLabels[i].text = _step == 0 ? LagOptions[i].label : _step == 1 ? Modes[i].label :
-                    _step == 2 ? Sides[i].label : _step == 3 ? AIProfiles[i].label :
+                    _step == 3 ? AIProfiles[i].label :
                     _step == 5 ? OnlineOptions[i].label : AIDifficulties[i].label;
                 _cardLabels[i].fontSize = count >= 4 ? 16 : 24;
             }
@@ -266,7 +261,7 @@ namespace LagFighter
                     : new Color(0.12f, 0.13f, 0.17f, 0.9f);
             }
             _desc.text = _step == 0 ? LagOptions[_sel].desc : _step == 1 ? Modes[_sel].desc :
-                _step == 2 ? Sides[_sel].desc : _step == 3 ? AIProfiles[_sel].desc :
+                _step == 3 ? AIProfiles[_sel].desc :
                 _step == 5 ? OnlineOptions[_sel].desc : AIDifficulties[_sel].desc;
         }
 
@@ -298,13 +293,6 @@ namespace LagFighter
                     Layout();
                     return;
                 }
-                if (Modes[idx].mode == GameMode.Async)
-                {
-                    _step = 2;
-                    _sel = 0;
-                    Layout();
-                    return;
-                }
                 if (Modes[idx].mode == GameMode.Online)
                 {
                     _step = 5;
@@ -313,11 +301,6 @@ namespace LagFighter
                     return;
                 }
                 _mc.StartMatch(Modes[idx].mode, _lagChoice);
-                return;
-            }
-            if (_step == 2)
-            {
-                _mc.StartMatch(GameMode.Async, _lagChoice, idx);
                 return;
             }
             if (_step == 5)
@@ -405,7 +388,7 @@ namespace LagFighter
                     _step = 3;
                     _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_profile", 0), 0, AIProfiles.Length - 1);
                 }
-                else if (_step >= 2) // lado async / perfil / online → elegir rival
+                else if (_step >= 2) // perfil / online → elegir rival
                 {
                     _step = 1;
                     _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_mode", 1), 0, Modes.Length - 1);

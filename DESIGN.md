@@ -157,19 +157,22 @@ partir del turno siguiente.
   plan contra rival quieto (ghost + "pegaría N si no se mueve").
 - `MatchController.cs`: Planning → Executing → (KO | EndTurn → Planning).
   Log de turnos (`_turnLog`) → **replay completo con V** re-simulando.
-- Modos: Práctica (dummy quieto, revive) / VS IA (planifica en secreto) / 1v1
-  local hotseat con **picks secretos** (pantalla "pasá el teclado") / **POR
-  CÓDIGO**: online asincrónico sin servidores — cada turno se intercambia un
-  código corto (`TurnCode`: LF+base64 de lado/turno/wakeup/cola) por chat y
-  la sim determinista garantiza que ambos ven la misma pelea / **ONLINE**
+- Modos en el menú: Práctica (dummy quieto, revive) / VS IA (directo contra
+  Adaptive Normal) / IA CUSTOM (perfil + dificultad) / **ONLINE**
   (2026-07-18): sala con código de invitación de 4 letras sobre un relay
   Supabase tonto (`NetLobby.cs`, tablas `lf_rooms`/`lf_turns` en el proyecto
-  compartido arrow-game) — el mismo `TurnCode` del modo manual, pero subido y
-  bajado por HTTP con polling de 1.5s. Sin cuentas ni matchmaking; la sala
-  persiste (retomable). Sin revancha local (desincronizaría): sala nueva.
-- **Timer de planificación de 30s** en ONLINE y 1v1 local: al agotarse se
-  manda lo que haya (sin órdenes = quieto bloqueando). Práctica/VS IA sin
-  timer. El HUD muestra la cuenta y se pone rojo a los 10s.
+  compartido arrow-game) — cada turno se intercambia un `TurnCode` (LF+base64
+  de lado/turno/wakeup/cola) por HTTP con polling de 1.5s y la sim
+  determinista garantiza que ambos ven la misma pelea. Sin cuentas ni
+  matchmaking; la sala persiste (retomable). Sin revancha local
+  (desincronizaría): sala nueva.
+- **Retirados del menú (2026-07-18, injugables)**: 1v1 local hotseat (picks
+  secretos con "pasá el teclado") y POR CÓDIGO (intercambio manual del
+  TurnCode por chat). La maquinaria sigue en `MatchController` por si
+  vuelven; el `TurnCode` nació ahí y es la base de ONLINE.
+- **Timer de planificación de 30s** en ONLINE: al agotarse se manda lo que
+  haya (sin órdenes = quieto bloqueando). Práctica/VS IA sin timer. El HUD
+  muestra la cuenta y se pone rojo a los 10s.
 - UI: cartas con framedata (PlanMenuUI), timelines de 60f con fichas por
   comando y bloque de stun arrastrado al inicio (HudUI) — la fila rival se
   revela al ejecutar. Hurt/hitboxes con toggle (Viz.cs). Blockman procedural
