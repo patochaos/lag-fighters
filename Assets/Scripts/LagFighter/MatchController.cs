@@ -8,6 +8,10 @@ namespace LagFighter
 {
     public enum GameMode { Practice, VsAI, PvP, Async, Online }
 
+    // Cómo se VE la repetición (botones en el HUD, cambiables en vivo):
+    // LAG = con el lag teatral · NORMAL = limpia · FAST = limpia a ×2.
+    public enum ReplayViewMode { Lag, Normal, Fast }
+
     // Flags del lag TEATRAL del replay (solo presentación, la re-simulación es
     // idéntica). Apagar acá lo que no convenza — cada efecto es independiente.
     public static class ReplayLagFX
@@ -95,6 +99,24 @@ namespace LagFighter
         float _replayIntensity = 1f;   // >1 en Lag Mode según el nivel alcanzado
         MatchSim _rewindSnap;          // foto reciente de la sim para el mini-rewind
         int _suppressEventsUntil = -1; // re-step tras rewind: no re-disparar sfx/sparks ya vistos
+
+        // modo de visualización del replay, cambiable EN VIVO desde el HUD
+        // (se recuerda dentro de la sesión)
+        public ReplayViewMode ReplayMode { get; private set; } = ReplayViewMode.Lag;
+
+        public void SetReplayMode(ReplayViewMode m)
+        {
+            if (m == ReplayMode) return;
+            ReplayMode = m;
+            // cortar en seco cualquier tirón en curso al salir de LAG
+            // (_suppressEventsUntil queda: evita re-juice si venimos de un rewind)
+            _replayFreeze = 0f;
+            _replayDebt = 0f;
+            _choppyTimer = 0f;
+            _choppyAcc = 0f;
+            _hud.SetReplayStalled(false);
+            if (AudioListener.volume < 1f) AudioListener.volume = 1f;
+        }
         readonly int[] _wins = new int[2];
         public readonly int[] TurnStartStun = new int[2];        // stun arrastrado al arrancar el turno
         public readonly StunKind[] TurnStartStunKind = new StunKind[2];
@@ -821,7 +843,7 @@ namespace LagFighter
             // fast-forward hasta alcanzarse, con rewind y ping falso opcionales ----
             float dt = Time.deltaTime;
             float lagMult = 1f;
-            if (ReplayLagFX.Enabled)
+            if (ReplayMode == ReplayViewMode.Lag && ReplayLagFX.Enabled)
             {
                 if (_replayFreeze > 0f)
                 {
@@ -872,13 +894,14 @@ namespace LagFighter
                 }
             }
 
-            _acc += dt * PlaybackSpeed * lagMult;
+            _acc += dt * PlaybackSpeed * lagMult * (ReplayMode == ReplayViewMode.Fast ? 2f : 1f);
             while (_acc >= SimConfig.TickDuration)
             {
                 _acc -= SimConfig.TickDuration;
                 Sim.Step();
-                // foto periódica para el mini-rewind (solo mientras hay flag)
-                if (ReplayLagFX.Rewind && Sim.Tick % 6 == 0) _rewindSnap = Sim.Clone();
+                // foto periódica para el mini-rewind (solo en modo LAG)
+                if (ReplayMode == ReplayViewMode.Lag && ReplayLagFX.Rewind && Sim.Tick % 6 == 0)
+                    _rewindSnap = Sim.Clone();
                 // tras un rewind, lo re-simulado ya se vio: sin sfx/sparks dobles
                 if (Sim.Tick > _suppressEventsUntil) DispatchEvents();
                 else _lastProjCount = Sim.Projectiles.Count;

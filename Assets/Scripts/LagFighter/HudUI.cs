@@ -92,6 +92,11 @@ namespace LagFighter
         int _fakePing;      // ping spike falso durante el tirón del replay
         bool _connSpiked;
 
+        // modos de visualización del replay: LAG / NORMAL / RÁPIDO, en vivo
+        static readonly string[] ReplayModeNames = { "LAG", "NORMAL", "RÁPIDO" };
+        readonly Image[] _replayModeBtns = new Image[3];
+        readonly Text[] _replayModeLabels = new Text[3];
+
         // caches para no armar strings por frame (WebGL sufre el GC)
         float _lastConnDist = -1f;
         int _lastConnPing = -1;
@@ -181,6 +186,20 @@ namespace LagFighter
             _skipBtn = MakeImage(_replayPanel.rectTransform, "SkipBtn", new Vector2(1f, 0.5f), new Vector2(-84f, 0f), new Vector2(150f, 32f), new Color(0.1f, 0.12f, 0.16f, 0.95f));
             MakeTextP(_skipBtn.rectTransform, "T", "SKIP — ESPACIO", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(146f, 20f),
                 8, new Color(1f, 1f, 1f, 0.85f), TextAnchor.MiddleCenter);
+            // botones GRANDES de modo de replay, colgados del panel (se muestran
+            // y ocultan con él): cambian cómo se ve la repetición en vivo
+            for (int m = 0; m < 3; m++)
+            {
+                var btn = MakeImage(_replayPanel.rectTransform, "Mode" + m, new Vector2(0.5f, 0f),
+                    new Vector2((m - 1) * 168f, -36f), new Vector2(158f, 50f), new Color(0.1f, 0.12f, 0.16f, 0.95f));
+                var ol = btn.gameObject.AddComponent<Outline>();
+                ol.effectColor = new Color(1f, 1f, 1f, 0.18f);
+                ol.effectDistance = new Vector2(1.5f, -1.5f);
+                _replayModeBtns[m] = btn;
+                _replayModeLabels[m] = MakeTextP(btn.rectTransform, "T", ReplayModeNames[m],
+                    new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(154f, 24f),
+                    16, Color.white, TextAnchor.MiddleCenter);
+            }
             _replayPanel.gameObject.SetActive(false);
             RegisterHover(_skipBtn);
 
@@ -471,11 +490,28 @@ namespace LagFighter
                 var rc = _replayTitle.color;
                 rc.a = 0.65f + Mathf.PingPong(Time.time * 1.6f, 0.35f); // parpadeo estilo VHS
                 _replayTitle.color = rc;
-                if (GameInput.ClickPressed() && Inside(_skipBtn, GameInput.MousePos()))
+                var rmp = GameInput.MousePos();
+                bool rclick = GameInput.ClickPressed();
+                if (rclick && Inside(_skipBtn, rmp))
                 {
                     SfxLib.Play(SfxLib.Kind.UiClick, 0.8f);
                     _mc.SkipReplay();
                     return;
+                }
+                // LAG / NORMAL / RÁPIDO: quedan en pantalla y conmutan en vivo
+                for (int m = 0; m < 3; m++)
+                {
+                    bool on = (int)_mc.ReplayMode == m;
+                    var c = on ? new Color(0.2f, 0.4f, 0.6f, 0.95f) : new Color(0.1f, 0.12f, 0.16f, 0.95f);
+                    bool over = Inside(_replayModeBtns[m], rmp);
+                    if (over) c = Color.Lerp(c, Color.white, 0.22f);
+                    _replayModeBtns[m].color = c;
+                    _replayModeLabels[m].color = on ? Color.white : new Color(1f, 1f, 1f, 0.6f);
+                    if (rclick && over)
+                    {
+                        SfxLib.Play(SfxLib.Kind.UiClick, 0.8f);
+                        _mc.SetReplayMode((ReplayViewMode)m);
+                    }
                 }
             }
             if (flow != _prevFlow)

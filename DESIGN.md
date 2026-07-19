@@ -99,7 +99,9 @@ partir del turno siguiente.
   re-simula sin re-disparar juice: el teleport de netplay) · `AudioDrop` (el
   audio se ahoga al 30% durante el tirón) · `ScaleWithLag` (en Lag Mode la
   frecuencia/duración escala con el nivel alcanzado en el round) ·
-  `Enabled` (master).
+  `Enabled` (master). Durante el replay hay **tres botones grandes arriba al
+  medio — LAG / NORMAL / RÁPIDO** (`ReplayViewMode`): con lag teatral, limpio,
+  o limpio a ×2; conmutables en vivo y recordados dentro de la sesión.
 - Rounds al mejor de 3 (marcadores dorados junto a los pips; V repite el
   último round, R es revancha). **20 turnos por round** (2026-07-18): al
   agotarse → TIME OVER y gana el que tiene más vida (empate posible). El
