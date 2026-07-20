@@ -304,6 +304,29 @@ namespace LagFighter
             bool empty = framesUsed == 0;
             _doneLabel.text = empty ? "PASAR\n<size=11>(quieto, bloquea)</size>" : "¡LISTO!";
             _doneLabel.fontSize = empty ? 14 : 16;
+
+            RefreshCardStates(); // el plan cambió: gris/overflow de cada carta
+        }
+
+        // Estado visual de cada carta según lo que queda del turno:
+        // - gris oscuro: no entra (estricto) o ni siquiera arranca (fluido)
+        // - lavado rojo-naranja: entra pero CRUZA el turno (identidad overflow)
+        void RefreshCardStates()
+        {
+            if (_cardOverlay == null) return;
+            int used = _mc.PlanFramesUsed(_mc.Picker);
+            int avail = _mc.PlanFramesAvailable(_mc.Picker);
+            for (int i = 0; i < Order.Length; i++)
+            {
+                int mi = Order[i];
+                bool startable = _mc.PlanFits(mi);
+                bool crosses = SimConfig.CarryoverEnabled && startable &&
+                               used + MoveCatalog.All[mi].Total > avail;
+                _cardOverlay[i].gameObject.SetActive(!startable || crosses);
+                _cardOverlay[i].color = !startable
+                    ? new Color(0.02f, 0.02f, 0.03f, 0.78f)
+                    : new Color(0.95f, 0.3f, 0.05f, 0.30f);
+            }
         }
 
         void Highlight(int pos)
@@ -312,12 +335,11 @@ namespace LagFighter
             _sel = ((pos % n) + n) % n;
             for (int i = 0; i < n; i++)
             {
-                bool fits = _mc.PlanFits(Order[i]);
                 bool sel = i == _sel;
                 _cardBg[i].color = sel ? new Color(0.22f, 0.3f, 0.42f, 1f) : new Color(0.12f, 0.13f, 0.17f, 0.98f);
                 _cardName[i].color = sel ? Color.white : new Color(1f, 1f, 1f, 0.85f);
-                _cardOverlay[i].gameObject.SetActive(!fits);
             }
+            RefreshCardStates();
 
             // panel de info: toda la data que antes vivía apretada en la carta
             int mi = Order[_sel];
