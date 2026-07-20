@@ -50,7 +50,7 @@ namespace LagFighter
         // Barra de 70 (era 100: crushear casi no pasaba): 5 jabs o 3 sweeps
         // bloqueados seguidos y la guardia vuela.
         public const float GuardMax = 70f;
-        public const float GuardRegen = 0.1f;       // ~6/seg, solo fuera de guardia/blockstun
+        public const float GuardRegen = 0.14f;      // ~8/seg, SOLO mientras ejecutás moves que no bloquean (guardia = stamina)
         public const int GuardCrushStun = 50;
         public const float GuardCrushRespawn = 35f; // la barra renace al 50%
         public const float ParryGuardRefund = 15f;  // parry exitoso RECARGA guardia: anti-chip
@@ -500,8 +500,11 @@ namespace LagFighter
                 if (f.MoveIndex < 0)
                     f.Face = Fighters[1 - i].X >= f.X ? 1 : -1;
 
-                // la guardia regenera solo cuando NO estás bloqueando ni en blockstun
-                if (!IsBlockingState(i) && !(f.Stun == StunKind.Blockstun && IsStunned(i)))
+                // Guardia = stamina (2026-07-19): regenera SOLO mientras
+                // ejecutás un move que no bloquea. Quieto o bloqueando no
+                // cura — la zanahoria es del que juega: llenar la barra de
+                // órdenes (y cruzarla en turno fluido) recupera la guardia.
+                if (f.MoveIndex >= 0 && !IsBlockingState(i) && !IsStunned(i))
                     f.Guard = Math.Min(SimConfig.GuardMax, f.Guard + SimConfig.GuardRegen);
             }
 

@@ -93,6 +93,17 @@ Online/Async (el toggle no viaja en el protocolo → desync).
   (el horizonte de compromiso COMO mecánica de lag). Ver conversación
   2026-07-19: riesgo de matar al zoner; A/B con el lab antes.
 
+### Guardia = stamina (2026-07-19, anti-tortuga)
+
+La guardia regenera **solo mientras ejecutás un move que no bloquea**
+(`Sim.Step`; GuardRegen 0.1 → 0.14 para compensar el uptime menor). Quieto
+o bloqueando no cura: en turnos largos "esperar al otro" deja de ser gratis,
+pero sin castigo directo — la recompensa va al que llena la barra de órdenes.
+El overflow del turno fluido sigue regenerando durante los frames
+comprometidos. Alternativas anotadas si no alcanza: medidor de IMPULSO
+(stacks por barra llena → +daño en el primer hit), prioridad en trades para
+el que más frames comprometió.
+
 ### Lag Mode
 
 Menú inicial: primero NORMAL o **LAG MODE**. En Lag Mode, cada 3

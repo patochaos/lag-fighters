@@ -1050,9 +1050,11 @@ namespace LagFighter
                     {
                         var m = MoveCatalog.All[mi];
                         float w = m.Total * px - 2f;
-                        // turno fluido: el chip se CORTA en el borde del turno;
-                        // lo que sigue lo dice la pestaña »Nf de más allá del borde
-                        if (x + w > RowW)
+                        // turno fluido: el chip se CORTA en el borde del turno
+                        // y cambia de identidad (naranja pulsante + "»") para
+                        // que se lea que SIGUE en el próximo turno
+                        bool ovfChip = x + w > RowW;
+                        if (ovfChip)
                         {
                             overflowF = Mathf.RoundToInt((x + m.Total * px - RowW) / px);
                             w = Mathf.Max(10f, RowW - x);
@@ -1061,9 +1063,11 @@ namespace LagFighter
                         chip.rectTransform.anchoredPosition = new Vector2(x, 0f);
                         chip.rectTransform.sizeDelta = new Vector2(w, _height - 8f);
                         var c = ChipColor(mi);
+                        if (ovfChip)
+                            c = Color.Lerp(c, new Color(1f, 0.55f, 0.1f), 0.4f + 0.25f * Mathf.PingPong(Time.time * 1.4f, 1f));
                         if (_dim) c = new Color(c.r, c.g, c.b, 0.8f);
                         chip.color = c;
-                        _labels[used - 1].text = ChipLabel(mi);
+                        _labels[used - 1].text = ovfChip ? ChipLabel(mi) + "»" : ChipLabel(mi);
 
                         // fases dentro de la ficha (solo moves con ventana activa):
                         // el mismo amarillo/rojo/azul del panel de info
@@ -1098,9 +1102,11 @@ namespace LagFighter
                 if (overflowF > 0)
                 {
                     _ovfSeg.gameObject.SetActive(true);
-                    _ovfSeg.rectTransform.anchoredPosition = new Vector2(RowW + 3f, 0f);
-                    float pulse = 0.55f + Mathf.PingPong(Time.time * 1.1f, 0.35f);
-                    _ovfSeg.color = new Color(1f, 0.6f, 0.15f, pulse);
+                    _ovfSeg.transform.SetAsLastSibling(); // por arriba de los chips
+                    // ADENTRO del borde derecho: fuera de la barra quedaba invisible
+                    _ovfSeg.rectTransform.anchoredPosition = new Vector2(RowW - 47f, 0f);
+                    float pulse = 0.7f + Mathf.PingPong(Time.time * 1.1f, 0.3f);
+                    _ovfSeg.color = new Color(1f, 0.5f, 0.05f, pulse);
                     _ovfLabel.text = $"»{overflowF}f";
                 }
                 else _ovfSeg.gameObject.SetActive(false);

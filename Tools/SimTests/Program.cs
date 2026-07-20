@@ -51,6 +51,7 @@ class Tests
         LosJabsBloqueadosRompenLaGuardia();
         DpBloqueadoEsMenosQuince();
         ElParryRecargaGuardia();
+        LaGuardiaRegeneraSoloJugando();
         ElFinalDelTatsuComeProyectiles();
         LaEsquinaEmpujaAlAtacante();
         AgarreVsAgarreEsTech();
@@ -281,6 +282,22 @@ class Tests
             ok &= frames <= SimConfig.TurnFrames && ai.ResolvedProfile != AIProfile.Random;
         }
         Check(ok, "todos los perfiles y dificultades respetan el presupuesto");
+    }
+
+    // Guardia = stamina: quieto o bloqueando no regenera; ejecutando sí.
+    static void LaGuardiaRegeneraSoloJugando()
+    {
+        var s = NewSim(-3f, 3f, p1Blocks: false);
+        s.Fighters[0].Guard = 40f;
+        Run(s, 30); // neutral: nada
+        Check(s.Fighters[0].Guard == 40f, "la guardia NO regenera quieto", $"guard {s.Fighters[0].Guard}");
+        s.SetQueue(0, new List<int> { MoveCatalog.DashF, MoveCatalog.DashF });
+        Run(s, 32); // dos dashes = 32f ejecutando
+        Check(s.Fighters[0].Guard > 40f, "la guardia regenera ejecutando moves", $"guard {s.Fighters[0].Guard}");
+        float afterDash = s.Fighters[0].Guard;
+        s.SetQueue(0, new List<int> { MoveCatalog.WalkB });
+        Run(s, 20); // bloquear: tampoco regenera
+        Check(s.Fighters[0].Guard == afterDash, "bloquear no regenera guardia", $"guard {s.Fighters[0].Guard}");
     }
 
     // Turno fluido (SimConfig.CarryoverEnabled): el move en curso cruza el
