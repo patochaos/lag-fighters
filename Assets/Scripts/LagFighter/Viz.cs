@@ -149,7 +149,11 @@ namespace LagFighter
                 go.transform.position = new Vector3(p.X, (SimConfig.ProjY0 + SimConfig.ProjY1) * 0.5f, 0f);
                 if (fresh) go.GetComponent<HadoukenLook>().ResetTrail();
                 float pulse = 0.42f + Mathf.Sin(Time.time * 14f) * 0.04f;
+                if (p.Super) pulse *= 2.1f; // la super es una BOLA
                 go.transform.localScale = new Vector3(pulse, pulse, pulse);
+                go.GetComponent<Renderer>().material.color = p.Super
+                    ? new Color(1f, 0.75f, 0.2f, 0.95f) // dorada
+                    : new Color(0.5f, 0.8f, 1f, 0.9f);
             }
             for (int i = used; i < _projPool.Count; i++)
                 _projPool[i].SetActive(false);

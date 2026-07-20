@@ -28,6 +28,8 @@ namespace LagFighter
         readonly Image[][] _pips = new Image[2][];
         readonly Image[][] _winPips = new Image[2][];
         readonly Image[] _guardFill = new Image[2];
+        readonly Image[] _superFill = new Image[2];
+        readonly Image[] _superBg = new Image[2]; // se oculta con el turno fluido apagado
         const float PipW = 42f, PipGap = 46f;
         const float GuardBarW = SimConfig.MaxHp * PipGap - (PipGap - PipW);
         Text _banner, _prompt, _turnSummary, _planTimerText;
@@ -370,7 +372,7 @@ namespace LagFighter
             var color = Palette.Side(i);
 
             // panel contenedor del bloque de jugador
-            var panel = MakePanel(_canvasRt, label + "Panel", anchor, new Vector2(sign * 24f, -22f), new Vector2(GuardBarW + 32f, 112f), color);
+            var panel = MakePanel(_canvasRt, label + "Panel", anchor, new Vector2(sign * 24f, -22f), new Vector2(GuardBarW + 32f, 124f), color);
             panel.rectTransform.pivot = anchor;
             var pr = panel.rectTransform;
 
@@ -407,7 +409,15 @@ namespace LagFighter
                 new Vector2(sign * 14f, -80f), new Vector2(GuardBarW, 9f), Palette.Guard);
             _guardFill[i].rectTransform.pivot = new Vector2(left ? 0f : 1f, 1f);
 
-            _limbLabel[i] = MakeTextP(pr, "Limbs", "", new Vector2(left ? 0f : 1f, 1f), new Vector2(sign * 14f, -96f), new Vector2(400f, 14f),
+            // barra de SUPER: dorada y finita bajo la guardia; carga con overflow
+            _superBg[i] = MakeImage(pr, "SuperBg", new Vector2(left ? 0f : 1f, 1f),
+                new Vector2(sign * 14f, -92f), new Vector2(GuardBarW, 6f), new Color(0f, 0f, 0f, 0.55f));
+            _superBg[i].rectTransform.pivot = new Vector2(left ? 0f : 1f, 1f);
+            _superFill[i] = MakeImage(pr, "Super", new Vector2(left ? 0f : 1f, 1f),
+                new Vector2(sign * 14f, -92f), new Vector2(0f, 6f), new Color(1f, 0.75f, 0.2f, 0.9f));
+            _superFill[i].rectTransform.pivot = new Vector2(left ? 0f : 1f, 1f);
+
+            _limbLabel[i] = MakeTextP(pr, "Limbs", "", new Vector2(left ? 0f : 1f, 1f), new Vector2(sign * 14f, -102f), new Vector2(400f, 14f),
                 8, new Color(1f, 0.45f, 0.35f), left ? TextAnchor.UpperLeft : TextAnchor.UpperRight);
             _limbLabel[i].rectTransform.pivot = new Vector2(left ? 0f : 1f, 1f);
         }
@@ -614,6 +624,22 @@ namespace LagFighter
                 _guardFill[i].color = g <= 0.25f
                     ? Color.Lerp(Palette.Guard, new Color(1f, 0.2f, 0.15f), Mathf.PingPong(Time.time * 4f, 1f))
                     : Palette.Guard;
+
+                // super: solo tiene sentido en turno fluido (carga con overflow)
+                bool superOn = SimConfig.CarryoverEnabled;
+                if (_superBg[i].gameObject.activeSelf != superOn)
+                {
+                    _superBg[i].gameObject.SetActive(superOn);
+                    _superFill[i].gameObject.SetActive(superOn);
+                }
+                if (superOn)
+                {
+                    float sp = Mathf.Clamp01(sim.Fighters[i].Super / (float)SimConfig.SuperMax);
+                    _superFill[i].rectTransform.sizeDelta = new Vector2(GuardBarW * sp, 6f);
+                    _superFill[i].color = sp >= 1f
+                        ? Color.Lerp(new Color(1f, 0.8f, 0.2f), Color.white, Mathf.PingPong(Time.time * 3f, 0.65f))
+                        : new Color(1f, 0.75f, 0.2f, 0.9f);
+                }
 
                 for (int w = 0; w < MatchController.RoundsToWin; w++)
                 {
@@ -901,6 +927,7 @@ namespace LagFighter
                 case MoveCatalog.WalkB: // bloquear: azul defensivo, como agacharse
                 case MoveCatalog.Crouch: return new Color(0.35f, 0.55f, 0.85f);
                 case MoveCatalog.LowKick: return new Color(0.75f, 0.28f, 0.3f);
+                case MoveCatalog.Super: return new Color(1f, 0.78f, 0.2f); // dorada
                 default: return new Color(0.25f, 0.72f, 0.45f); // caminar
             }
         }
@@ -925,6 +952,7 @@ namespace LagFighter
                 case MoveCatalog.Parry: return "P";
                 case MoveCatalog.Crouch: return "▼";
                 case MoveCatalog.LowKick: return "b";
+                case MoveCatalog.Super: return "SPR";
                 default: return "·";
             }
         }

@@ -35,12 +35,13 @@ namespace LagFighter
         Image[] _cardBg, _cardEdge, _cardOverlay;
         Text[] _cardName;
         RectTransform[] _cardRt;
-        Image _undoBtn, _doneBtn, _wakeBtn;
-        Text _wakeLabel, _doneLabel;
+        Image _undoBtn, _doneBtn, _wakeBtn, _superBtn;
+        Text _wakeLabel, _doneLabel, _superLabel;
         // hover: tinte sobre el color base de cada botón
         static readonly Color DoneC = new Color(0.18f, 0.45f, 0.22f, 0.95f);
         static readonly Color UndoC = new Color(0.4f, 0.2f, 0.2f, 0.95f);
         static readonly Color WakeC = new Color(0.5f, 0.32f, 0.1f, 0.95f);
+        static readonly Color SuperDimC = new Color(0.22f, 0.18f, 0.05f, 0.92f); // cargando: dorado apagado
         // panel de info a la derecha de la grilla: se llena con el hover
         Text _detailTitle, _detailFrames, _detailAdv, _detailTag, _detail, _status;
         Image _segBg, _segS, _segA, _segR;
@@ -176,6 +177,13 @@ namespace LagFighter
             _wakeLabel = MakeText(_wakeBtn.rectTransform, "T", "", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(156f, 50f), 13, Color.white, TextAnchor.MiddleCenter);
             _wakeLabel.fontStyle = FontStyle.Bold;
             _wakeBtn.gameObject.SetActive(false);
+
+            // SUPER: botón dorado arriba del stack; late cuando la barra está
+            // llena. Solo existe en turno fluido (la barra carga con overflow).
+            _superBtn = MakeImage(rootRt, "SuperBtn", new Vector2(0.5f, 0f), new Vector2(-sideX, 252f), new Vector2(160f, 52f), SuperDimC);
+            _superLabel = MakeText(_superBtn.rectTransform, "T", "", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(156f, 46f), 13, Color.white, TextAnchor.MiddleCenter);
+            _superLabel.fontStyle = FontStyle.Bold;
+            _superBtn.gameObject.SetActive(false);
 
             // panel de info a la DERECHA de la grilla: nombre, framedata con
             // mini-barra S/A/R, tag y descripción del movimiento hovereado.
@@ -391,6 +399,7 @@ namespace LagFighter
             _doneBtn.color = HoverTint(_doneBtn, DoneC, mp);
             _undoBtn.color = HoverTint(_undoBtn, UndoC, mp);
             if (_wakeBtn.gameObject.activeSelf) _wakeBtn.color = HoverTint(_wakeBtn, WakeC, mp);
+            RefreshSuper();
 
             if (GameInput.ClickPressed())
             {
@@ -423,6 +432,13 @@ namespace LagFighter
                     Highlight(_sel); // el presupuesto de frames pudo cambiar
                     return;
                 }
+                if (_superBtn.gameObject.activeSelf &&
+                    RectTransformUtility.RectangleContainsScreenPoint(_superBtn.rectTransform, pos, null))
+                {
+                    if (_mc.PlanFits(MoveCatalog.Super)) { SfxLib.Play(SfxLib.Kind.UiClick, 0.9f); _mc.PlanAdd(MoveCatalog.Super); }
+                    else SfxLib.Play(SfxLib.Kind.UiCancel, 0.5f);
+                    return;
+                }
             }
 
             if (GameInput.LeftPressed()) { Highlight(_sel - 1); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
@@ -434,6 +450,30 @@ namespace LagFighter
             else if (GameInput.AddPressed()) { TryAdd(Order[_sel]); Highlight(_sel); }
             if (GameInput.UndoPressed()) { TryUndo(); Highlight(_sel); }
             if (GameInput.EndTurnPressed()) _mc.PlanConfirm();
+        }
+
+        // botón SUPER: porcentaje mientras carga, dorado latiendo cuando está lista
+        void RefreshSuper()
+        {
+            bool show = SimConfig.CarryoverEnabled;
+            if (_superBtn.gameObject.activeSelf != show) _superBtn.gameObject.SetActive(show);
+            if (!show) return;
+            var fs = _mc.Sim.Fighters[_mc.Picker];
+            bool full = fs.Super >= SimConfig.SuperMax;
+            if (full)
+            {
+                bool fits = _mc.PlanFits(MoveCatalog.Super);
+                _superLabel.text = fits
+                    ? "SHINKU HADOUKEN\n<size=10>click: a la cola (56f)</size>"
+                    : "SHINKU HADOUKEN\n<size=10>ya en el plan / sin frames</size>";
+                _superBtn.color = Color.Lerp(new Color(0.85f, 0.62f, 0.1f, 0.98f),
+                    new Color(1f, 0.9f, 0.45f, 1f), Mathf.PingPong(Time.time * 2.6f, 1f));
+            }
+            else
+            {
+                _superLabel.text = $"SUPER {fs.Super * 100 / SimConfig.SuperMax}%\n<size=10>se carga con OVERFLOW</size>";
+                _superBtn.color = SuperDimC;
+            }
         }
 
         static Color HoverTint(Image btn, Color baseC, Vector2 mp)

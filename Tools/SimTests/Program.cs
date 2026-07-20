@@ -62,6 +62,7 @@ class Tests
         PerfilesDeIAMantienenPresupuesto();
         WakeupAjustaElKnockdown();
         TurnoFluidoCruzaElLimite();
+        LaSuperArrasaYPegaCuatro();
         if (SimConfig.LimbsEnabled)
         {
             TresJabsArrancanElBrazo();
@@ -316,6 +317,8 @@ class Tests
             Check(lost == 0 && sigue && resto > 0 && resto <= 16,
                 "turno fluido: el hadouken cruza el límite comprometido",
                 $"lost {lost}, move {s.Fighters[0].MoveIndex}, resto {resto}");
+            Check(s.Fighters[0].Super == resto, "los frames de overflow cargan la barra de super",
+                $"super {s.Fighters[0].Super}, resto {resto}");
             Run(s, resto + 2);
             Check(s.Fighters[0].MoveIndex == -1, "turno fluido: el move comprometido termina en el turno siguiente",
                 $"move {s.Fighters[0].MoveIndex}");
@@ -328,6 +331,26 @@ class Tests
         int lost2 = s2.OnTurnEnd(0);
         Check(lost2 == 1 && s2.Fighters[0].MoveIndex == -1 && s2.CommittedRemaining(0) == 0,
             "turno estricto: el mismo move se corta y cuenta como orden perdida", $"lost {lost2}");
+    }
+
+    // La super exige barra llena, se consume al arrancar, arrasa el hadouken
+    // rival y pega 4 con hard knockdown.
+    static void LaSuperArrasaYPegaCuatro()
+    {
+        var s = NewSim(-2.5f, 2.5f, p1Blocks: false);
+        Check(!s.MoveAllowed(0, MoveCatalog.Super), "sin barra llena no hay super");
+        s.Fighters[0].Super = SimConfig.SuperMax;
+        Check(s.MoveAllowed(0, MoveCatalog.Super), "barra llena habilita la super");
+
+        s.SetQueue(0, new List<int> { MoveCatalog.Super });
+        s.SetQueue(1, new List<int> { MoveCatalog.Hadouken });
+        var evs = Run(s, 90); // la super conecta ~f52: a los 90 el KD de 60f sigue vivo
+        var hit = Find(evs, EvKind.Hit, 0);
+        Check(hit.HasValue && hit.Value.Damage == SimConfig.SuperDamage && hit.Value.MoveIndex == MoveCatalog.Super,
+            "la super arrasa el hadouken rival y pega 4",
+            hit.HasValue ? $"dmg {hit.Value.Damage}, move {hit.Value.MoveIndex}" : "no conectó");
+        Check(s.Fighters[1].Stun == StunKind.Knockdown, "la super derriba (hard KD)", $"stun {s.Fighters[1].Stun}");
+        Check(s.Fighters[0].Super == 0, "la barra se consume al tirarla", $"super {s.Fighters[0].Super}");
     }
 
     static void WakeupAjustaElKnockdown()

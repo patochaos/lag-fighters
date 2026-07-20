@@ -440,6 +440,8 @@ namespace LagFighter
         // (el último puede cruzar el límite). Estricto: tiene que entrar entero.
         public bool PlanFits(int moveIndex) =>
             Sim.MoveAllowed(Picker, moveIndex) &&
+            // la barra se gasta al ejecutar: una sola super por plan
+            !(moveIndex == MoveCatalog.Super && _plans[Picker].Contains(MoveCatalog.Super)) &&
             (SimConfig.CarryoverEnabled
                 ? PlanFramesUsed(Picker) < PlanFramesAvailable(Picker)
                 : PlanFramesUsed(Picker) + MoveCatalog.All[moveIndex].Total <= PlanFramesAvailable(Picker));

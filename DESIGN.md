@@ -19,7 +19,7 @@ advantage) + *Your Only Move Is HUSTLE* (framedata visible, ghost, replay).
 - Counter hit: pegarle a alguien en el startup de su ataque = más stun, y +1
   daño SOLO en golpes de 1 (un DP counter de 3/6 HP decidía medio round).
 
-### Comandos (16 en catálogo, 12 en el menú) — `MoveCatalog` en `Sim.cs` (sabor Ryu vs Ken)
+### Comandos (17 en catálogo, 12 en la grilla + super) — `MoveCatalog` en `Sim.cs` (sabor Ryu vs Ken)
 
 Los retirados (OFF) quedan en `MoveCatalog` con sus índices intactos para no
 romper replays viejos ni tests; solo salen de `PlanMenuUI.Order` y `SimpleAI`.
@@ -92,6 +92,23 @@ Online/Async (el toggle no viaja en el protocolo → desync).
 - Pendiente si el toggle convence: turnos cortos que se alargan con el lag
   (el horizonte de compromiso COMO mecánica de lag). Ver conversación
   2026-07-19: riesgo de matar al zoner; A/B con el lab antes.
+
+### Super: Shinku Hadouken (2026-07-19, solo turno fluido)
+
+Barra dorada (0..`SuperMax`=120) bajo la guardia: **carga con los frames de
+overflow** que cruzan el turno (`OnTurnEnd`) — el riesgo de comprometerse es
+el combustible. Botón dorado en el menú de planificación (late al llenarse),
+una por plan, la barra se gasta al arrancar el move. Reset por round (sim
+nueva). La IA la tira a distancia >1.6 con barra llena (55%).
+
+**Shinku** (`MoveCatalog.Super`=16): 14/2/40 = 56f, proyectil 4 dmg, doble
+velocidad, 1.8× de ancho (misma altura: **se salta**), hard KD, **arrasa
+hadoukens** comunes (super vs super se anulan), el **parry no la rechaza**,
+bloquearla come 40 de guardia. Con el toggle OFF la barra no existe (se
+oculta en HUD y menú).
+
+Idea anotada para una segunda super: install "SIN LAG" (tus moves −20% de
+frames por 2 turnos) — temática pero invasiva en la framedata.
 
 ### Guardia = stamina (2026-07-19, anti-tortuga)
 

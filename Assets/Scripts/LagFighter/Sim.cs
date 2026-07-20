@@ -53,6 +53,16 @@ namespace LagFighter
         public const float GuardRegen = 0.14f;      // ~8/seg, SOLO mientras ejecutás moves que no bloquean (guardia = stamina)
         public const int GuardCrushStun = 50;
         public const float GuardCrushRespawn = 35f; // la barra renace al 50%
+
+        // ---- Super (Shinku Hadouken): la barra se carga con frames de
+        // overflow (turno fluido) — el riesgo de comprometerse es el combustible.
+        public const int SuperMax = 120;            // ~3 overflows grandes
+        public const float SuperDamage = 4f;        // el golpe más fuerte del juego
+        public const int SuperHitstun = 60;         // hard KD
+        public const int SuperBlockstun = 30;
+        public const float SuperGuardDamage = 40f;  // bloquearla te deja al borde del crush
+        public const float SuperPush = 0.9f;
+        public const float SuperSpeed = 0.1f;       // el doble del hadouken común
         public const float ParryGuardRefund = 15f;  // parry exitoso RECARGA guardia: anti-chip
 
         // ---- features DESACTIVADAS a pedido de Patricio (2026-07-17) ----
@@ -121,7 +131,7 @@ namespace LagFighter
         public const int WalkF = 0, WalkB = 1, DashF = 2, DashB = 3,
                          JumpF = 4, JumpN = 5, JumpB = 6,
                          AttackA = 7, AttackB = 8, Hadouken = 9, Shoryuken = 10, Parry = 11,
-                         Tatsu = 12, Grab = 13, Crouch = 14, LowKick = 15;
+                         Tatsu = 12, Grab = 13, Crouch = 14, LowKick = 15, Super = 16;
 
         public static readonly MoveDef[] All =
         {
@@ -206,6 +216,10 @@ namespace LagFighter
                 CrouchStart = 0, CrouchEnd = 28,
                 Hits = new[] { new HitWindow { Start = 8, Duration = 4, Fwd0 = 0.4f, Fwd1 = 1.15f, Y0 = 0.25f, Y1 = 0.8f,
                     Damage = 1f, Hitstun = 22, Blockstun = 13, CounterStun = 32, Push = 0.3f, GuardDamage = 15f } } },
+
+            new MoveDef { Id = "shinku", Name = "Shinku Hadouken", Anim = AnimKind.Fireball, Startup = 14, Active = 2, Recovery = 40,
+                Desc = "LA SUPER: proyectil gigante de 4, veloz, arrasa hadoukens y el parry no lo rechaza. Bloquearla come 40 de guardia. Se salta. Cuesta la barra entera.",
+                SpawnFrame = 14 },
         };
     }
 
@@ -215,10 +229,13 @@ namespace LagFighter
         public float X;
         public int Dir;
         public bool Alive;
+        public bool Super; // Shinku: más ancho y rápido, arrasa hadoukens, imparryable
 
+        // la super es más ANCHA pero no más alta: saltarla sigue siendo el counter
         public WorldRect Rect => new WorldRect
         {
-            X0 = X - SimConfig.ProjHalfWidth, X1 = X + SimConfig.ProjHalfWidth,
+            X0 = X - SimConfig.ProjHalfWidth * (Super ? 1.8f : 1f),
+            X1 = X + SimConfig.ProjHalfWidth * (Super ? 1.8f : 1f),
             Y0 = SimConfig.ProjY0, Y1 = SimConfig.ProjY1
         };
     }
@@ -237,6 +254,7 @@ namespace LagFighter
         public int MoveIndex = -1;
         public int MoveStartTick;
         public bool Crushed; // guard crush en curso (distingue su stun del hitstun común)
+        public int Super;    // barra de super (0..SuperMax): carga con frames de overflow
         public uint WindowHit; // bitmask: 1 = esa ventana de hit ya conectó
         public StunKind Stun = StunKind.None;
         public int StunEndTick;
@@ -350,6 +368,9 @@ namespace LagFighter
         {
             if (!SimConfig.CrouchEnabled && (moveIndex == MoveCatalog.Crouch || moveIndex == MoveCatalog.LowKick))
                 return false;
+            // la super pide la barra LLENA (solo carga en turno fluido)
+            if (moveIndex == MoveCatalog.Super && Fighters[i].Super < SimConfig.SuperMax)
+                return false;
             if (!SimConfig.LimbsEnabled) return true;
             var f = Fighters[i];
             if (f.ArmHp <= 0f && (moveIndex == MoveCatalog.AttackA || moveIndex == MoveCatalog.Hadouken))
@@ -389,7 +410,10 @@ namespace LagFighter
             int lost = f.Queue.Count - f.QueueIndex;
             // Turno fluido: el move en curso NO se corta — sigue ejecutando y
             // el turno siguiente arranca con esos frames ya comprometidos.
+            // Cada frame que cruza CARGA la barra de super: el riesgo paga.
             if (f.MoveIndex >= 0 && !SimConfig.CarryoverEnabled) { lost++; f.MoveIndex = -1; }
+            else if (f.MoveIndex >= 0)
+                f.Super = Math.Min(SimConfig.SuperMax, f.Super + CommittedRemaining(i));
             f.Queue.Clear();
             f.QueueIndex = 0;
             return lost;
@@ -468,6 +492,7 @@ namespace LagFighter
             f.MoveStartTick = Tick;
             f.WindowHit = 0;
             f.Face = Fighters[1 - i].X >= f.X ? 1 : -1;
+            if (mi == MoveCatalog.Super) f.Super = 0; // la barra se gasta al arrancar
         }
 
         public void Step()
@@ -532,7 +557,8 @@ namespace LagFighter
                 if (m == null || m.SpawnFrame < 0 || Phase(i) != m.SpawnFrame) continue;
                 if (HasProjectile(i)) continue; // uno por vez
                 var f = Fighters[i];
-                Projectiles.Add(new Projectile { Owner = i, X = f.X + f.Face * 0.7f, Dir = f.Face, Alive = true });
+                Projectiles.Add(new Projectile { Owner = i, X = f.X + f.Face * 0.7f, Dir = f.Face, Alive = true,
+                    Super = f.MoveIndex == MoveCatalog.Super });
             }
 
             // proyectiles: mover, chocar entre sí, pegar
@@ -540,7 +566,7 @@ namespace LagFighter
             {
                 var p = Projectiles[pi];
                 if (!p.Alive) continue;
-                p.X += p.Dir * SimConfig.ProjSpeed;
+                p.X += p.Dir * (p.Super ? SimConfig.SuperSpeed : SimConfig.ProjSpeed);
                 if (Math.Abs(p.X) > SimConfig.StageHalfWidth + 1.2f) p.Alive = false;
                 Projectiles[pi] = p;
             }
@@ -550,8 +576,15 @@ namespace LagFighter
                     if (!Projectiles[a].Alive || !Projectiles[b].Alive) continue;
                     if (Projectiles[a].Owner == Projectiles[b].Owner) continue;
                     if (!Projectiles[a].Rect.Overlaps(Projectiles[b].Rect)) continue;
-                    var pa = Projectiles[a]; pa.Alive = false; Projectiles[a] = pa;
-                    var pb = Projectiles[b]; pb.Alive = false; Projectiles[b] = pb;
+                    // la super ARRASA hadoukens comunes y sigue de largo
+                    bool superA = Projectiles[a].Super, superB = Projectiles[b].Super;
+                    if (!superB) { var pb0 = Projectiles[b]; pb0.Alive = false; Projectiles[b] = pb0; }
+                    if (!superA) { var pa0 = Projectiles[a]; pa0.Alive = false; Projectiles[a] = pa0; }
+                    if (superA && superB) // super vs super: se anulan
+                    {
+                        var pa = Projectiles[a]; pa.Alive = false; Projectiles[a] = pa;
+                        var pb = Projectiles[b]; pb.Alive = false; Projectiles[b] = pb;
+                    }
                 }
             for (int pi = 0; pi < Projectiles.Count; pi++)
             {
@@ -560,11 +593,18 @@ namespace LagFighter
                 int def = 1 - p.Owner;
                 if (IsInvulnerable(def) || IsProjImmune(def)) continue; // el tatsu los atraviesa: el proyectil sigue viajando
                 if (!p.Rect.Overlaps(HurtRect(def))) continue;
-                ApplyContact(BuildPending(p.Owner, MoveCatalog.Hadouken,
-                    SimConfig.ProjDamage, SimConfig.ProjHitstun, SimConfig.ProjBlockstun, SimConfig.ProjHitstun + 8,
-                    SimConfig.ProjPush, knockdown: false, attackerFreeTick: AttackerFreeTick(p.Owner),
-                    guardDamage: SimConfig.ProjGuardDamage, hitY: (SimConfig.ProjY0 + SimConfig.ProjY1) * 0.5f,
-                    isProjectile: true));
+                var pend = BuildPending(p.Owner, p.Super ? MoveCatalog.Super : MoveCatalog.Hadouken,
+                    p.Super ? SimConfig.SuperDamage : SimConfig.ProjDamage,
+                    p.Super ? SimConfig.SuperHitstun : SimConfig.ProjHitstun,
+                    p.Super ? SimConfig.SuperBlockstun : SimConfig.ProjBlockstun,
+                    p.Super ? SimConfig.SuperHitstun + 10 : SimConfig.ProjHitstun + 8,
+                    p.Super ? SimConfig.SuperPush : SimConfig.ProjPush,
+                    knockdown: p.Super, attackerFreeTick: AttackerFreeTick(p.Owner),
+                    guardDamage: p.Super ? SimConfig.SuperGuardDamage : SimConfig.ProjGuardDamage,
+                    hitY: (SimConfig.ProjY0 + SimConfig.ProjY1) * 0.5f,
+                    isProjectile: true);
+                if (p.Super) pend.Parried = false; // la super no se parrea
+                ApplyContact(pend);
                 p.Alive = false;
                 Projectiles[pi] = p;
             }

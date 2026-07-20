@@ -64,10 +64,20 @@ namespace LagFighter
             // todo el tiempo disponible y casi no se desvía de su perfil.
             if (Difficulty == AIDifficulty.Easy) budget = (int)(budget * 0.78f);
 
+            bool usedSuper = false;
             while (frames < budget)
             {
                 float dist = System.Math.Abs(oppX - myX);
                 int pick = PickMove(sim, me, dist, oppDown, threwFireball);
+                // barra llena: la IA tira la super a distancia de proyectil
+                if (!usedSuper && sim.Fighters[me].Super >= SimConfig.SuperMax &&
+                    dist > 1.6f && _rng.NextDouble() < 0.55)
+                    pick = MoveCatalog.Super;
+                if (pick == MoveCatalog.Super)
+                {
+                    if (usedSuper) pick = MoveCatalog.DashB;
+                    else usedSuper = true;
+                }
                 double noise = Difficulty == AIDifficulty.Easy ? 0.34 : Difficulty == AIDifficulty.Normal ? 0.12 : 0.03;
                 if (_rng.NextDouble() < noise) pick = PickUnfocused(dist);
 
