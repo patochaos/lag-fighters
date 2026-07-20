@@ -244,7 +244,9 @@ namespace LagFighter
 
         public void Show(MatchSim src, int fighter, List<int> plan, int turnFrames)
         {
-            if (plan == null || plan.Count == 0)
+            // con un move comprometido (turno fluido) el ghost se muestra
+            // aunque el plan esté vacío: ver dónde terminás ES la información
+            if ((plan == null || plan.Count == 0) && src.CommittedRemaining(fighter) == 0)
             {
                 Clear();
                 return;
@@ -258,7 +260,7 @@ namespace LagFighter
 
             int planFrames = 0;
             foreach (var mi in plan) planFrames += MoveCatalog.All[mi].Total;
-            _loopFrames = Mathf.Min(src.StunRemaining(fighter) + planFrames + 18, turnFrames + 18);
+            _loopFrames = Mathf.Min(src.StunRemaining(fighter) + src.CommittedRemaining(fighter) + planFrames + 18, turnFrames + 18);
 
             _active = true;
             Ghost(fighter).gameObject.SetActive(true);

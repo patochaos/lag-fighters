@@ -60,6 +60,7 @@ class Tests
         ParryDesactivaProyectilSinStunearAlZoner();
         PerfilesDeIAMantienenPresupuesto();
         WakeupAjustaElKnockdown();
+        TurnoFluidoCruzaElLimite();
         if (SimConfig.LimbsEnabled)
         {
             TresJabsArrancanElBrazo();
@@ -280,6 +281,36 @@ class Tests
             ok &= frames <= SimConfig.TurnFrames && ai.ResolvedProfile != AIProfile.Random;
         }
         Check(ok, "todos los perfiles y dificultades respetan el presupuesto");
+    }
+
+    // Turno fluido (SimConfig.CarryoverEnabled): el move en curso cruza el
+    // límite del turno en vez de cortarse; apagado, se corta y se pierde.
+    static void TurnoFluidoCruzaElLimite()
+    {
+        SimConfig.CarryoverEnabled = true;
+        try
+        {
+            var s = NewSim(-2.5f, 2.5f, p1Blocks: false);
+            s.SetQueue(0, new List<int> { MoveCatalog.DashF, MoveCatalog.Hadouken }); // 16f + 60f: cruza el límite de 60
+            Run(s, SimConfig.TurnFrames);
+            int lost = s.OnTurnEnd(0);
+            bool sigue = s.Fighters[0].MoveIndex == MoveCatalog.Hadouken;
+            int resto = s.CommittedRemaining(0);
+            Check(lost == 0 && sigue && resto > 0 && resto <= 16,
+                "turno fluido: el hadouken cruza el límite comprometido",
+                $"lost {lost}, move {s.Fighters[0].MoveIndex}, resto {resto}");
+            Run(s, resto + 2);
+            Check(s.Fighters[0].MoveIndex == -1, "turno fluido: el move comprometido termina en el turno siguiente",
+                $"move {s.Fighters[0].MoveIndex}");
+        }
+        finally { SimConfig.CarryoverEnabled = false; }
+
+        var s2 = NewSim(-2.5f, 2.5f, p1Blocks: false);
+        s2.SetQueue(0, new List<int> { MoveCatalog.DashF, MoveCatalog.Hadouken });
+        Run(s2, SimConfig.TurnFrames);
+        int lost2 = s2.OnTurnEnd(0);
+        Check(lost2 == 1 && s2.Fighters[0].MoveIndex == -1 && s2.CommittedRemaining(0) == 0,
+            "turno estricto: el mismo move se corta y cuenta como orden perdida", $"lost {lost2}");
     }
 
     static void WakeupAjustaElKnockdown()

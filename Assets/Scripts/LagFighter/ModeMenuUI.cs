@@ -164,6 +164,21 @@ namespace LagFighter
             _desc = Txt(rootRt, "Desc", "", new Vector2(0f, -86f), 20, new Color(1f, 1f, 1f, 0.85f), FontStyle.Normal);
             Txt(rootRt, "Help", "1-6 o flechas + Enter · click también funciona · ESC vuelve atrás · en partida: R reinicia, M vuelve acá",
                 new Vector2(0f, -210f), 16, new Color(1f, 1f, 1f, 0.5f), FontStyle.Normal);
+
+            // toggle experimental (tecla C): turno fluido = el último move
+            // puede cruzar el límite del turno en vez de entrar completo
+            _carryLine = Txt(rootRt, "Carry", "", new Vector2(0f, -245f), 15, Color.white, FontStyle.Normal);
+        }
+
+        Text _carryLine;
+
+        void RefreshCarryLine()
+        {
+            bool on = SimConfig.CarryoverEnabled;
+            _carryLine.text = on
+                ? "‹C› TURNO FLUIDO: ON — el último move puede cruzar el turno (quedás comprometido y el rival te ve)"
+                : "‹C› TURNO FLUIDO: OFF — los moves tienen que entrar completos en el turno";
+            _carryLine.color = on ? new Color(0.5f, 1f, 0.6f) : new Color(1f, 1f, 1f, 0.5f);
         }
 
         Text Txt(RectTransform parent, string name, string content, Vector2 pos, int size, Color color, FontStyle style)
@@ -197,6 +212,8 @@ namespace LagFighter
             _active = true;
             _step = 0;
             _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_lag", 0), 0, LagOptions.Length - 1); // arranca donde quedaste
+            SimConfig.CarryoverEnabled = PlayerPrefs.GetInt("lf_carryover", 0) == 1;
+            RefreshCarryLine();
             Layout();
         }
 
@@ -218,6 +235,7 @@ namespace LagFighter
                               "ESPERANDO AL RIVAL…";
 
             _bigCode.gameObject.SetActive(_step >= 6);
+            if (_carryLine != null) _carryLine.gameObject.SetActive(_step <= 1); // solo mientras elegís lag/modo
             if (_step == 6)
             {
                 _bigCode.text = _codeInput.PadRight(4, '_');
@@ -377,6 +395,15 @@ namespace LagFighter
                     Layout();
                 }
                 return;
+            }
+
+            // C conmuta el turno fluido mientras elegís lag/modo
+            if (_step <= 1 && GameInput.LetterPressed() == 'C')
+            {
+                SimConfig.CarryoverEnabled = !SimConfig.CarryoverEnabled;
+                PlayerPrefs.SetInt("lf_carryover", SimConfig.CarryoverEnabled ? 1 : 0);
+                RefreshCarryLine();
+                SfxLib.Play(SfxLib.Kind.UiClick, 0.6f);
             }
 
             // ESC siempre vuelve un paso atrás (en el paso 0 no hay adónde)

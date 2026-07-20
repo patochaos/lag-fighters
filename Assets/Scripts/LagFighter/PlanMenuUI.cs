@@ -285,7 +285,10 @@ namespace LagFighter
         {
             int left = available - framesUsed;
             int turnFrames = _mc.CurrentTurnFrames; // en Lag Mode el turno crece
-            string stunNote = available < turnFrames ? $" (perdés {turnFrames - available}f por el stun)" : "";
+            int committed = _mc.TurnStartCommitted[_mc.Picker];
+            string stunNote = committed > 0
+                ? $" ({committed}f ya comprometidos en {MoveCatalog.All[_mc.Sim.Fighters[_mc.Picker].MoveIndex].Name})"
+                : available < turnFrames ? $" (perdés {turnFrames - available}f por el stun)" : "";
             string extra = "";
             if (g.DamageIfStill > 0f) extra += $"  ·  pegaría {g.DamageIfStill:0} si no reacciona";
             if (g.BlockedCount > 0) extra += $"  ·  {g.BlockedCount} bloqueado(s) si se queda en neutral";

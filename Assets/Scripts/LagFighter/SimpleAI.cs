@@ -58,7 +58,7 @@ namespace LagFighter
             int face = oppX >= myX ? 1 : -1;
             bool oppDown = sim.StunRemaining(opp) > 20;
             bool threwFireball = false;
-            int budget = System.Math.Max(0, turnFrames - sim.StunRemaining(me));
+            int budget = System.Math.Max(0, turnFrames - sim.StunRemaining(me) - sim.CommittedRemaining(me));
 
             // Easy deja huecos y toma más decisiones subóptimas. Hard aprovecha
             // todo el tiempo disponible y casi no se desvía de su perfil.
@@ -79,7 +79,13 @@ namespace LagFighter
                 if (!sim.MoveAllowed(me, pick)) pick = dist > 1.5f ? MoveCatalog.DashF : MoveCatalog.WalkB;
 
                 var move = MoveCatalog.All[pick];
-                if (frames + move.Total > budget) break;
+                if (frames + move.Total > budget)
+                {
+                    // turno fluido: a veces compromete un move que cruza el
+                    // límite (arranca dentro del turno, termina en el próximo)
+                    if (SimConfig.CarryoverEnabled && _rng.NextDouble() < 0.45) plan.Add(pick);
+                    break;
+                }
                 plan.Add(pick);
                 frames += move.Total;
                 myX += face * move.MoveDx;

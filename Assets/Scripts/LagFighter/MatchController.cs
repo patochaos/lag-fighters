@@ -120,6 +120,7 @@ namespace LagFighter
         readonly int[] _wins = new int[2];
         public readonly int[] TurnStartStun = new int[2];        // stun arrastrado al arrancar el turno
         public readonly StunKind[] TurnStartStunKind = new StunKind[2];
+        public readonly int[] TurnStartCommitted = new int[2];   // frames de move que cruzaron el turno (turno fluido)
         float _roundTimer;
         float _hitstop;
         float _koTimer; // KO en cámara lenta (cosmético: timeScale, la sim ya terminó)
@@ -204,6 +205,8 @@ namespace LagFighter
             Mode = mode;
             LagMode = lagMode;
             LocalSide = localSide;
+            // el toggle no viaja en el protocolo online: forzarlo OFF evita desyncs
+            if (mode == GameMode.Online || mode == GameMode.Async) SimConfig.CarryoverEnabled = false;
             SelectedAIProfile = aiProfile;
             SelectedAIDifficulty = aiDifficulty;
             _modeMenu.Close();
@@ -316,6 +319,11 @@ namespace LagFighter
             string adv = "";
             if (myStun > 0) adv = $"  ·  arrancás −{myStun}f ({StunName(Picker)})";
             else if (oppStun > 0) adv = $"  ·  VENTAJA +{oppStun}f (rival en {StunName(1 - Picker)})";
+            // turno fluido: los moves que cruzaron el límite son info pública
+            if (TurnStartCommitted[Picker] > 0)
+                adv += $"  ·  seguís en {MoveCatalog.All[Sim.Fighters[Picker].MoveIndex].Name} ({TurnStartCommitted[Picker]}f)";
+            if (TurnStartCommitted[1 - Picker] > 0)
+                adv += $"  ·  RIVAL comprometido: {MoveCatalog.All[Sim.Fighters[1 - Picker].MoveIndex].Name} ({TurnStartCommitted[1 - Picker]}f)";
             string lag = "";
             if (LagMode && LagLevel > LagLevelForTurn(TurnNumber - 1))
                 lag = $"  ·  ¡AHORA {CurrentTurnFrames}F POR TURNO!";
@@ -382,7 +390,10 @@ namespace LagFighter
         {
             _wakeQuick[Picker] = !_wakeQuick[Picker];
             // si el plan ya no entra con menos frames, se recorta desde el final
-            while (_plans[Picker].Count > 0 && PlanFramesUsed(Picker) > PlanFramesAvailable(Picker))
+            // (en turno fluido un move es válido mientras ARRANQUE dentro del turno)
+            while (_plans[Picker].Count > 0 && (SimConfig.CarryoverEnabled
+                ? PlanFramesUsed(Picker) - MoveCatalog.All[_plans[Picker][_plans[Picker].Count - 1]].Total >= PlanFramesAvailable(Picker)
+                : PlanFramesUsed(Picker) > PlanFramesAvailable(Picker)))
                 _plans[Picker].RemoveAt(_plans[Picker].Count - 1);
             UpdateGhost();
         }
@@ -390,11 +401,20 @@ namespace LagFighter
         // la timeline muestra el stun base (info pública); tu propia fila, tu elección
         public int DisplayStun(int i) => State == Flow.Planning && i == Picker ? EffectiveStartStun(i) : TurnStartStun[i];
 
+        // offset total de la timeline: stun arrastrado + move comprometido
+        // (turno fluido); nunca coexisten porque un golpe cancela el move
+        public int TimelineOffset(int i) => DisplayStun(i) + TurnStartCommitted[i];
+
         // el stun arrastrado te come frames del turno: solo se planifica lo que entra
-        public int PlanFramesAvailable(int i) => CurrentTurnFrames - EffectiveStartStun(i);
+        public int PlanFramesAvailable(int i) =>
+            Mathf.Max(0, CurrentTurnFrames - EffectiveStartStun(i) - TurnStartCommitted[i]);
+        // Turno fluido: alcanza con que el move ARRANQUE dentro del turno
+        // (el último puede cruzar el límite). Estricto: tiene que entrar entero.
         public bool PlanFits(int moveIndex) =>
             Sim.MoveAllowed(Picker, moveIndex) &&
-            PlanFramesUsed(Picker) + MoveCatalog.All[moveIndex].Total <= PlanFramesAvailable(Picker);
+            (SimConfig.CarryoverEnabled
+                ? PlanFramesUsed(Picker) < PlanFramesAvailable(Picker)
+                : PlanFramesUsed(Picker) + MoveCatalog.All[moveIndex].Total <= PlanFramesAvailable(Picker));
 
         public void PlanAdd(int moveIndex)
         {
@@ -832,6 +852,7 @@ namespace LagFighter
             {
                 TurnStartStun[i] = Sim.StunRemaining(i);
                 TurnStartStunKind[i] = Sim.Fighters[i].Stun;
+                TurnStartCommitted[i] = Sim.CommittedRemaining(i);
             }
         }
 

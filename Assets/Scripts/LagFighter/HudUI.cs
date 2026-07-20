@@ -644,8 +644,8 @@ namespace LagFighter
             }
 
             float playX = executing ? Mathf.Clamp((_mc.TickFloat - _mc.TurnStartTick) * PxPerFrame, 0f, RowW) : -1f;
-            _row0.UpdateRow(_mc.GetPlan(0), _mc.RowRevealed(0), playX, _mc.DisplayStun(0), _mc.TurnStartStunKind[0]);
-            _row1.UpdateRow(_mc.GetPlan(1), _mc.RowRevealed(1), playX, _mc.DisplayStun(1), _mc.TurnStartStunKind[1]);
+            _row0.UpdateRow(_mc.GetPlan(0), _mc.RowRevealed(0), playX, _mc.TimelineOffset(0), _mc.TurnStartStunKind[0]);
+            _row1.UpdateRow(_mc.GetPlan(1), _mc.RowRevealed(1), playX, _mc.TimelineOffset(1), _mc.TurnStartStunKind[1]);
 
             UpdateTimelineInteraction(flow);
             UpdateConnStrip(sim);
@@ -714,7 +714,7 @@ namespace LagFighter
         int ChipIndexAt(float frame)
         {
             var plan = _mc.GetPlan(_mc.Picker);
-            float start = _mc.DisplayStun(_mc.Picker);
+            float start = _mc.TimelineOffset(_mc.Picker);
             for (int i = 0; i < plan.Count; i++)
             {
                 float end = start + MoveCatalog.All[plan[i]].Total;
@@ -1013,14 +1013,16 @@ namespace LagFighter
                     offset = stunFrames * px;
                     _stunSeg.gameObject.SetActive(true);
                     _stunSeg.rectTransform.sizeDelta = new Vector2(offset - 2f, _height - 4f);
+                    // StunKind.None con offset = move comprometido (turno fluido): verde-agua
                     _stunSeg.color = stunKind == StunKind.Blockstun ? new Color(0.3f, 0.5f, 0.85f, 0.75f)
                                    : stunKind == StunKind.Knockdown ? new Color(0.9f, 0.45f, 0.15f, 0.8f)
+                                   : stunKind == StunKind.None ? new Color(0.2f, 0.72f, 0.72f, 0.7f)
                                    : new Color(0.85f, 0.25f, 0.22f, 0.8f);
                     int shown = offset > 46f ? stunFrames : 0;
                     if (shown != _lastStunShown)
                     {
                         _lastStunShown = shown;
-                        _stunLabel.text = shown > 0 ? $"−{shown}f" : "";
+                        _stunLabel.text = shown > 0 ? (stunKind == StunKind.None ? $"{shown}f" : $"−{shown}f") : "";
                     }
                 }
                 else

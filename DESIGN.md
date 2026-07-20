@@ -72,6 +72,27 @@ vulnerable por off-by-one; lo pescó el test de framedata).
   frames activos, intro "ROUND N — ¡PELEA!", stage con skyline + público de
   bloques, announcer SOLO en KO/guard crush con toggle VOZ.
 
+### Turno fluido (toggle experimental, 2026-07-19)
+
+`SimConfig.CarryoverEnabled` — tecla **C** en el menú principal (pasos lag/modo),
+persiste en PlayerPrefs (`lf_carryover`), **OFF por defecto**. Forzado OFF en
+Online/Async (el toggle no viaja en el protocolo → desync).
+
+- ON: el último move planificado puede **cruzar el límite del turno** (basta
+  con que arranque adentro). El turno siguiente arranca con esos frames
+  **comprometidos**: p.ej. terminás en el aire (okizeme estilo Akuma).
+- La info es **honesta y pública**: el rival ve tu move comprometido al
+  planificar (prompt "RIVAL comprometido: …", segmento verde-agua en la
+  timeline, el ghost lo reproduce). Move largo tarde en el turno =
+  telegrafiado; temprano = secreto. Esa es la decisión nueva.
+- Un golpe cancela el move como siempre; solo se pierden las órdenes que no
+  arrancaron. La IA compromete moves largos un 45% de las veces que su
+  presupuesto se queda corto.
+- El replay usa el mismo `OnTurnEnd` con el mismo flag → determinista.
+- Pendiente si el toggle convence: turnos cortos que se alargan con el lag
+  (el horizonte de compromiso COMO mecánica de lag). Ver conversación
+  2026-07-19: riesgo de matar al zoner; A/B con el lab antes.
+
 ### Lag Mode
 
 Menú inicial: primero NORMAL o **LAG MODE**. En Lag Mode, cada 3

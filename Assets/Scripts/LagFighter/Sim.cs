@@ -18,6 +18,12 @@ namespace LagFighter
         public const int TicksPerSecond = 60;
         public const float TickDuration = 1f / TicksPerSecond;
         public const int TurnFrames = 60; // 1 segundo por turno: denso, decisión a decisión
+
+        // Turno fluido (toggle del menú principal, OFF por defecto): el último
+        // move puede CRUZAR el límite del turno en vez de tener que entrar
+        // completo. Arrancás el turno siguiente comprometido (p.ej. en el aire,
+        // okizeme estilo Akuma) y el rival TE VE al planificar: info honesta.
+        public static bool CarryoverEnabled = false;
         // 20 turnos por round → TIME OVER y decide la vida. Calibrado con la
         // distribución natural del lab: mediana 13, p75 21; con 20 el 75% de
         // las peleas termina por KO y el juez solo corta la cola de stalls.
@@ -379,11 +385,22 @@ namespace LagFighter
         public int OnTurnEnd(int i)
         {
             var f = Fighters[i];
-            int lost = f.Queue.Count - f.QueueIndex + (f.MoveIndex >= 0 ? 1 : 0);
-            f.MoveIndex = -1;
+            int lost = f.Queue.Count - f.QueueIndex;
+            // Turno fluido: el move en curso NO se corta — sigue ejecutando y
+            // el turno siguiente arranca con esos frames ya comprometidos.
+            if (f.MoveIndex >= 0 && !SimConfig.CarryoverEnabled) { lost++; f.MoveIndex = -1; }
             f.Queue.Clear();
             f.QueueIndex = 0;
             return lost;
+        }
+
+        // Frames del move en curso que quedan por ejecutar (turno fluido):
+        // al planificar, esto es lo que ya está comprometido del turno nuevo.
+        public int CommittedRemaining(int i)
+        {
+            var f = Fighters[i];
+            if (f.MoveIndex < 0) return 0;
+            return Math.Max(0, MoveCatalog.All[f.MoveIndex].Total - (Tick - f.MoveStartTick));
         }
 
         public WorldRect HurtRect(int i)
