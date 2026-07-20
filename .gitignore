@@ -21,6 +21,9 @@ Recordings/
 # Herramientas headless del repo (estos csproj SÍ se versionan)
 !Tools/**/*.csproj
 
+# Logs que dejan los scripts de build/release
+Tools/*.log
+
 # Plastic SCM (estado local del workspace)
 .plastic/
 

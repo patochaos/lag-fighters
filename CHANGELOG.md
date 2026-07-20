@@ -2,6 +2,58 @@
 
 Cada subida a GitHub agrega acá sus change notes.
 
+## 0.4.4 — 2026-07-19 (turno fluido + SUPER + animación legible)
+
+### Turno fluido (toggle experimental)
+- **Tecla C en el menú principal** (OFF por defecto, persiste): el último
+  move puede **cruzar el límite del turno** en vez de tener que entrar
+  completo. Arrancás el turno siguiente comprometido — p.ej. en el aire,
+  okizeme estilo Akuma — y el rival TE VE al planificar (info honesta).
+- Feedback de overflow en todas las capas: chip cortado en el borde con
+  identidad naranja + pestaña «Nf, badge OVERFLOW sobre la cabeza, cartas
+  con franja naranja + » cuando cruzarían, aviso en el status del menú.
+- Forzado OFF en Online (el toggle no viaja en el protocolo → desync).
+
+### SUPER: Shinku Hadouken (solo turno fluido)
+- Barra dorada bajo la guardia: **se carga con los frames de overflow** —
+  el riesgo de comprometerse es el combustible (120 puntos ≈ 3 cruces
+  grandes). Botón dorado en el menú que late al llenarse; una por plan.
+- El Shinku: proyectil gigante de **4 de daño**, doble velocidad, arrasa
+  hadoukens, el parry no lo rechaza, bloquearlo come 40 de guardia,
+  hard KD. Se salta: sigue siendo un compromiso de turno entero.
+- La IA también la carga y la tira; lab con **doble pasada** (estricto +
+  fluido) para calibrarla: 64% hit, ~1 super por pelea, peleas más cortas.
+
+### Guardia = stamina (anti-tortuga)
+- La guardia **regenera solo mientras ejecutás moves que no bloquean**
+  (0.1 → 0.14/f). Quieto o bloqueando no cura: en turnos largos esperar
+  deja de ser gratis, sin castigo directo al defensor.
+
+### Menú de cartas simplificado
+- **Fuera Caminar +** (redundante con Dash +) **y Salto −** (Salto N ya
+  esquiva proyectiles, Dash − retrocede). Grilla 6×2.
+- **Caminar − pasa a ser BLOQUEAR** — el nombre dice lo que hace.
+- **Golpe A → Jab, Patada B → Barrida**; fichas JAB/BAR en la timeline.
+- Cartas con estado en vivo: gris = no entra, franja naranja + » = cruza.
+  Se recalcula en cada cambio del plan (agregar, borrar, wakeup).
+
+### Animación procedural legible
+- **Anticipación + snap**: los ataques se cargan hacia atrás en startup,
+  snapean a extensión en activos y vuelven lento en recovery (se LEE el
+  castigo). Jab, Barrida, Hadouken (manos a la cadera) y Shoryuken.
+- **Tinte de fase en el limb que pega**: amarillo/rojo/azul (por pegar /
+  pegando / recovery), el lenguaje de la framedata llevado al muñeco.
+- **Puños y pies** como bloques brillantes; los trails salen del punto de
+  contacto real. Torso y cabeza acompañan el golpe; shake en hitstun;
+  squash & stretch en saltos.
+
+### Legibilidad y estados
+- **Hover de carta = ghost actuando** tu plan + esa carta (chau puntos).
+- **Badges de estado** sobre las cabezas como lugar único: KD / BLOCK /
+  HIT / GUARD / **GUARD CRUSH** (nuevo, rosa) / **OVERFLOW «Nf**.
+- Menú de planificación en dos columnas (regla anti-overlap: nada por
+  encima de las timelines).
+
 ## 0.4.3 — 2026-07-18 (menú simplificado + replay con lag teatral)
 
 ### Menú

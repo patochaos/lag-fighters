@@ -663,11 +663,11 @@ namespace LagFighter
                         default: badge = $"HIT {rem}F"; bc = Palette.Damage; break;
                     }
                 }
-                else if (_mc.OverflowFrames(i) > 0)
+                else if (_mc.OverflowFrames(i) is int ovf && ovf > 0)
                 {
                     // turno fluido: este move cruza el turno (o ya cruzó
                     // y arrancás comprometido)
-                    badge = $"OVERFLOW »{_mc.OverflowFrames(i)}F";
+                    badge = $"OVERFLOW »{ovf}F";
                     bc = new Color(1f, 0.6f, 0.15f);
                 }
                 else if (sim.IsBlockingState(i) && executing)
@@ -1138,9 +1138,10 @@ namespace LagFighter
 
                 if (overflowF > 0)
                 {
+                    // creada después de _chipParent: siempre dibuja sobre los chips.
+                    // ADENTRO del borde derecho: la fila tiene RectMask2D y
+                    // fuera de la barra quedaba recortada (invisible).
                     _ovfSeg.gameObject.SetActive(true);
-                    _ovfSeg.transform.SetAsLastSibling(); // por arriba de los chips
-                    // ADENTRO del borde derecho: fuera de la barra quedaba invisible
                     _ovfSeg.rectTransform.anchoredPosition = new Vector2(RowW - 47f, 0f);
                     float pulse = 0.7f + Mathf.PingPong(Time.time * 1.1f, 0.3f);
                     _ovfSeg.color = new Color(1f, 0.5f, 0.05f, pulse);

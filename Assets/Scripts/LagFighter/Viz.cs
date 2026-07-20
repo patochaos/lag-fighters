@@ -81,6 +81,8 @@ namespace LagFighter
         readonly GameObject[] _hurt = new GameObject[2];
         readonly List<GameObject> _hitPool = new List<GameObject>();
         readonly List<GameObject> _projPool = new List<GameObject>();
+        readonly List<Renderer> _projRend = new List<Renderer>();      // cache: sin GetComponent por frame
+        readonly List<HadoukenLook> _projLook = new List<HadoukenLook>();
         readonly List<WorldRect> _rects = new List<WorldRect>();
 
         public static LiveViz Create(MatchController mc)
@@ -142,18 +144,21 @@ namespace LagFighter
                     ball.GetComponent<Renderer>().material = new Material(VizLib.BaseMat) { color = new Color(0.5f, 0.8f, 1f, 0.9f) };
                     ball.AddComponent<HadoukenLook>().Build();
                     _projPool.Add(ball);
+                    _projRend.Add(ball.GetComponent<Renderer>());
+                    _projLook.Add(ball.GetComponent<HadoukenLook>());
                 }
-                var go = _projPool[used++];
+                var go = _projPool[used];
                 bool fresh = !go.activeSelf; // reciclado del pool: no arrastrar el trail viejo
                 go.SetActive(true);
                 go.transform.position = new Vector3(p.X, (SimConfig.ProjY0 + SimConfig.ProjY1) * 0.5f, 0f);
-                if (fresh) go.GetComponent<HadoukenLook>().ResetTrail();
+                if (fresh) _projLook[used].ResetTrail();
                 float pulse = 0.42f + Mathf.Sin(Time.time * 14f) * 0.04f;
                 if (p.Super) pulse *= 2.1f; // la super es una BOLA
                 go.transform.localScale = new Vector3(pulse, pulse, pulse);
-                go.GetComponent<Renderer>().material.color = p.Super
+                _projRend[used].material.color = p.Super
                     ? new Color(1f, 0.75f, 0.2f, 0.95f) // dorada
                     : new Color(0.5f, 0.8f, 1f, 0.9f);
+                used++;
             }
             for (int i = used; i < _projPool.Count; i++)
                 _projPool[i].SetActive(false);
