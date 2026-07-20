@@ -192,8 +192,8 @@ namespace LagFighter
     }
 
     // Rango del movimiento hovereado, dibujado EN el escenario frente al
-    // peleador que planifica (hitboxes, línea del proyectil, arco del salto,
-    // pasos de movimiento). La framedata como intuición espacial.
+    // peleador que planifica (hitboxes y línea del proyectil). La framedata
+    // como intuición espacial; el desplazamiento lo actúa el ghost.
     public class RangePreview : MonoBehaviour
     {
         static RangePreview _i;
@@ -248,20 +248,8 @@ namespace LagFighter
                     new Color(Palette.Block.r, Palette.Block.g, Palette.Block.b, 0.14f));
             }
 
-            // trayectoria de movimiento: puntos en el piso (o el arco del salto)
-            if (m.MoveDx != 0f && m.MotionEnd > m.MotionStart)
-            {
-                const int dots = 7;
-                for (int d = 1; d <= dots; d++)
-                {
-                    float t = d / (float)dots;
-                    float x = f.X + face * m.MoveDx * t;
-                    float y = 0.05f;
-                    if (m.HasAir) y = Mathf.Sin(t * Mathf.PI) * 1.25f + 0.05f; // arco del salto
-                    i.Box(new Vector3(x, y, 0f), new Vector3(0.09f, 0.09f, 0.09f),
-                        new Color(Palette.Ok.r, Palette.Ok.g, Palette.Ok.b, 0.55f));
-                }
-            }
+            // (los puntos de trayectoria se retiraron: el ghost ACTÚA el
+            // movimiento hovereado, que se lee mucho mejor que los dots)
         }
 
         void Box(Vector3 pos, Vector3 scale, Color c)

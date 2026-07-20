@@ -405,6 +405,34 @@ namespace LagFighter
         // (turno fluido); nunca coexisten porque un golpe cancela el move
         public int TimelineOffset(int i) => DisplayStun(i) + TurnStartCommitted[i];
 
+        // frames del move en curso que cruzan el fin del turno (badge OVERFLOW):
+        // planificando = lo ya comprometido; ejecutando = lo que va a cruzar
+        public int OverflowFrames(int i)
+        {
+            if (State == Flow.Planning) return TurnStartCommitted[i];
+            var f = Sim.Fighters[i];
+            if (f.MoveIndex < 0) return 0;
+            int endTick = f.MoveStartTick + MoveCatalog.All[f.MoveIndex].Total;
+            return Mathf.Max(0, endTick - (TurnStartTick + CurrentTurnFrames));
+        }
+
+        // hover de carta: el ghost muestra el plan actual + la carta bajo el
+        // cursor, como si ya estuviera agregada (sin comprometerla)
+        public void PreviewHover(int moveIndex)
+        {
+            if (State != Flow.Planning) return;
+            var preview = _plans[Picker];
+            if (moveIndex >= 0 && PlanFits(moveIndex))
+                preview = new List<int>(preview) { moveIndex };
+            var basis = Sim;
+            if (WakeDelta(Picker) != 0)
+            {
+                basis = Sim.Clone();
+                basis.AdjustKnockdown(Picker, WakeDelta(Picker));
+            }
+            _ghost.Show(basis, Picker, preview, CurrentTurnFrames);
+        }
+
         // el stun arrastrado te come frames del turno: solo se planifica lo que entra
         public int PlanFramesAvailable(int i) =>
             Mathf.Max(0, CurrentTurnFrames - EffectiveStartStun(i) - TurnStartCommitted[i]);

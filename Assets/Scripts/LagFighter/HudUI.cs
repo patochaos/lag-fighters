@@ -622,18 +622,27 @@ namespace LagFighter
                     _winPips[i][w].color = c;
                 }
 
-                // badge de estado sobre la cabeza (world-space)
+                // badge de estado sobre la cabeza (world-space): el lugar
+                // único de status effects — stun, guard crush y overflow
                 string badge = "";
                 Color bc = Color.white;
                 if (sim.IsStunned(i))
                 {
                     int rem = sim.StunRemaining(i);
-                    switch (sim.Fighters[i].Stun)
+                    if (sim.Fighters[i].Crushed) { badge = $"GUARD CRUSH {rem}F"; bc = new Color(1f, 0.35f, 0.75f); }
+                    else switch (sim.Fighters[i].Stun)
                     {
                         case StunKind.Knockdown: badge = $"KD {rem}F"; bc = new Color(1f, 0.5f, 0.2f); break;
                         case StunKind.Blockstun: badge = $"BLOCK {rem}F"; bc = Palette.Block; break;
                         default: badge = $"HIT {rem}F"; bc = Palette.Damage; break;
                     }
+                }
+                else if (_mc.OverflowFrames(i) > 0)
+                {
+                    // turno fluido: este move cruza el turno (o ya cruzó
+                    // y arrancás comprometido)
+                    badge = $"OVERFLOW »{_mc.OverflowFrames(i)}F";
+                    bc = new Color(1f, 0.6f, 0.15f);
                 }
                 else if (sim.IsBlockingState(i) && executing)
                 {

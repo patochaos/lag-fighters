@@ -236,6 +236,7 @@ namespace LagFighter
         public int QueueIndex;
         public int MoveIndex = -1;
         public int MoveStartTick;
+        public bool Crushed; // guard crush en curso (distingue su stun del hitstun común)
         public uint WindowHit; // bitmask: 1 = esa ventana de hit ya conectó
         public StunKind Stun = StunKind.None;
         public int StunEndTick;
@@ -493,6 +494,7 @@ namespace LagFighter
                 if (!IsStunned(i))
                 {
                     f.Stun = StunKind.None;
+                    f.Crushed = false;
                     // apenas puede, sigue ejecutando lo que le quedaba
                     if (f.MoveIndex < 0 && f.QueueIndex < f.Queue.Count)
                         StartQueuedMove(i);
@@ -726,6 +728,7 @@ namespace LagFighter
                     def.Guard = SimConfig.GuardCrushRespawn;
                     def.MoveIndex = -1;
                     def.Stun = StunKind.Hitstun;
+                    def.Crushed = true;
                     def.StunEndTick = Tick + SimConfig.GuardCrushStun;
                     PushDefender(p.Attacker, face, p.Push);
                     LastEvents.Add(new SimEvent { Attacker = p.Attacker, Kind = EvKind.GuardCrush, MoveIndex = p.MoveIndex,

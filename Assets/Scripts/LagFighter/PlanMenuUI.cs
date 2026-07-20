@@ -343,6 +343,8 @@ namespace LagFighter
 
             // el rango del movimiento se dibuja EN el escenario (Into the Breach)
             RangePreview.Show(_mc.Sim, _mc.Picker, Order[_sel]);
+            // y el ghost lo ACTÚA: plan actual + la carta bajo el cursor
+            _mc.PreviewHover(Order[_sel]);
         }
 
         void Update()
