@@ -21,6 +21,24 @@ class Program
             return;
         }
         int matches = args.Length > 0 ? int.Parse(args[0]) : 3000;
+        RunLab(matches, carryover: false);
+        Console.WriteLine();
+        Console.WriteLine("=== TURNO FLUIDO (overflow + SUPER habilitados) ===");
+        RunLab(matches, carryover: true);
+    }
+
+    // Una pasada completa del lab. Con carryover, la IA cruza el límite del
+    // turno (45% cuando el presupuesto no alcanza), carga la barra y tira
+    // el Shinku: acá se calibra la economía de la super.
+    static void RunLab(int matches, bool carryover)
+    {
+        SimConfig.CarryoverEnabled = carryover;
+        try { RunLabInner(matches, carryover); }
+        finally { SimConfig.CarryoverEnabled = false; }
+    }
+
+    static void RunLabInner(int matches, bool carryover)
+    {
         int n = MoveCatalog.All.Length;
         var uses = new int[n];
         var hits = new int[n];
@@ -32,6 +50,7 @@ class Program
         int wins0 = 0, wins1 = 0, draws = 0, timeouts = 0, techs = 0;
         int totalTurns = 0, totalCrushes = 0, matchesWithCrush = 0;
         double guardSum = 0; long guardSamples = 0;
+        long overflowFrames = 0; int supersFull = 0; // economía del turno fluido
 
         for (int m = 0; m < matches; m++)
         {
@@ -68,8 +87,11 @@ class Program
                     guardSum += sim.Fighters[0].Guard + sim.Fighters[1].Guard;
                     guardSamples += 2;
                 }
+                overflowFrames += sim.CommittedRemaining(0) + sim.CommittedRemaining(1);
                 sim.OnTurnEnd(0);
                 sim.OnTurnEnd(1);
+                if (sim.Fighters[0].Super >= SimConfig.SuperMax) supersFull++;
+                if (sim.Fighters[1].Super >= SimConfig.SuperMax) supersFull++;
                 totalTurns++;
             }
 
@@ -85,6 +107,8 @@ class Program
         Console.WriteLine($"turnos/pelea: {(double)totalTurns / matches:0.0}");
         Console.WriteLine($"GUARD CRUSH: {totalCrushes} total · {(double)totalCrushes / matches:0.00}/pelea · {100.0 * matchesWithCrush / matches:0.0}% de peleas con >=1");
         Console.WriteLine($"guardia promedio en juego: {guardSum / guardSamples:0.0}/{SimConfig.GuardMax:0}");
+        if (carryover)
+            Console.WriteLine($"OVERFLOW: {(double)overflowFrames / matches:0.0} frames/pelea · turnos con barra llena: {supersFull} · supers tiradas: {uses[MoveCatalog.Super]}");
         Console.WriteLine();
         Console.WriteLine($"{"mov",-18}{"usos",8}{"hit",7}{"block",7}{"whiff",7}{"parry",7}{"crush",7}{"hit%",7}{"dmg/uso",9}");
         for (int i = 0; i < n; i++)

@@ -180,18 +180,23 @@ namespace LagFighter
             _undoBtn = MakeImage(rootRt, "UndoBtn", new Vector2(0.5f, 0f), new Vector2(-sideX, 62f), new Vector2(150f, 44f), UndoC);
             MakeText(_undoBtn.rectTransform, "T", "← BORRAR", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(146f, 30f), 14, Color.white, TextAnchor.MiddleCenter).fontStyle = FontStyle.Bold;
 
-            // wakeup option: solo aparece si arrancás el turno derribado
-            _wakeBtn = MakeImage(rootRt, "WakeBtn", new Vector2(0.5f, 0f), new Vector2(-sideX, 190f), new Vector2(160f, 56f), WakeC);
-            _wakeLabel = MakeText(_wakeBtn.rectTransform, "T", "", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(156f, 50f), 13, Color.white, TextAnchor.MiddleCenter);
-            _wakeLabel.fontStyle = FontStyle.Bold;
-            _wakeBtn.gameObject.SetActive(false);
+            // REGLA DE LAYOUT: todo el menú vive DEBAJO de y≈220 — arriba de
+            // eso arrancan las timelines del HUD. Los botones contextuales van
+            // en una SEGUNDA COLUMNA a la izquierda, nunca apilados hacia arriba.
+            float sideX2 = sideX + 164f;
 
-            // SUPER: botón dorado arriba del stack; late cuando la barra está
-            // llena. Solo existe en turno fluido (la barra carga con overflow).
-            _superBtn = MakeImage(rootRt, "SuperBtn", new Vector2(0.5f, 0f), new Vector2(-sideX, 252f), new Vector2(160f, 52f), SuperDimC);
+            // SUPER: botón dorado; late cuando la barra está llena. Solo
+            // existe en turno fluido (la barra carga con overflow).
+            _superBtn = MakeImage(rootRt, "SuperBtn", new Vector2(0.5f, 0f), new Vector2(-sideX2, 118f), new Vector2(160f, 54f), SuperDimC);
             _superLabel = MakeText(_superBtn.rectTransform, "T", "", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(156f, 46f), 13, Color.white, TextAnchor.MiddleCenter);
             _superLabel.fontStyle = FontStyle.Bold;
             _superBtn.gameObject.SetActive(false);
+
+            // wakeup option: solo aparece si arrancás el turno derribado
+            _wakeBtn = MakeImage(rootRt, "WakeBtn", new Vector2(0.5f, 0f), new Vector2(-sideX2, 62f), new Vector2(160f, 50f), WakeC);
+            _wakeLabel = MakeText(_wakeBtn.rectTransform, "T", "", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(156f, 46f), 12, Color.white, TextAnchor.MiddleCenter);
+            _wakeLabel.fontStyle = FontStyle.Bold;
+            _wakeBtn.gameObject.SetActive(false);
 
             // panel de info a la DERECHA de la grilla: nombre, framedata con
             // mini-barra S/A/R, tag y descripción del movimiento hovereado.
