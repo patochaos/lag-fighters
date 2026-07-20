@@ -46,6 +46,9 @@ namespace LagFighter
         readonly int[] _yomiHpBefore = new int[2];
         const int YomiTheaterFrames = 78;              // duración fija del teatro
         const float YomiCloseSlot = 0.45f, YomiFarSlot = 0.95f; // X de cada distancia
+        const float YomiRevealSeconds = 2.4f;          // cartas gigantes antes de actuar
+        const float YomiTheaterSpeed = 0.6f;           // la acción corre lenta: que se LEA
+        float _yomiRevealTimer;
         public float TickFloat => Sim == null ? 0f : Sim.Tick + _acc / SimConfig.TickDuration;
         public GameMode Mode { get; private set; }
         public bool LagMode { get; private set; }
@@ -201,6 +204,7 @@ namespace LagFighter
             State = Flow.ModeSelect;
             _tipStage = -1;
             _hud.SetTip("");
+            _hud.HideYomiCards();
             _menu.Close();
             _ghost.Clear();
             _modeMenu.Open();
@@ -613,6 +617,7 @@ namespace LagFighter
             }
             Picker = 0;
             State = Flow.Planning;
+            _hud.HideYomiCards(); // las cartas del turno pasado ya contaron lo suyo
             if (Yomi.Recovery[0])
             {
                 // whiffeaste el Shoryu: este turno no se elige, se sufre
@@ -684,6 +689,10 @@ namespace LagFighter
             _turnDmg[0] = _turnDmg[1] = 0f;
             _turnHitCount[0] = _turnHitCount[1] = 0;
             State = Flow.Executing;
+            // fase de REVELACIÓN: las dos cartas gigantes, 2.4s de "esto eligió
+            // cada uno" antes de que pase nada (espacio o click la apuran)
+            _yomiRevealTimer = YomiRevealSeconds;
+            _hud.ShowYomiReveal(r.A0, r.A1, r.CloseBefore);
             _hud.SetPrompt($"TURNO {TurnNumber} — {YomiConfig.Name(r.A0).ToUpperInvariant()} vs {YomiConfig.Name(r.A1).ToUpperInvariant()}");
             SfxLib.Play(SfxLib.Kind.TurnStart, 0.6f);
         }
@@ -740,8 +749,19 @@ namespace LagFighter
 
         void TickYomiTheater()
         {
+            // revelación: las cartas al frente, la sim quieta
+            if (_yomiRevealTimer > 0f)
+            {
+                _yomiRevealTimer -= Time.deltaTime;
+                // apurarla con espacio/click (no el mismo click que eligió la carta)
+                if (_yomiRevealTimer < YomiRevealSeconds - 0.35f &&
+                    (GameInput.EndTurnPressed() || GameInput.ClickPressed()))
+                    _yomiRevealTimer = 0f;
+                if (_yomiRevealTimer <= 0f) _hud.DockYomiCards();
+                return;
+            }
             if (_hitstop > 0f) { _hitstop -= Time.deltaTime * PlaybackSpeed; return; }
-            _acc += Time.deltaTime * PlaybackSpeed;
+            _acc += Time.deltaTime * PlaybackSpeed * YomiTheaterSpeed;
             while (_acc >= SimConfig.TickDuration)
             {
                 _acc -= SimConfig.TickDuration;

@@ -302,6 +302,13 @@ tabla — la matriz de counters ES la ley**.
   jugarla ya** (sin cola, sin LISTO); la tag de cada carta canta su fila de
   la matriz en la distancia actual. IA: `SimpleAI.PickYomi` (pondera por
   distancia/economía + counter-pick del hábito rival observado; Hard lee más).
+- **Presentación del turno (pedido 2026-07-20)**: fase de REVELACIÓN — las
+  dos cartas GIGANTES con animación de entrada (ease-out-back) + "VS" por
+  2.4s antes de que pase nada (espacio/click la apura); después se achican y
+  quedan **dockeadas a los costados durante la acción** para que se lea qué
+  hizo cada uno; el teatro corre al 60% de velocidad. AP como **circulitos**
+  (sprite circular procedural): lleno = punto disponible, vacío = gastado,
+  bajo la barra de guardia de cada lado.
 - Lab discreto: `dotnet run --project Tools/SimHarness -- yomi N` (y tercera
   pasada del lab default). 8000 partidas: 100% KO, 7.6 turnos/partida,
   46% de turnos en cerca, AP promedio 2.6/6 (la economía muerde), 9k parrys,

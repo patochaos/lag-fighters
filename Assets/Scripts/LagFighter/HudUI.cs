@@ -30,6 +30,18 @@ namespace LagFighter
         readonly Image[] _guardFill = new Image[2];
         readonly Image[] _superFill = new Image[2];
         readonly Image[] _superBg = new Image[2]; // se oculta con el turno fluido apagado
+
+        // ---- modo YOMI: circulitos de AP + cartas de revelación ----
+        readonly Image[][] _apPips = new Image[2][];
+        readonly Image[] _yomiCard = new Image[2];
+        readonly Image[] _yomiCardEdge = new Image[2];
+        readonly Text[] _yomiCardName = new Text[2];
+        readonly Text[] _yomiCardInfo = new Text[2];
+        Text _yomiVs;
+        float _yomiPop;   // entrada de las cartas (0..1, con overshoot)
+        float _yomiDock;  // 0 = grandes al centro · 1 = chicas al costado
+        bool _yomiDocked;
+        static Sprite _circleSprite;
         const float PipW = 42f, PipGap = 46f;
         const float GuardBarW = SimConfig.MaxHp * PipGap - (PipGap - PipW);
         Text _banner, _prompt, _turnSummary, _planTimerText;
@@ -181,6 +193,29 @@ namespace LagFighter
             // tip contextual (práctica): entre el menú de plan y las timelines
             _tip = MakeText(_canvasRt, "Tip", "", new Vector2(0.5f, 0f), new Vector2(0f, 396f), new Vector2(1400f, 24f),
                 16, new Color(0.55f, 1f, 0.65f, 0.9f), TextAnchor.MiddleCenter);
+
+            // cartas de revelación del modo YOMI: entran GRANDES al centro
+            // ("esto eligió cada uno"), y durante la acción se van chicas al
+            // costado para que se lea qué está haciendo cada lado.
+            for (int i = 0; i < 2; i++)
+            {
+                bool left = i == 0;
+                _yomiCard[i] = MakeImage(_canvasRt, "YomiCard" + i, new Vector2(0.5f, 0.5f),
+                    new Vector2(left ? -310f : 310f, 120f), new Vector2(340f, 170f), new Color(0.05f, 0.06f, 0.09f, 0.96f));
+                _yomiCardEdge[i] = MakeImage(_yomiCard[i].rectTransform, "Edge", new Vector2(0.5f, 1f),
+                    new Vector2(0f, -6f), new Vector2(328f, 10f), Color.white);
+                MakeTextP(_yomiCard[i].rectTransform, "Who", left ? "VOS" : "RIVAL", new Vector2(0.5f, 1f),
+                    new Vector2(0f, -30f), new Vector2(300f, 22f), 8,
+                    left ? new Color(0.55f, 0.8f, 1f) : new Color(1f, 0.63f, 0.5f), TextAnchor.MiddleCenter);
+                _yomiCardName[i] = MakeTextP(_yomiCard[i].rectTransform, "Name", "", new Vector2(0.5f, 0.5f),
+                    new Vector2(0f, 4f), new Vector2(330f, 44f), 24, Color.white, TextAnchor.MiddleCenter);
+                _yomiCardInfo[i] = MakeTextP(_yomiCard[i].rectTransform, "Info", "", new Vector2(0.5f, 0f),
+                    new Vector2(0f, 28f), new Vector2(330f, 22f), 8, new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleCenter);
+                _yomiCard[i].gameObject.SetActive(false);
+            }
+            _yomiVs = MakeTextP(_canvasRt, "YomiVs", "VS", new Vector2(0.5f, 0.5f), new Vector2(0f, 120f),
+                new Vector2(160f, 60f), 32, new Color(1f, 0.85f, 0.3f), TextAnchor.MiddleCenter);
+            _yomiVs.gameObject.SetActive(false);
 
             // REPLAY + SKIP, arriba al medio (solo visible durante la repetición)
             _replayPanel = MakePanel(_canvasRt, "ReplayPanel", new Vector2(0.5f, 1f), new Vector2(0f, -120f), new Vector2(430f, 44f), Palette.Damage);
@@ -420,6 +455,37 @@ namespace LagFighter
             _limbLabel[i] = MakeTextP(pr, "Limbs", "", new Vector2(left ? 0f : 1f, 1f), new Vector2(sign * 14f, -102f), new Vector2(400f, 14f),
                 8, new Color(1f, 0.45f, 0.35f), left ? TextAnchor.UpperLeft : TextAnchor.UpperRight);
             _limbLabel[i].rectTransform.pivot = new Vector2(left ? 0f : 1f, 1f);
+
+            // circulitos de AP (modo YOMI): lleno = punto disponible, vacío = gastado
+            _apPips[i] = new Image[YomiConfig.ApCap];
+            for (int p = 0; p < YomiConfig.ApCap; p++)
+            {
+                var pip = MakeImage(pr, $"ApPip{p}", new Vector2(left ? 0f : 1f, 1f),
+                    new Vector2(sign * (14f + p * 17f), -90f), new Vector2(12f, 12f), Color.white);
+                pip.rectTransform.pivot = new Vector2(left ? 0f : 1f, 1f);
+                pip.sprite = CircleSprite();
+                pip.gameObject.SetActive(false);
+                _apPips[i][p] = pip;
+            }
+        }
+
+        // circulito procedural (el proyecto no usa assets: todo se genera)
+        static Sprite CircleSprite()
+        {
+            if (_circleSprite != null) return _circleSprite;
+            const int S = 24;
+            var tex = new Texture2D(S, S, TextureFormat.RGBA32, false);
+            float c = (S - 1) * 0.5f, r = S * 0.42f;
+            for (int y = 0; y < S; y++)
+                for (int x = 0; x < S; x++)
+                {
+                    float d = Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c));
+                    float a = Mathf.Clamp01(r - d + 0.5f); // borde suave de 1px
+                    tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+                }
+            tex.Apply();
+            _circleSprite = Sprite.Create(tex, new Rect(0, 0, S, S), new Vector2(0.5f, 0.5f));
+            return _circleSprite;
         }
 
         public void SetPrompt(string s) => _prompt.text = s;
@@ -527,10 +593,13 @@ namespace LagFighter
             }
             if (flow != _prevFlow)
             {
-                if (flow == MatchController.Flow.Executing && _prevFlow == MatchController.Flow.Planning)
+                // en YOMI la transición la cuentan las cartas de revelación
+                if (flow == MatchController.Flow.Executing && _prevFlow == MatchController.Flow.Planning && !SimConfig.YomiEnabled)
                     ShowBigMessage("¡EJECUTANDO!", new Color(0.5f, 0.95f, 1f), 0.8f);
                 _prevFlow = flow;
             }
+
+            AnimateYomiCards();
 
             bool executing = flow == MatchController.Flow.Executing || flow == MatchController.Flow.Replay;
 
@@ -634,31 +703,34 @@ namespace LagFighter
                     : Palette.Guard;
 
                 // super: solo tiene sentido en turno fluido (carga con overflow).
-                // En YOMI la misma barrita muestra los AP en celeste.
-                bool yomiBar = SimConfig.YomiEnabled;
-                bool superOn = SimConfig.CarryoverEnabled && !yomiBar;
-                bool barOn = superOn || yomiBar;
-                if (_superBg[i].gameObject.activeSelf != barOn)
+                // En YOMI en su lugar van los circulitos de AP.
+                bool yomiOn = SimConfig.YomiEnabled;
+                bool superOn = SimConfig.CarryoverEnabled && !yomiOn;
+                if (_superBg[i].gameObject.activeSelf != superOn)
                 {
-                    _superBg[i].gameObject.SetActive(barOn);
-                    _superFill[i].gameObject.SetActive(barOn);
+                    _superBg[i].gameObject.SetActive(superOn);
+                    _superFill[i].gameObject.SetActive(superOn);
                 }
-                if (yomiBar)
-                {
-                    int apNow = _mc.Yomi == null ? 0 : _mc.Yomi.Ap[i];
-                    float ap = Mathf.Clamp01(apNow / (float)YomiConfig.ApCap);
-                    _superFill[i].rectTransform.sizeDelta = new Vector2(GuardBarW * ap, 6f);
-                    _superFill[i].color = apNow >= YomiConfig.ApCap
-                        ? Color.Lerp(new Color(0.35f, 0.85f, 1f), Color.white, Mathf.PingPong(Time.time * 3f, 0.6f))
-                        : new Color(0.35f, 0.85f, 1f, 0.95f);
-                }
-                else if (superOn)
+                if (superOn)
                 {
                     float sp = Mathf.Clamp01(sim.Fighters[i].Super / (float)SimConfig.SuperMax);
                     _superFill[i].rectTransform.sizeDelta = new Vector2(GuardBarW * sp, 6f);
                     _superFill[i].color = sp >= 1f
                         ? Color.Lerp(new Color(1f, 0.8f, 0.2f), Color.white, Mathf.PingPong(Time.time * 3f, 0.65f))
                         : new Color(1f, 0.75f, 0.2f, 0.9f);
+                }
+
+                // circulitos de AP: lleno = disponible, vacío = no hay
+                bool pipsOn = yomiOn && _mc.Yomi != null;
+                int apNow = pipsOn ? _mc.Yomi.Ap[i] : 0;
+                for (int p = 0; p < _apPips[i].Length; p++)
+                {
+                    if (_apPips[i][p].gameObject.activeSelf != pipsOn)
+                        _apPips[i][p].gameObject.SetActive(pipsOn);
+                    if (pipsOn)
+                        _apPips[i][p].color = p < apNow
+                            ? new Color(0.35f, 0.85f, 1f, 1f)
+                            : new Color(0.25f, 0.32f, 0.4f, 0.55f);
                 }
 
                 for (int w = 0; w < MatchController.RoundsToWin; w++)
@@ -1210,6 +1282,97 @@ namespace LagFighter
             outline.effectColor = new Color(accent.r, accent.g, accent.b, 0.55f);
             outline.effectDistance = new Vector2(1.5f, -1.5f);
             return img;
+        }
+
+        // ---- cartas de revelación del modo YOMI ----
+
+        public static Color YomiActionColor(YomiAction a)
+        {
+            switch (a)
+            {
+                case YomiAction.Jab: return new Color(0.9f, 0.32f, 0.24f);
+                case YomiAction.Kick: return new Color(0.95f, 0.55f, 0.2f);
+                case YomiAction.Grab: return new Color(0.85f, 0.3f, 0.75f);
+                case YomiAction.Parry: return new Color(0.25f, 0.75f, 0.95f);
+                case YomiAction.Shoryu: return new Color(0.95f, 0.7f, 0.15f);
+                case YomiAction.Dash: return new Color(0.2f, 0.72f, 0.72f);
+                case YomiAction.Jump: return new Color(0.55f, 0.8f, 0.35f);
+                case YomiAction.Charge: return new Color(1f, 0.8f, 0.3f);
+                default: return new Color(0.6f, 0.6f, 0.65f); // recovery
+            }
+        }
+
+        static string YomiCardInfo(YomiAction a, bool close)
+        {
+            if (a == YomiAction.Recovery) return "WHIFFEÓ EL SHORYU: PIERDE EL TURNO";
+            if (a == YomiAction.Charge) return "+2 AP SI NADIE LE PEGA";
+            int cost = YomiConfig.Cost(a);
+            int dmg = YomiConfig.Damage(a);
+            string s = cost == 0 ? "GRATIS" : $"{cost} AP";
+            if (dmg > 0) s += $"  ·  {dmg} DMG";
+            if (a == YomiAction.Dash) s += close ? "  ·  SE VA" : "  ·  ENTRA";
+            if (a == YomiAction.Jump) s += close ? "  ·  ESCAPA" : "  ·  ENTRA PEGANDO";
+            return s;
+        }
+
+        public void ShowYomiReveal(YomiAction a0, YomiAction a1, bool close)
+        {
+            var acts = new[] { a0, a1 };
+            for (int i = 0; i < 2; i++)
+            {
+                var c = YomiActionColor(acts[i]);
+                _yomiCard[i].gameObject.SetActive(true);
+                _yomiCardEdge[i].color = new Color(c.r, c.g, c.b, 0.95f);
+                _yomiCardName[i].text = YomiConfig.Name(acts[i]).ToUpperInvariant();
+                _yomiCardName[i].color = new Color(c.r * 0.45f + 0.55f, c.g * 0.45f + 0.55f, c.b * 0.45f + 0.55f);
+                _yomiCardInfo[i].text = YomiCardInfo(acts[i], close);
+            }
+            _yomiVs.gameObject.SetActive(true);
+            _yomiPop = 0f;
+            _yomiDock = 0f;
+            _yomiDocked = false;
+            LayoutYomiCards();
+        }
+
+        public void DockYomiCards()
+        {
+            _yomiDocked = true;
+            _yomiVs.gameObject.SetActive(false);
+        }
+
+        public void HideYomiCards()
+        {
+            _yomiCard[0].gameObject.SetActive(false);
+            _yomiCard[1].gameObject.SetActive(false);
+            _yomiVs.gameObject.SetActive(false);
+        }
+
+        void AnimateYomiCards()
+        {
+            if (_yomiCard[0] == null || !_yomiCard[0].gameObject.activeSelf) return;
+            _yomiPop = Mathf.MoveTowards(_yomiPop, 1f, Time.unscaledDeltaTime * 4.5f);
+            _yomiDock = Mathf.MoveTowards(_yomiDock, _yomiDocked ? 1f : 0f, Time.unscaledDeltaTime * 4f);
+            LayoutYomiCards();
+        }
+
+        void LayoutYomiCards()
+        {
+            // entrada con overshoot (ease-out-back) + viaje al costado al dockear
+            float t = _yomiPop - 1f;
+            const float k = 1.70158f;
+            float pop = 1f + (k + 1f) * t * t * t + k * t * t;
+            float dock = _yomiDock * _yomiDock * (3f - 2f * _yomiDock);
+            float scale = Mathf.Lerp(1f, 0.5f, dock) * Mathf.Max(0.05f, pop);
+            for (int i = 0; i < 2; i++)
+            {
+                float sign = i == 0 ? -1f : 1f;
+                var pos = new Vector2(sign * Mathf.Lerp(310f, 640f, dock), Mathf.Lerp(120f, 288f, dock));
+                _yomiCard[i].rectTransform.anchoredPosition = pos;
+                _yomiCard[i].rectTransform.localScale = new Vector3(scale, scale, 1f);
+            }
+            var vc = _yomiVs.color;
+            vc.a = Mathf.Clamp01(_yomiPop * 1.4f - 0.4f);
+            _yomiVs.color = vc;
         }
 
         public Image MakeImage(RectTransform parent, string name, Vector2 anchor, Vector2 pos, Vector2 size, Color color)

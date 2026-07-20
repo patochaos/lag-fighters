@@ -184,22 +184,9 @@ namespace LagFighter
                 : MoveCatalog.All[mi].Name.ToUpperInvariant();
         }
 
-        // color de categoría según el modo (en YOMI, por acción)
-        Color CardColor(int v)
-        {
-            if (!_builtYomi) return CategoryColor(v);
-            switch ((YomiAction)v)
-            {
-                case YomiAction.Jab: return new Color(0.9f, 0.32f, 0.24f);
-                case YomiAction.Kick: return new Color(0.95f, 0.55f, 0.2f);
-                case YomiAction.Grab: return new Color(0.85f, 0.3f, 0.75f);
-                case YomiAction.Parry: return new Color(0.25f, 0.75f, 0.95f);
-                case YomiAction.Shoryu: return new Color(0.95f, 0.7f, 0.15f);
-                case YomiAction.Dash: return new Color(0.2f, 0.72f, 0.72f);
-                case YomiAction.Jump: return new Color(0.55f, 0.8f, 0.35f);
-                default: return new Color(1f, 0.8f, 0.3f); // cargar: dorado
-            }
-        }
+        // color de categoría según el modo (en YOMI, por acción — mismo
+        // color que las cartas de revelación del HUD)
+        Color CardColor(int v) => _builtYomi ? HudUI.YomiActionColor((YomiAction)v) : CategoryColor(v);
 
         void Build(RectTransform canvasRt)
         {
