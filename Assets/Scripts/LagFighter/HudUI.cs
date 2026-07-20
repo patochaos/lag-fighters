@@ -616,8 +616,16 @@ namespace LagFighter
                 }
 
                 var lf = sim.Fighters[i];
-                _limbLabel[i].text = lf.ArmHp <= 0f && lf.LegHp <= 0f ? "SIN BRAZO · SIN PIERNA"
-                                   : lf.ArmHp <= 0f ? "SIN BRAZO" : lf.LegHp <= 0f ? "SIN PIERNA" : "";
+                // en YOMI el label de miembros (siempre libre: limbs off) muestra
+                // los AP — info pública de ambos lados, el corazón de la lectura
+                if (SimConfig.YomiEnabled)
+                {
+                    _limbLabel[i].text = $"AP {lf.Ap}/{SimConfig.ApMax}";
+                    _limbLabel[i].color = new Color(0.45f, 0.9f, 1f);
+                }
+                else
+                    _limbLabel[i].text = lf.ArmHp <= 0f && lf.LegHp <= 0f ? "SIN BRAZO · SIN PIERNA"
+                                       : lf.ArmHp <= 0f ? "SIN BRAZO" : lf.LegHp <= 0f ? "SIN PIERNA" : "";
 
                 float g = sim.Fighters[i].Guard / SimConfig.GuardMax;
                 _guardFill[i].rectTransform.sizeDelta = new Vector2(GuardBarW * g, 9f);
@@ -625,14 +633,25 @@ namespace LagFighter
                     ? Color.Lerp(Palette.Guard, new Color(1f, 0.2f, 0.15f), Mathf.PingPong(Time.time * 4f, 1f))
                     : Palette.Guard;
 
-                // super: solo tiene sentido en turno fluido (carga con overflow)
-                bool superOn = SimConfig.CarryoverEnabled;
-                if (_superBg[i].gameObject.activeSelf != superOn)
+                // super: solo tiene sentido en turno fluido (carga con overflow).
+                // En YOMI la misma barrita muestra los AP en celeste.
+                bool yomiBar = SimConfig.YomiEnabled;
+                bool superOn = SimConfig.CarryoverEnabled && !yomiBar;
+                bool barOn = superOn || yomiBar;
+                if (_superBg[i].gameObject.activeSelf != barOn)
                 {
-                    _superBg[i].gameObject.SetActive(superOn);
-                    _superFill[i].gameObject.SetActive(superOn);
+                    _superBg[i].gameObject.SetActive(barOn);
+                    _superFill[i].gameObject.SetActive(barOn);
                 }
-                if (superOn)
+                if (yomiBar)
+                {
+                    float ap = Mathf.Clamp01(sim.Fighters[i].Ap / (float)SimConfig.ApMax);
+                    _superFill[i].rectTransform.sizeDelta = new Vector2(GuardBarW * ap, 6f);
+                    _superFill[i].color = sim.Fighters[i].Ap >= SimConfig.ApMax
+                        ? Color.Lerp(new Color(0.35f, 0.85f, 1f), Color.white, Mathf.PingPong(Time.time * 3f, 0.6f))
+                        : new Color(0.35f, 0.85f, 1f, 0.95f);
+                }
+                else if (superOn)
                 {
                     float sp = Mathf.Clamp01(sim.Fighters[i].Super / (float)SimConfig.SuperMax);
                     _superFill[i].rectTransform.sizeDelta = new Vector2(GuardBarW * sp, 6f);
@@ -928,6 +947,8 @@ namespace LagFighter
                 case MoveCatalog.Crouch: return new Color(0.35f, 0.55f, 0.85f);
                 case MoveCatalog.LowKick: return new Color(0.75f, 0.28f, 0.3f);
                 case MoveCatalog.Super: return new Color(1f, 0.78f, 0.2f); // dorada
+                case MoveCatalog.Strong: return new Color(0.95f, 0.55f, 0.2f); // golpe fuerte (yomi)
+                case MoveCatalog.YomiGrab: return Palette.GrabC;
                 default: return new Color(0.25f, 0.72f, 0.45f); // caminar
             }
         }
@@ -953,6 +974,8 @@ namespace LagFighter
                 case MoveCatalog.Crouch: return "▼";
                 case MoveCatalog.LowKick: return "b";
                 case MoveCatalog.Super: return "SPR";
+                case MoveCatalog.Strong: return "GF";
+                case MoveCatalog.YomiGrab: return "G";
                 default: return "·";
             }
         }

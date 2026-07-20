@@ -171,6 +171,64 @@ namespace LagFighter
             }
         }
 
+        // ---- Modo YOMI: planifica con las 7 cartas y el presupuesto de AP.
+        // Sin perfiles finos todavía: juega el triángulo según la distancia y
+        // castiga lo comprometido visible (salto rival → Golpe fuerte).
+        public List<int> PlanYomi(MatchSim sim, int me, int turnFrames)
+        {
+            int opp = 1 - me;
+            var plan = new List<int>();
+            int budget = System.Math.Max(0, turnFrames - sim.StunRemaining(me) - sim.CommittedRemaining(me));
+            int ap = sim.Fighters[me].Ap;
+            if (Difficulty == AIDifficulty.Easy) ap = System.Math.Min(ap, SimConfig.ApPerTurn); // Easy no usa lo banqueado
+            int frames = 0;
+            float myX = sim.Fighters[me].X;
+            float oppX = sim.Fighters[opp].X;
+            int face = oppX >= myX ? 1 : -1;
+            bool oppAir = sim.IsAirborne(opp); // turno fluido: el compromiso rival es info pública
+            bool oppDown = sim.StunRemaining(opp) > 20;
+            bool threwFireball = false;
+
+            while (frames < budget)
+            {
+                float dist = System.Math.Abs(oppX - myX);
+                int pick = PickYomi(dist, oppAir, oppDown, ap);
+                oppAir = false; // solo la primera decisión reacciona al compromiso
+                if (MoveCatalog.ApCost(pick) > ap) pick = MoveCatalog.WalkB;
+                if (pick == MoveCatalog.Hadouken)
+                {
+                    if (threwFireball || HasProjectile(sim, me)) pick = dist > 1.5f ? MoveCatalog.DashF : MoveCatalog.WalkB;
+                    else threwFireball = true;
+                }
+
+                var move = MoveCatalog.All[pick];
+                plan.Add(pick);
+                ap -= MoveCatalog.ApCost(pick);
+                if (frames + move.Total > budget) break; // cruza el turno: comprometido y visible
+                frames += move.Total;
+                myX += face * move.MoveDx;
+                myX = System.Math.Max(-SimConfig.StageHalfWidth, System.Math.Min(SimConfig.StageHalfWidth, myX));
+                if (oppDown && plan.Count >= 2) oppDown = false;
+                if (ap <= 0) break; // sin puntos: lo que quede del turno bloquea en neutral
+            }
+            return plan;
+        }
+
+        int PickYomi(float dist, bool oppAir, bool oppDown, int ap)
+        {
+            if (oppAir && dist < 2.2f) return MoveCatalog.Strong; // antiaéreo al compromiso visible
+            if (oppDown && dist > 1.6f) return MoveCatalog.DashF;
+            double r = _rng.NextDouble();
+            if (dist > 2.4f)
+                return r < 0.35 ? MoveCatalog.Hadouken : r < 0.60 ? MoveCatalog.DashF :
+                       r < 0.80 ? MoveCatalog.JumpF : MoveCatalog.WalkB;
+            if (dist > 1.3f)
+                return r < 0.28 ? MoveCatalog.Strong : r < 0.50 ? MoveCatalog.DashF :
+                       r < 0.64 ? MoveCatalog.JumpF : r < 0.86 ? MoveCatalog.WalkB : MoveCatalog.Hadouken;
+            return r < 0.30 ? MoveCatalog.AttackA : r < 0.54 ? MoveCatalog.YomiGrab :
+                   r < 0.68 ? MoveCatalog.Strong : r < 0.88 ? MoveCatalog.WalkB : MoveCatalog.DashB;
+        }
+
         int PickUnfocused(float dist)
         {
             double r = _rng.NextDouble();

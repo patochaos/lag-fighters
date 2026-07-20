@@ -24,6 +24,21 @@ namespace LagFighter
         // completo. Arrancás el turno siguiente comprometido (p.ej. en el aire,
         // okizeme estilo Akuma) y el rival TE VE al planificar: info honesta.
         public static bool CarryoverEnabled = false;
+
+        // ---- Modo YOMI (2026-07-20): 7 cartas, triángulo explícito y ACTION
+        // POINTS en vez de presupuesto de frames. Golpe gana a Agarre, Agarre
+        // rompe Bloqueo, Bloqueo para golpes; de lejos Hadouken > Golpe fuerte,
+        // Salto > Hadouken, Golpe fuerte (antiaéreo) > Salto. Los AP viven en
+        // la sim (FighterState.Ap): se gastan al ARRANCAR cada move (si te
+        // interrumpen, lo no ejecutado no se cobra), +ApPerTurn por turno con
+        // tope ApMax, y cada Bloqueo ejecutado banquea +1 (la "carta robada"
+        // de Yomi). 3/6 y no 4/8: en el lab con 4/8 el promedio era 7.6/8 —
+        // la restricción no mordía nunca y la lectura "está pobre/cargado"
+        // no existía. No toca los modos clásicos: flag OFF por defecto,
+        // forzado por el menú al elegir el modo. Turno fluido implícito.
+        public static bool YomiEnabled = false;
+        public const int ApPerTurn = 3;
+        public const int ApMax = 6;
         // 20 turnos por round → TIME OVER y decide la vida. Calibrado con la
         // distribución natural del lab: mediana 13, p75 21; con 20 el 75% de
         // las peleas termina por KO y el juez solo corta la cola de stalls.
@@ -131,7 +146,21 @@ namespace LagFighter
         public const int WalkF = 0, WalkB = 1, DashF = 2, DashB = 3,
                          JumpF = 4, JumpN = 5, JumpB = 6,
                          AttackA = 7, AttackB = 8, Hadouken = 9, Shoryuken = 10, Parry = 11,
-                         Tatsu = 12, Grab = 13, Crouch = 14, LowKick = 15, Super = 16;
+                         Tatsu = 12, Grab = 13, Crouch = 14, LowKick = 15, Super = 16,
+                         Strong = 17, YomiGrab = 18;
+
+        // Costo en ACTION POINTS de cada carta del modo YOMI. Bloqueo cuesta 0:
+        // quedarse sin puntos te deja SOLO bloquear — el rival lo sabe y ahí
+        // nace la lectura ("está pobre, va a bloquear → agarre").
+        public static int ApCost(int moveIndex)
+        {
+            switch (moveIndex)
+            {
+                case WalkB: return 0;
+                case DashF: case DashB: case AttackA: return 1;
+                default: return 2;
+            }
+        }
 
         public static readonly MoveDef[] All =
         {
@@ -220,6 +249,24 @@ namespace LagFighter
             new MoveDef { Id = "shinku", Name = "Shinku Hadouken", Anim = AnimKind.Fireball, Startup = 14, Active = 2, Recovery = 40,
                 Desc = "LA SUPER: proyectil gigante de 4, veloz, arrasa hadoukens y el parry no lo rechaza. Bloquearla come 40 de guardia. Se salta. Cuesta la barra entera.",
                 SpawnFrame = 14 },
+
+            // ---- Cartas exclusivas del modo YOMI (2026-07-20) ----
+            // Golpe fuerte: poke largo Y antiaéreo (hitbox hasta 2.4 de alto:
+            // alcanza la hurtbox aérea 1.35-2.6). Derriba; bloqueado es −12.
+            // De cerca pierde con el agarre yomi (startup 14 vs 9): su casa es
+            // la media distancia y el cielo.
+            new MoveDef { Id = "strong", Name = "Golpe fuerte", Anim = AnimKind.AttackA, Startup = 14, Active = 4, Recovery = 26,
+                Desc = "Largo y ALTO: el antiaéreo del modo. 2 de daño, DERRIBA. Bloqueado es −12 y de cerca el agarre le gana.",
+                Hits = new[] { new HitWindow { Start = 14, Duration = 4, Fwd0 = 0.4f, Fwd1 = 1.5f, Y0 = 0.6f, Y1 = 2.4f,
+                    Damage = 2f, Hitstun = 45, Blockstun = 18, CounterStun = 58, Push = 0.5f, Knockdown = true, GuardDamage = 30f } } },
+
+            // Agarre yomi: igual al clásico pero startup 9 (vs 6): el jab (6)
+            // SIEMPRE lo countereá — el triángulo Golpe > Agarre queda limpio,
+            // sin trades turbios en el mismo frame. El clásico no se toca.
+            new MoveDef { Id = "grabY", Name = "Agarre", Anim = AnimKind.Grab, Startup = 9, Active = 4, Recovery = 17,
+                Desc = "Rompe la guardia y tira (KD). Pierde contra golpes (más rápidos) y whiffea contra saltos y a distancia.",
+                Hits = new[] { new HitWindow { Start = 9, Duration = 4, Fwd0 = 0.15f, Fwd1 = 0.9f, Y0 = 0.5f, Y1 = 1.6f,
+                    Damage = 1f, Hitstun = 45, Blockstun = 0, CounterStun = 45, Push = 1.2f, Knockdown = true, IsGrab = true } } },
         };
     }
 
@@ -255,6 +302,7 @@ namespace LagFighter
         public int MoveStartTick;
         public bool Crushed; // guard crush en curso (distingue su stun del hitstun común)
         public int Super;    // barra de super (0..SuperMax): carga con frames de overflow
+        public int Ap = SimConfig.ApPerTurn; // ACTION POINTS (modo YOMI): info pública, se gastan al arrancar cada move
         public uint WindowHit; // bitmask: 1 = esa ventana de hit ya conectó
         public StunKind Stun = StunKind.None;
         public int StunEndTick;
@@ -414,6 +462,15 @@ namespace LagFighter
             if (f.MoveIndex >= 0 && !SimConfig.CarryoverEnabled) { lost++; f.MoveIndex = -1; }
             else if (f.MoveIndex >= 0)
                 f.Super = Math.Min(SimConfig.SuperMax, f.Super + CommittedRemaining(i));
+            // YOMI: recarga de +ApPerTurn con tope ApMax, más +1 por Bloqueo ejecutado
+            // (la zanahoria defensiva: bloquear banquea puntos, como robar carta)
+            if (SimConfig.YomiEnabled)
+            {
+                int refund = 0;
+                for (int qi = 0; qi < f.QueueIndex && qi < f.Queue.Count; qi++)
+                    if (f.Queue[qi] == MoveCatalog.WalkB) refund++;
+                f.Ap = Math.Min(SimConfig.ApMax, f.Ap + SimConfig.ApPerTurn + refund);
+            }
             f.Queue.Clear();
             f.QueueIndex = 0;
             return lost;
@@ -493,6 +550,8 @@ namespace LagFighter
             f.WindowHit = 0;
             f.Face = Fighters[1 - i].X >= f.X ? 1 : -1;
             if (mi == MoveCatalog.Super) f.Super = 0; // la barra se gasta al arrancar
+            // YOMI: los AP se cobran al ARRANCAR — órdenes interrumpidas no se cobran
+            if (SimConfig.YomiEnabled) f.Ap = Math.Max(0, f.Ap - MoveCatalog.ApCost(mi));
         }
 
         public void Step()

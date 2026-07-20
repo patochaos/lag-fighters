@@ -13,13 +13,12 @@ namespace LagFighter
     // Espacio (o botón ¡LISTO!) cierra el turno.
     public class PlanMenuUI : MonoBehaviour
     {
-        const int Cols = 6;
         const float CardW = 168f, CardH = 44f, Gap = 6f;
 
         // orden de display: movimiento y defensa arriba, ataques abajo.
         // Caminar + y Salto − retirados (2026-07-19): redundantes con Dash +
         // y con Salto N / Dash −. Siguen en MoveCatalog por replays viejos.
-        static readonly int[] Order =
+        static readonly int[] ClassicOrder =
         {
             MoveCatalog.WalkB, MoveCatalog.DashF, MoveCatalog.DashB,
             MoveCatalog.JumpF, MoveCatalog.JumpN, MoveCatalog.Parry,
@@ -28,6 +27,25 @@ namespace LagFighter
             // agachado desactivado — reactivar junto con SimConfig.CrouchEnabled:
             // MoveCatalog.LowKick, MoveCatalog.Crouch,
         };
+
+        // Modo YOMI: 7 cartas en una fila. DashF es la carta "DASH ±": al
+        // clickearla se abre en ATRÁS / ADELANTE (DashB no ocupa slot).
+        static readonly int[] YomiOrder =
+        {
+            MoveCatalog.DashF, MoveCatalog.JumpF, MoveCatalog.WalkB,
+            MoveCatalog.AttackA, MoveCatalog.Strong, MoveCatalog.YomiGrab,
+            MoveCatalog.Hadouken,
+        };
+
+        int[] _order = ClassicOrder;
+        int _cols = 6;
+        bool _builtYomi;
+        RectTransform _canvasRt;
+        // popup del dash (solo yomi): dos botones ATRÁS / ADELANTE
+        GameObject _dashPop;
+        Image _dashBackBtn, _dashFwdBtn;
+        bool _dashOpen;
+        int _dashSlot = -1;
 
         MatchController _mc;
         Font _font;
@@ -63,15 +81,31 @@ namespace LagFighter
 
             var ui = go.AddComponent<PlanMenuUI>();
             ui._mc = mc;
-            ui.Build(go.GetComponent<RectTransform>());
-            ui._root.SetActive(false);
+            ui._canvasRt = go.GetComponent<RectTransform>();
+            ui.Rebuild();
             return ui;
+        }
+
+        // La grilla depende del modo (12 cartas clásicas vs 7 yomi): se
+        // reconstruye al abrir si el modo cambió desde la última vez.
+        void Rebuild()
+        {
+            if (_root != null) Destroy(_root);
+            _builtYomi = SimConfig.YomiEnabled;
+            _order = _builtYomi ? YomiOrder : ClassicOrder;
+            _cols = _builtYomi ? YomiOrder.Length : 6;
+            _dashSlot = _builtYomi ? System.Array.IndexOf(YomiOrder, MoveCatalog.DashF) : -1;
+            _dashOpen = false;
+            _sel = 0;
+            Build(_canvasRt);
+            _root.SetActive(false);
         }
 
         static Color CategoryColor(int mi)
         {
             var m = MoveCatalog.All[mi];
-            if (mi == MoveCatalog.Grab) return new Color(0.85f, 0.3f, 0.75f);
+            if (mi == MoveCatalog.Grab || mi == MoveCatalog.YomiGrab) return new Color(0.85f, 0.3f, 0.75f);
+            if (mi == MoveCatalog.Strong) return new Color(0.95f, 0.55f, 0.2f);
             if (mi == MoveCatalog.Shoryuken) return new Color(0.95f, 0.7f, 0.15f);
             if (mi == MoveCatalog.Hadouken) return new Color(0.3f, 0.55f, 0.95f);
             if (mi == MoveCatalog.Tatsu) return new Color(0.9f, 0.45f, 0.15f);
@@ -82,8 +116,25 @@ namespace LagFighter
             return new Color(0.3f, 0.7f, 0.45f);
         }
 
+        // En YOMI las tags cantan el triángulo: qué le gana y qué la castiga.
+        static string YomiTag(int mi)
+        {
+            switch (mi)
+            {
+                case MoveCatalog.AttackA: return "GANA A AGARRE · PIERDE CON BLOQUEO";
+                case MoveCatalog.Strong: return "ANTIAÉREO · PIERDE CON BLOQUEO y AGARRE cerca";
+                case MoveCatalog.YomiGrab: return "ROMPE BLOQUEO · PIERDE CON GOLPES";
+                case MoveCatalog.WalkB: return "PARA GOLPES · +1 AP · PIERDE CON AGARRE";
+                case MoveCatalog.JumpF: return "SALTA HADOUKENS y AGARRES · PIERDE CON GOLPE FUERTE";
+                case MoveCatalog.Hadouken: return "CONTROLA LEJOS · SE SALTA";
+                case MoveCatalog.DashF: return "MOVERTE ELIGE EL TRIÁNGULO · no bloquea";
+                default: return "";
+            }
+        }
+
         static string CardTag(int mi)
         {
+            if (SimConfig.YomiEnabled) return YomiTag(mi);
             var m = MoveCatalog.All[mi];
             switch (mi)
             {
@@ -105,6 +156,21 @@ namespace LagFighter
             }
         }
 
+        // Nombre en la carta: en YOMI son cortos y de rol (el dash es "DASH ±"
+        // porque al clickearlo se abre en atrás/adelante).
+        string DisplayName(int pos, int mi)
+        {
+            if (!_builtYomi) return MoveCatalog.All[mi].Name.ToUpperInvariant();
+            switch (mi)
+            {
+                case MoveCatalog.DashF: return pos == _dashSlot ? "DASH ±" : "DASH +";
+                case MoveCatalog.JumpF: return "SALTO";
+                case MoveCatalog.WalkB: return "BLOQUEO";
+                case MoveCatalog.AttackA: return "JAB";
+                default: return MoveCatalog.All[mi].Name.ToUpperInvariant();
+            }
+        }
+
         void Build(RectTransform canvasRt)
         {
             _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
@@ -116,25 +182,25 @@ namespace LagFighter
             rootRt.anchorMax = Vector2.one;
             rootRt.offsetMin = rootRt.offsetMax = Vector2.zero;
 
-            int rows = Mathf.CeilToInt(Order.Length / (float)Cols);
-            float totalW = Cols * (CardW + Gap) - Gap;
+            int rows = Mathf.CeilToInt(_order.Length / (float)_cols);
+            float totalW = _cols * (CardW + Gap) - Gap;
             float totalH = rows * (CardH + Gap) - Gap;
 
             var panel = MakeImage(rootRt, "Panel", new Vector2(0.5f, 0f), new Vector2(0f, 26f + totalH / 2f + 12f),
                 new Vector2(totalW + 28f, totalH + 28f), new Color(0.04f, 0.05f, 0.07f, 0.85f));
 
-            _cardBg = new Image[Order.Length];
-            _cardEdge = new Image[Order.Length];
-            _cardName = new Text[Order.Length];
-            _cardOvfMark = new Text[Order.Length];
-            _cardOverlay = new Image[Order.Length];
-            _cardRt = new RectTransform[Order.Length];
+            _cardBg = new Image[_order.Length];
+            _cardEdge = new Image[_order.Length];
+            _cardName = new Text[_order.Length];
+            _cardOvfMark = new Text[_order.Length];
+            _cardOverlay = new Image[_order.Length];
+            _cardRt = new RectTransform[_order.Length];
 
-            for (int pos = 0; pos < Order.Length; pos++)
+            for (int pos = 0; pos < _order.Length; pos++)
             {
-                int mi = Order[pos];
+                int mi = _order[pos];
                 var m = MoveCatalog.All[mi];
-                int col = pos % Cols, row = pos / Cols;
+                int col = pos % _cols, row = pos / _cols;
                 float x = -totalW / 2f + CardW / 2f + col * (CardW + Gap);
                 float y = totalH / 2f - CardH / 2f - row * (CardH + Gap);
                 var cat = CategoryColor(mi);
@@ -150,7 +216,7 @@ namespace LagFighter
                 _cardEdge[pos] = MakeImage(card.rectTransform, "Edge", new Vector2(0f, 0.5f), new Vector2(3f, 0f),
                     new Vector2(6f, CardH - 6f), new Color(cat.r, cat.g, cat.b, 0.9f));
 
-                _cardName[pos] = MakeText(card.rectTransform, "Name", m.Name.ToUpperInvariant(), new Vector2(0.5f, 0.5f), new Vector2(6f, 0f),
+                _cardName[pos] = MakeText(card.rectTransform, "Name", DisplayName(pos, mi), new Vector2(0.5f, 0.5f), new Vector2(6f, 0f),
                     new Vector2(CardW - 26f, 30f), 8, new Color(1f, 1f, 1f, 0.92f), TextAnchor.MiddleCenter);
                 _cardName[pos].font = UIFonts.Pixel;
 
@@ -158,6 +224,17 @@ namespace LagFighter
                 var keyT = MakeText(card.rectTransform, "Key", key, new Vector2(0f, 1f), new Vector2(14f, -10f),
                     new Vector2(20f, 16f), 8, new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleLeft);
                 keyT.font = UIFonts.Pixel;
+
+                // YOMI: el costo en AP abajo a la derecha (0 = gratis: bloqueo)
+                if (_builtYomi)
+                {
+                    int cost = MoveCatalog.ApCost(mi);
+                    var costT = MakeText(card.rectTransform, "Cost", cost == 0 ? "GRATIS" : $"{cost} AP",
+                        new Vector2(1f, 0f), new Vector2(-8f, 10f), new Vector2(60f, 14f), 8,
+                        new Color(0.5f, 0.95f, 1f, 0.85f), TextAnchor.MiddleRight);
+                    costT.font = UIFonts.Pixel;
+                    costT.rectTransform.pivot = new Vector2(1f, 0.5f);
+                }
 
                 // overlay de "no te entra en el turno" (tapa toda la carta)
                 _cardOverlay[pos] = MakeImage(card.rectTransform, "Overlay", new Vector2(0.5f, 0.5f), Vector2.zero,
@@ -170,6 +247,28 @@ namespace LagFighter
                     new Vector2(22f, 26f), 20, new Color(1f, 0.6f, 0.15f, 0.95f), TextAnchor.MiddleCenter);
                 _cardOvfMark[pos].fontStyle = FontStyle.Bold;
                 _cardOvfMark[pos].gameObject.SetActive(false);
+            }
+
+            // popup del DASH (yomi): dos botones sobre la carta, ATRÁS / ADELANTE
+            if (_builtYomi && _dashSlot >= 0)
+            {
+                _dashPop = new GameObject("DashPop", typeof(RectTransform));
+                var dpRt = _dashPop.GetComponent<RectTransform>();
+                dpRt.SetParent(_cardRt[_dashSlot], false);
+                dpRt.anchorMin = dpRt.anchorMax = new Vector2(0.5f, 1f);
+                dpRt.anchoredPosition = new Vector2(78f, 28f);
+                dpRt.sizeDelta = Vector2.zero;
+                _dashBackBtn = MakeImage(dpRt, "Back", new Vector2(0.5f, 0.5f), new Vector2(-78f, 0f),
+                    new Vector2(150f, 40f), new Color(0.16f, 0.3f, 0.3f, 0.98f));
+                var bt = MakeText(_dashBackBtn.rectTransform, "T", "« ATRÁS (bait)", new Vector2(0.5f, 0.5f), Vector2.zero,
+                    new Vector2(146f, 30f), 8, Color.white, TextAnchor.MiddleCenter);
+                bt.font = UIFonts.Pixel;
+                _dashFwdBtn = MakeImage(dpRt, "Fwd", new Vector2(0.5f, 0.5f), new Vector2(78f, 0f),
+                    new Vector2(150f, 40f), new Color(0.16f, 0.3f, 0.3f, 0.98f));
+                var ft = MakeText(_dashFwdBtn.rectTransform, "T", "ADELANTE »", new Vector2(0.5f, 0.5f), Vector2.zero,
+                    new Vector2(146f, 30f), 8, Color.white, TextAnchor.MiddleCenter);
+                ft.font = UIFonts.Pixel;
+                _dashPop.SetActive(false);
             }
 
             // LISTO y BORRAR apilados a la izquierda de la grilla
@@ -244,7 +343,9 @@ namespace LagFighter
             _status = MakeText(rootRt, "Status", "", new Vector2(0.5f, 0f), new Vector2(totalW / 2f + 14f, 26f + totalH + 44f),
                 new Vector2(900f, 22f), 14, new Color(0.5f, 1f, 0.6f), TextAnchor.MiddleRight);
             _status.rectTransform.pivot = new Vector2(1f, 0.5f);
-            MakeText(rootRt, "Help", "click o 1-9 agrega  ·  Backspace borra  ·  ESPACIO cierra el turno\narrastrá tu timeline para mover el ghost cuadro a cuadro  ·  click derecho en una ficha la borra",
+            MakeText(rootRt, "Help", _builtYomi
+                    ? "GOLPE gana a AGARRE · AGARRE rompe BLOQUEO · BLOQUEO para GOLPES — y de lejos: HADOUKEN › GOLPE FUERTE › SALTO › HADOUKEN\nclick o 1-7 agrega · Backspace borra · ESPACIO cierra el turno · los AP no gastados se acumulan (tope 6)"
+                    : "click o 1-9 agrega  ·  Backspace borra  ·  ESPACIO cierra el turno\narrastrá tu timeline para mover el ghost cuadro a cuadro  ·  click derecho en una ficha la borra",
                 new Vector2(0.5f, 0f), new Vector2(0f, 14f), new Vector2(1300f, 36f), 13, new Color(1f, 1f, 1f, 0.45f), TextAnchor.MiddleCenter);
         }
 
@@ -279,8 +380,10 @@ namespace LagFighter
 
         public void Open(int picker)
         {
+            if (_builtYomi != SimConfig.YomiEnabled) Rebuild(); // el modo cambió: otra grilla
             _root.SetActive(true);
             _active = true;
+            _dashOpen = false;
             RefreshWake();
             Highlight(_sel);
         }
@@ -298,11 +401,13 @@ namespace LagFighter
         public void Close()
         {
             _active = false;
+            CloseDash();
             if (_root != null) _root.SetActive(false);
             RangePreview.Clear();
         }
 
-        public void SetPrediction(PlanPreview g, int framesUsed, int available)
+        public void SetPrediction(PlanPreview g, int framesUsed, int available,
+            int apUsed = 0, int apBudget = 0, int oppAp = 0)
         {
             int over = Mathf.Max(0, framesUsed - available);   // frames que cruzan al próximo turno
             int left = Mathf.Max(0, available - framesUsed);
@@ -315,10 +420,22 @@ namespace LagFighter
             if (g.DamageIfStill > 0f) extra += $"  ·  pegaría {g.DamageIfStill:0} si no reacciona";
             if (g.BlockedCount > 0) extra += $"  ·  {g.BlockedCount} bloqueado(s) si se queda en neutral";
             if (over > 0) extra += $"  ·  » el último move CRUZA {over}f al próximo turno (quedás comprometido)";
-            _status.text = $"{framesUsed}/{available} frames planificados{stunNote} — quedan {left}{extra}";
-            _status.color = over > 0 ? new Color(1f, 0.6f, 0.15f)
-                : left == 0 ? new Color(1f, 0.85f, 0.3f)
-                : available < SimConfig.TurnFrames ? new Color(1f, 0.65f, 0.4f) : new Color(0.5f, 1f, 0.6f);
+            if (SimConfig.YomiEnabled)
+            {
+                // en YOMI el presupuesto que se lee es el de AP; los frames
+                // quedan de fondo (el turno sigue durando 60f)
+                int apLeft = Mathf.Max(0, apBudget - apUsed);
+                _status.text = $"AP {apUsed}/{apBudget} — te quedan {apLeft}{stunNote}  ·  rival: {oppAp} AP{extra}";
+                _status.color = over > 0 ? new Color(1f, 0.6f, 0.15f)
+                    : apLeft == 0 ? new Color(1f, 0.85f, 0.3f) : new Color(0.5f, 1f, 0.6f);
+            }
+            else
+            {
+                _status.text = $"{framesUsed}/{available} frames planificados{stunNote} — quedan {left}{extra}";
+                _status.color = over > 0 ? new Color(1f, 0.6f, 0.15f)
+                    : left == 0 ? new Color(1f, 0.85f, 0.3f)
+                    : available < SimConfig.TurnFrames ? new Color(1f, 0.65f, 0.4f) : new Color(0.5f, 1f, 0.6f);
+            }
 
             // sin órdenes, confirmar es jugada válida (quieto bloqueando):
             // que el botón lo diga, no que parezca un LISTO en falso
@@ -338,9 +455,9 @@ namespace LagFighter
             if (_cardOverlay == null) return;
             int used = _mc.PlanFramesUsed(_mc.Picker);
             int avail = _mc.PlanFramesAvailable(_mc.Picker);
-            for (int i = 0; i < Order.Length; i++)
+            for (int i = 0; i < _order.Length; i++)
             {
-                int mi = Order[i];
+                int mi = _order[i];
                 bool startable = _mc.PlanFits(mi);
                 bool crosses = SimConfig.CarryoverEnabled && startable &&
                                used + MoveCatalog.All[mi].Total > avail;
@@ -355,7 +472,7 @@ namespace LagFighter
 
         void Highlight(int pos)
         {
-            int n = Order.Length;
+            int n = _order.Length;
             _sel = ((pos % n) + n) % n;
             for (int i = 0; i < n; i++)
             {
@@ -366,14 +483,15 @@ namespace LagFighter
             RefreshCardStates();
 
             // panel de info: toda la data que antes vivía apretada en la carta
-            int mi = Order[_sel];
+            int mi = _order[_sel];
             var m = MoveCatalog.All[mi];
             var cat = CategoryColor(mi);
-            _detailTitle.text = m.Name.ToUpperInvariant();
+            _detailTitle.text = DisplayName(_sel, mi);
             _detailTitle.color = new Color(cat.r * 0.5f + 0.5f, cat.g * 0.5f + 0.5f, cat.b * 0.5f + 0.5f);
 
             string dmg = m.TotalDamage > 0f ? $"   ·   {m.TotalDamage:0} DMG" + (m.Hits.Length > 1 ? $" ({m.Hits.Length} hits)" : "") : "";
-            _detailFrames.text = $"{m.Startup} / {m.Active} / {m.Recovery}  ·  {m.Total}f{dmg}";
+            string apStr = _builtYomi ? (MoveCatalog.ApCost(mi) == 0 ? "GRATIS  ·  " : $"{MoveCatalog.ApCost(mi)} AP  ·  ") : "";
+            _detailFrames.text = $"{apStr}{m.Startup} / {m.Active} / {m.Recovery}  ·  {m.Total}f{dmg}";
 
             float px = _segW / m.Total;
             _segS.rectTransform.sizeDelta = new Vector2(m.Startup * px, 8f);
@@ -388,9 +506,9 @@ namespace LagFighter
             _detail.text = m.Desc;
 
             // el rango del movimiento se dibuja EN el escenario (Into the Breach)
-            RangePreview.Show(_mc.Sim, _mc.Picker, Order[_sel]);
+            RangePreview.Show(_mc.Sim, _mc.Picker, _order[_sel]);
             // y el ghost lo ACTÚA: plan actual + la carta bajo el cursor
-            _mc.PreviewHover(Order[_sel]);
+            _mc.PreviewHover(_order[_sel]);
         }
 
         void Update()
@@ -417,13 +535,36 @@ namespace LagFighter
             if (_wakeBtn.gameObject.activeSelf) _wakeBtn.color = HoverTint(_wakeBtn, WakeC, mp);
             RefreshSuper();
 
+            // popup del DASH abierto: captura la entrada hasta elegir dirección
+            if (_dashOpen)
+            {
+                var dashBase = new Color(0.16f, 0.3f, 0.3f, 0.98f);
+                _dashBackBtn.color = HoverTint(_dashBackBtn, dashBase, mp);
+                _dashFwdBtn.color = HoverTint(_dashFwdBtn, dashBase, mp);
+                if (GameInput.ClickPressed())
+                {
+                    var dp = GameInput.MousePos();
+                    if (RectTransformUtility.RectangleContainsScreenPoint(_dashBackBtn.rectTransform, dp, null))
+                        TryAdd(MoveCatalog.DashB);
+                    else if (RectTransformUtility.RectangleContainsScreenPoint(_dashFwdBtn.rectTransform, dp, null))
+                        TryAdd(MoveCatalog.DashF);
+                    CloseDash();
+                    Highlight(_sel);
+                    return;
+                }
+                if (GameInput.LeftPressed()) { TryAdd(MoveCatalog.DashB); CloseDash(); Highlight(_sel); return; }
+                if (GameInput.RightPressed()) { TryAdd(MoveCatalog.DashF); CloseDash(); Highlight(_sel); return; }
+                if (GameInput.CancelPressed() || GameInput.UndoPressed() || GameInput.AddPressed()) { CloseDash(); return; }
+            }
+
             if (GameInput.ClickPressed())
             {
                 var pos = GameInput.MousePos();
                 for (int i = 0; i < _cardRt.Length; i++)
                 {
                     if (!RectTransformUtility.RectangleContainsScreenPoint(_cardRt[i], pos, null)) continue;
-                    TryAdd(Order[i]);
+                    if (_builtYomi && i == _dashSlot) { OpenDash(); Highlight(i); return; }
+                    TryAdd(_order[i]);
                     Highlight(i);
                     return;
                 }
@@ -459,19 +600,43 @@ namespace LagFighter
 
             if (GameInput.LeftPressed()) { Highlight(_sel - 1); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
             if (GameInput.RightPressed()) { Highlight(_sel + 1); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
-            if (GameInput.UpPressed()) { Highlight(_sel - Cols); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
-            if (GameInput.DownPressed()) { Highlight(_sel + Cols); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
+            if (GameInput.UpPressed()) { Highlight(_sel - _cols); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
+            if (GameInput.DownPressed()) { Highlight(_sel + _cols); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
             int num = GameInput.NumberPressed();
-            if (num > 0 && num <= Order.Length) { TryAdd(Order[num - 1]); Highlight(num - 1); }
-            else if (GameInput.AddPressed()) { TryAdd(Order[_sel]); Highlight(_sel); }
+            if (num > 0 && num <= _order.Length)
+            {
+                if (_builtYomi && num - 1 == _dashSlot) { OpenDash(); Highlight(num - 1); }
+                else { TryAdd(_order[num - 1]); Highlight(num - 1); }
+            }
+            else if (GameInput.AddPressed())
+            {
+                if (_builtYomi && _sel == _dashSlot) OpenDash();
+                else TryAdd(_order[_sel]);
+                Highlight(_sel);
+            }
             if (GameInput.UndoPressed()) { TryUndo(); Highlight(_sel); }
             if (GameInput.EndTurnPressed()) _mc.PlanConfirm();
         }
 
+        void OpenDash()
+        {
+            if (_dashPop == null) return;
+            _dashOpen = true;
+            _dashPop.SetActive(true);
+            SfxLib.Play(SfxLib.Kind.UiTick, 0.5f);
+        }
+
+        void CloseDash()
+        {
+            _dashOpen = false;
+            if (_dashPop != null) _dashPop.SetActive(false);
+        }
+
         // botón SUPER: porcentaje mientras carga, dorado latiendo cuando está lista
+        // (en YOMI no hay super: el overflow es parte del flujo normal)
         void RefreshSuper()
         {
-            bool show = SimConfig.CarryoverEnabled;
+            bool show = SimConfig.CarryoverEnabled && !SimConfig.YomiEnabled;
             if (_superBtn.gameObject.activeSelf != show) _superBtn.gameObject.SetActive(show);
             if (!show) return;
             var fs = _mc.Sim.Fighters[_mc.Picker];

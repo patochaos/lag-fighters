@@ -63,6 +63,10 @@ class Tests
         WakeupAjustaElKnockdown();
         TurnoFluidoCruzaElLimite();
         LaSuperArrasaYPegaCuatro();
+        YomiElJabLeGanaAlAgarre();
+        YomiElGolpeFuerteEsAntiaereo();
+        YomiEconomiaDeAp();
+        YomiLoInterrumpidoNoSeCobra();
         if (SimConfig.LimbsEnabled)
         {
             TresJabsArrancanElBrazo();
@@ -351,6 +355,88 @@ class Tests
             hit.HasValue ? $"dmg {hit.Value.Damage}, move {hit.Value.MoveIndex}" : "no conectó");
         Check(s.Fighters[1].Stun == StunKind.Knockdown, "la super derriba (hard KD)", $"stun {s.Fighters[1].Stun}");
         Check(s.Fighters[0].Super == 0, "la barra se consume al tirarla", $"super {s.Fighters[0].Super}");
+    }
+
+    // ---- Modo YOMI: el triángulo tiene que ser limpio en la sim ----
+
+    // Golpe > Agarre: el agarre yomi (startup 9) SIEMPRE pierde con el jab
+    // (startup 6) — counter hit, sin trade turbio en el mismo frame.
+    static void YomiElJabLeGanaAlAgarre()
+    {
+        var s = NewSim(-0.45f, 0.45f, p1Blocks: true);
+        s.SetQueue(0, new List<int> { MoveCatalog.AttackA });
+        s.SetQueue(1, new List<int> { MoveCatalog.YomiGrab });
+        var evs = Run(s, 20);
+        var hit = Find(evs, EvKind.Hit, 0);
+        Check(hit.HasValue && hit.Value.Counter && Find(evs, EvKind.Hit, 1) == null,
+            "yomi: el jab countereá al agarre (golpe > agarre)",
+            hit.HasValue ? $"counter {hit.Value.Counter}" : "el jab no conectó");
+    }
+
+    // Golpe fuerte > Salto: hitbox alta (hasta 2.4) alcanza la hurtbox aérea
+    // y conecta ANTES de la patada de jump-in (activo 14 vs hit 20).
+    static void YomiElGolpeFuerteEsAntiaereo()
+    {
+        var s = NewSim(-0.5f, 1.7f, p1Blocks: true);
+        s.SetQueue(0, new List<int> { MoveCatalog.Strong });
+        s.SetQueue(1, new List<int> { MoveCatalog.JumpF });
+        var evs = Run(s, 40);
+        var hit = Find(evs, EvKind.Hit, 0);
+        Check(hit.HasValue && Find(evs, EvKind.Hit, 1) == null && s.Fighters[1].Stun == StunKind.Knockdown,
+            "yomi: el golpe fuerte baja al salto y derriba (antiaéreo)",
+            hit.HasValue ? $"stun {s.Fighters[1].Stun}" : "no conectó");
+    }
+
+    // AP: se cobran al arrancar, +ApPerTurn con tope ApMax, bloqueo banquea +1.
+    static void YomiEconomiaDeAp()
+    {
+        SimConfig.YomiEnabled = true;
+        try
+        {
+            int spent = MoveCatalog.ApCost(MoveCatalog.AttackA) + MoveCatalog.ApCost(MoveCatalog.Strong);
+            var s = NewSim(-2f, 2f, p1Blocks: false);
+            s.SetQueue(0, new List<int> { MoveCatalog.AttackA, MoveCatalog.Strong });
+            Run(s, SimConfig.TurnFrames);
+            Check(s.Fighters[0].Ap == SimConfig.ApPerTurn - spent,
+                $"jab + golpe fuerte cuestan {spent} de {SimConfig.ApPerTurn} AP", $"ap {s.Fighters[0].Ap}");
+            s.OnTurnEnd(0);
+            s.OnTurnEnd(1);
+            int expected = Math.Min(SimConfig.ApMax, SimConfig.ApPerTurn - spent + SimConfig.ApPerTurn);
+            Check(s.Fighters[0].Ap == expected, $"la recarga es +{SimConfig.ApPerTurn} por turno", $"ap {s.Fighters[0].Ap}");
+
+            // dos turnos enteros bloqueando: banquea hasta el tope
+            for (int turn = 0; turn < 2; turn++)
+            {
+                s.SetQueue(0, new List<int> { MoveCatalog.WalkB, MoveCatalog.WalkB }); // gratis, banquean
+                Run(s, SimConfig.TurnFrames);
+                s.OnTurnEnd(0);
+                s.OnTurnEnd(1);
+            }
+            Check(s.Fighters[0].Ap == SimConfig.ApMax,
+                $"bloquear banquea +1 por bloqueo, con tope {SimConfig.ApMax}", $"ap {s.Fighters[0].Ap}");
+        }
+        finally { SimConfig.YomiEnabled = false; }
+    }
+
+    // Si te interrumpen, las órdenes que no arrancaron NO se cobran.
+    static void YomiLoInterrumpidoNoSeCobra()
+    {
+        SimConfig.YomiEnabled = true;
+        try
+        {
+            int jabCost = MoveCatalog.ApCost(MoveCatalog.AttackA);
+            var s = NewSim(-1.2f, 0.6f, p1Blocks: false);
+            s.SetQueue(0, new List<int> { MoveCatalog.AttackB });                    // sweep: pega en f16
+            s.SetQueue(1, new List<int> { MoveCatalog.AttackA, MoveCatalog.Strong }); // jab whiffea, strong nunca arranca
+            Run(s, 30);
+            Check(s.Fighters[1].Ap == SimConfig.ApPerTurn - jabCost,
+                "interrumpido: solo se cobró el jab", $"ap {s.Fighters[1].Ap}");
+            int lost = s.OnTurnEnd(1);
+            int expected = Math.Min(SimConfig.ApMax, SimConfig.ApPerTurn - jabCost + SimConfig.ApPerTurn);
+            Check(lost == 1 && s.Fighters[1].Ap == expected,
+                $"la orden perdida no se cobra: queda en {expected}", $"lost {lost}, ap {s.Fighters[1].Ap}");
+        }
+        finally { SimConfig.YomiEnabled = false; }
     }
 
     static void WakeupAjustaElKnockdown()

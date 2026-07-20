@@ -19,13 +19,14 @@ namespace LagFighter
         // de perfil + dificultad para quien quiera tunear.
         // 1v1 LOCAL y POR CÓDIGO retirados del menú (2026-07-18, injugables);
         // la maquinaria sigue en MatchController y TurnCode la usa ONLINE.
-        const int QuickAIIdx = 1, CustomAIIdx = 2;
+        const int QuickAIIdx = 1, CustomAIIdx = 2, YomiIdx = 4;
         static readonly (string label, string desc, GameMode mode)[] Modes =
         {
             ("PRÁCTICA", "Solo vos y un dummy quieto. Probá comandos, distancias y framedata.", GameMode.Practice),
             ("VS IA", "Directo a pelear: la IA adaptativa en dificultad normal planifica en secreto, igual que vos.", GameMode.VsAI),
             ("IA CUSTOM", "Elegí perfil de IA (Zoner, Aggressive, Trickster…) y dificultad.", GameMode.VsAI),
             ("ONLINE", "Sala con código de invitación: uno crea, el otro se une. Turnos con timer de 30s.", GameMode.Online),
+            ("YOMI (NUEVO)", "El experimento: 7 cartas, ACTION POINTS y triángulo explícito — GOLPE › AGARRE › BLOQUEO › GOLPE. VS IA.", GameMode.VsAI),
         };
 
         static readonly (string label, string desc)[] OnlineOptions =
@@ -212,6 +213,7 @@ namespace LagFighter
             _active = true;
             _step = 0;
             _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_lag", 0), 0, LagOptions.Length - 1); // arranca donde quedaste
+            SimConfig.YomiEnabled = false; // el modo YOMI lo prende StartMatch; acá se apaga al volver
             SimConfig.CarryoverEnabled = PlayerPrefs.GetInt("lf_carryover", 0) == 1;
             RefreshCarryLine();
             Layout();
@@ -299,6 +301,11 @@ namespace LagFighter
             if (_step == 1)
             {
                 PlayerPrefs.SetInt("lf_menu_mode", idx);
+                if (idx == YomiIdx) // modo YOMI: VS IA con las 7 cartas y AP
+                {
+                    _mc.StartMatch(GameMode.VsAI, _lagChoice, 0, AIProfile.Adaptive, AIDifficulty.Normal, yomi: true);
+                    return;
+                }
                 if (idx == QuickAIIdx) // VS IA directo: adaptativa en normal, a pelear
                 {
                     _mc.StartMatch(GameMode.VsAI, _lagChoice, 0, AIProfile.Adaptive, AIDifficulty.Normal);
@@ -455,8 +462,8 @@ namespace LagFighter
 
             if (GameInput.LeftPressed()) { Highlight(_sel - 1); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
             if (GameInput.RightPressed()) { Highlight(_sel + 1); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
-            if (_step == 3 && GameInput.UpPressed()) { Highlight(_sel - 3); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
-            if (_step == 3 && GameInput.DownPressed()) { Highlight(_sel + 3); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
+            if (OptionCount > 4 && GameInput.UpPressed()) { Highlight(_sel - 3); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
+            if (OptionCount > 4 && GameInput.DownPressed()) { Highlight(_sel + 3); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
             int n = GameInput.NumberPressed();
             if (n >= 1 && n <= OptionCount) { Confirm(n - 1); return; }
             if (GameInput.ConfirmPressed()) Confirm(_sel);

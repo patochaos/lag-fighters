@@ -200,11 +200,16 @@ namespace LagFighter
         }
 
         public void StartMatch(GameMode mode, bool lagMode, int localSide = 0,
-            AIProfile aiProfile = AIProfile.Random, AIDifficulty aiDifficulty = AIDifficulty.Normal)
+            AIProfile aiProfile = AIProfile.Random, AIDifficulty aiDifficulty = AIDifficulty.Normal,
+            bool yomi = false)
         {
             Mode = mode;
             LagMode = lagMode;
             LocalSide = localSide;
+            // Modo YOMI: 7 cartas + AP; turno fluido implícito (los moves cruzan).
+            // ModeMenuUI.Open() lo apaga al volver al menú.
+            SimConfig.YomiEnabled = yomi;
+            if (yomi) SimConfig.CarryoverEnabled = true;
             // el toggle no viaja en el protocolo online: forzarlo OFF evita desyncs
             if (mode == GameMode.Online || mode == GameMode.Async) SimConfig.CarryoverEnabled = false;
             SelectedAIProfile = aiProfile;
@@ -282,7 +287,9 @@ namespace LagFighter
             if (Mode == GameMode.Practice || Mode == GameMode.VsAI)
             {
                 if (Mode == GameMode.VsAI && WakeupAvailable(1)) _wakeQuick[1] = _ai.QuickRise();
-                _plans[1] = Mode == GameMode.Practice ? new List<int>() : _ai.Plan(Sim, 1, CurrentTurnFrames - WakeDelta(1));
+                _plans[1] = Mode == GameMode.Practice ? new List<int>()
+                    : SimConfig.YomiEnabled ? _ai.PlanYomi(Sim, 1, CurrentTurnFrames - WakeDelta(1))
+                    : _ai.Plan(Sim, 1, CurrentTurnFrames - WakeDelta(1));
             }
             Picker = (Mode == GameMode.Async || Mode == GameMode.Online) ? LocalSide : 0;
             State = Flow.Planning;
@@ -324,6 +331,10 @@ namespace LagFighter
                 adv += $"  ·  seguís en {MoveCatalog.All[Sim.Fighters[Picker].MoveIndex].Name} ({TurnStartCommitted[Picker]}f)";
             if (TurnStartCommitted[1 - Picker] > 0)
                 adv += $"  ·  RIVAL comprometido: {MoveCatalog.All[Sim.Fighters[1 - Picker].MoveIndex].Name} ({TurnStartCommitted[1 - Picker]}f)";
+            // YOMI: los AP de ambos son información pública — acá nace la
+            // lectura ("tiene 7 AP: viene cargado" / "le queda 1: va a bloquear")
+            if (SimConfig.YomiEnabled)
+                adv += $"  ·  AP: vos {Sim.Fighters[Picker].Ap} · rival {Sim.Fighters[1 - Picker].Ap}";
             string lag = "";
             if (LagMode && LagLevel > LagLevelForTurn(TurnNumber - 1))
                 lag = $"  ·  ¡AHORA {CurrentTurnFrames}F POR TURNO!";
@@ -377,6 +388,15 @@ namespace LagFighter
             int f = 0;
             foreach (var m in _plans[i]) f += MoveCatalog.All[m].Total;
             return f;
+        }
+
+        // Modo YOMI: los AP planificados del picker (el presupuesto es
+        // Sim.Fighters[i].Ap, info pública que también ve el rival en su HUD)
+        public int PlanApUsed(int i)
+        {
+            int ap = 0;
+            foreach (var m in _plans[i]) ap += MoveCatalog.ApCost(m);
+            return ap;
         }
 
         // ---------- wakeup options ----------
@@ -442,6 +462,9 @@ namespace LagFighter
             Sim.MoveAllowed(Picker, moveIndex) &&
             // la barra se gasta al ejecutar: una sola super por plan
             !(moveIndex == MoveCatalog.Super && _plans[Picker].Contains(MoveCatalog.Super)) &&
+            // modo YOMI: además de arrancar dentro del turno, tiene que alcanzar el AP
+            (!SimConfig.YomiEnabled ||
+             PlanApUsed(Picker) + MoveCatalog.ApCost(moveIndex) <= Sim.Fighters[Picker].Ap) &&
             (SimConfig.CarryoverEnabled
                 ? PlanFramesUsed(Picker) < PlanFramesAvailable(Picker)
                 : PlanFramesUsed(Picker) + MoveCatalog.All[moveIndex].Total <= PlanFramesAvailable(Picker));
@@ -571,7 +594,8 @@ namespace LagFighter
             }
             _ghost.Show(basis, Picker, _plans[Picker], CurrentTurnFrames);
             var g = PlanPreview.Build(basis, Picker, _plans[Picker], CurrentTurnFrames);
-            _menu.SetPrediction(g, PlanFramesUsed(Picker), PlanFramesAvailable(Picker));
+            _menu.SetPrediction(g, PlanFramesUsed(Picker), PlanFramesAvailable(Picker),
+                PlanApUsed(Picker), Sim.Fighters[Picker].Ap, Sim.Fighters[1 - Picker].Ap);
         }
 
         // ---------- execution ----------

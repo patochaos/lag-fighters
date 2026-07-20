@@ -245,6 +245,72 @@ La sim usa rects y posición X; el escenario no está acoplado. Para volver al
 - Picks secretos reales en 1v1 (ocultar ghost del picker 2, o online lockstep
   — la sim determinista ya lo permite).
 
+## Modo YOMI (experimental, 2026-07-20)
+
+Sesión de diseño 2026-07-20: el juego muta de "lag" a **yomi** (lectura).
+Objetivo: un *Yomi Hustle casual* — pocas cartas, triángulo explícito de
+counters, costo en ACTION POINTS. Research: Sirlin (yomi layers, "Designing
+Yomi"): piedra-papel-tijera puro es malo porque no hay información; lo que
+vuelve hábil al guessing son **payoffs asimétricos + estado visible que sesga
+intenciones**. Acá el estado visible es: distancia, vida, guardia, knockdown,
+compromiso de overflow y **los AP de ambos**.
+
+Es un **modo aparte** (menú → YOMI (NUEVO), VS IA Adaptive Normal): no pisa
+nada de lo existente. `SimConfig.YomiEnabled` (lo prende `StartMatch`, lo
+apaga `ModeMenuUI.Open`); fuerza turno fluido y oculta la super.
+
+### Dos triángulos, la distancia elige cuál jugás
+
+- **De cerca**: Jab > Agarre > Bloqueo > Jab (y Golpe fuerte).
+- **De lejos**: Hadouken > Golpe fuerte (whiffea) · Salto > Hadouken ·
+  Golpe fuerte (antiaéreo) > Salto.
+- **Dash ±** (una carta que se abre en atrás/adelante) mueve entre bandas:
+  atrás es el esquive/bait, adelante el compromiso.
+- Pares grises a propósito (los resuelve la sim por espaciado/timing):
+  jab vs salto, agarre vs golpe fuerte de cerca (gana el agarre: startup
+  9 vs 14 — el golpe fuerte vive en la media distancia).
+
+### Las 7 cartas (costos AP)
+
+| Carta | AP | Move | Rol |
+|---|---|---|---|
+| Dash ± | 1 | DashF/DashB | elegir triángulo; no bloquea |
+| Salto | 2 | JumpF | salta hadoukens y agarres; patada al caer |
+| Bloqueo | 0 | WalkB | para golpes y **banquea +1 AP** al ejecutarse |
+| Jab | 1 | AttackA | countereá al agarre (6f vs 9f) |
+| Golpe fuerte | 2 | **Strong (17, nuevo)** | 14/4/26, alto (Y hasta 2.4 = antiaéreo), 2 dmg, KD, −12 block |
+| Agarre | 2 | **YomiGrab (18, nuevo)** | agarre clásico con startup 9 (el 6f trade-aba con el jab) |
+| Hadouken | 2 | Hadouken | control de lejos; 60f = el turno entero |
+
+### Economía de AP (`FighterState.Ap`, determinista, en la sim)
+
+- **3 por turno, tope 6** (con 4/8 el lab daba 7.6/8 promedio: no mordía).
+- Se cobran **al arrancar** el move → si te interrumpen, lo que no arrancó
+  no se cobra (te queda banqueado).
+- Bloqueo cuesta 0: **sin puntos solo podés bloquear — y el rival lo sabe.**
+  Ahí vive la lectura ("está pobre → bloquea → agarre"; "está a 6 → viene
+  cargado → bloqueo preventivo").
+- AP públicos: barrita celeste + "AP n/6" bajo la guardia (HUD), y ambos
+  valores en el prompt de planificación.
+- El turno sigue siendo de 60f simultáneos: los AP limitan CUÁNTAS cosas,
+  los frames deciden CÓMO chocan. Turno fluido siempre ON (el último move
+  cruza comprometido y visible).
+
+### Implementación / verificación
+
+- IA: `SimpleAI.PlanYomi` (triángulo por distancia, castiga compromiso aéreo
+  visible con Golpe fuerte). Lab: `dotnet run --project Tools/SimHarness -- yomi N`
+  (también corre como tercera pasada del lab default). Tests yomi en
+  `Tools/SimTests` (triángulo limpio + economía AP).
+- Lab 2000 peleas: 8 turnos/pelea, 0 timeouts, las 7 cartas con uso real.
+  **Vigilar**: hit% del hadouken 87% (la IA no lo respeta; ver con humanos),
+  AP promedio post-recarga 5.5/6 (la IA gasta poco; un humano greedy debería
+  sentir la escasez), guard crush casi nulo en este modo.
+- Ideas anotadas (todavía no): personajes = tocar UNA arista del triángulo
+  ("mi agarre alcanza más", "mis bloqueos dan +2 AP"); roguelike = draftear
+  cartas/modificadores entre peleas — ambos piden un core chico y legible,
+  que es exactamente este.
+
 ## Historial de pivots
 
 1. **Delay queue continuo** (4s de delay, timeline deslizante) — descartado.
