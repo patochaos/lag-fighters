@@ -929,6 +929,8 @@ namespace LagFighter
             readonly Image _playhead;
             readonly Image _stunSeg;
             readonly Text _stunLabel;
+            Image _ovfSeg;   // pestaña "»Nf" del move que cruza el turno
+            Text _ovfLabel;
             Image _lagSeg;
             Text _lagLabel;
             int _lastStunShown = -1; // para no armar el string del stun por frame
@@ -979,6 +981,15 @@ namespace LagFighter
                 _stunLabel = hud.MakeText(_stunSeg.rectTransform, "L", "", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(120f, 22f),
                     14, Color.white, TextAnchor.MiddleCenter);
                 _stunLabel.fontStyle = FontStyle.Bold;
+
+                // pestaña OVERFLOW (turno fluido): el move que cruza el límite
+                // se corta en el borde y esta flecha dice cuántos frames siguen
+                _ovfSeg = hud.MakeImage(_area, "Ovf", new Vector2(0f, 0.5f), Vector2.zero, new Vector2(44f, height - 4f), new Color(1f, 0.6f, 0.15f, 0.85f));
+                _ovfSeg.rectTransform.pivot = new Vector2(0f, 0.5f);
+                _ovfLabel = hud.MakeText(_ovfSeg.rectTransform, "L", "", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(80f, 22f),
+                    13, Color.white, TextAnchor.MiddleCenter);
+                _ovfLabel.fontStyle = FontStyle.Bold;
+                _ovfSeg.gameObject.SetActive(false);
 
                 _playhead = hud.MakeImage(_area, "Playhead", new Vector2(0f, 0.5f), Vector2.zero, new Vector2(4f, height), Color.white);
                 _playhead.rectTransform.pivot = new Vector2(0.5f, 0.5f);
@@ -1031,6 +1042,7 @@ namespace LagFighter
                 }
 
                 int used = 0;
+                int overflowF = 0; // frames del último move que cruzan al próximo turno
                 if (revealed && queue != null)
                 {
                     float x = offset;
@@ -1038,6 +1050,13 @@ namespace LagFighter
                     {
                         var m = MoveCatalog.All[mi];
                         float w = m.Total * px - 2f;
+                        // turno fluido: el chip se CORTA en el borde del turno;
+                        // lo que sigue lo dice la pestaña »Nf de más allá del borde
+                        if (x + w > RowW)
+                        {
+                            overflowF = Mathf.RoundToInt((x + m.Total * px - RowW) / px);
+                            w = Mathf.Max(10f, RowW - x);
+                        }
                         var chip = GetChip(used++);
                         chip.rectTransform.anchoredPosition = new Vector2(x, 0f);
                         chip.rectTransform.sizeDelta = new Vector2(w, _height - 8f);
@@ -1055,21 +1074,36 @@ namespace LagFighter
                         _phR[ci].gameObject.SetActive(phased);
                         if (phased)
                         {
-                            float wS = w * m.Startup / m.Total;
-                            float wA = w * m.Active / m.Total;
-                            float wR = w - wS - wA;
+                            float wFull = m.Total * px - 2f;
+                            float wS = wFull * m.Startup / m.Total;
+                            float wA = wFull * m.Active / m.Total;
+                            float wR = wFull - wS - wA;
+                            // recortadas al ancho visible del chip (overflow)
+                            wS = Mathf.Min(wS, w);
+                            wA = Mathf.Min(wA, Mathf.Max(0f, w - wS));
+                            wR = Mathf.Max(0f, Mathf.Min(wR, w - wS - wA));
                             _phS[ci].rectTransform.anchoredPosition = new Vector2(0f, 2f);
                             _phS[ci].rectTransform.sizeDelta = new Vector2(wS, 5f);
                             _phA[ci].rectTransform.anchoredPosition = new Vector2(wS, 2f);
                             _phA[ci].rectTransform.sizeDelta = new Vector2(wA, 5f);
                             _phR[ci].rectTransform.anchoredPosition = new Vector2(wS + wA, 2f);
-                            _phR[ci].rectTransform.sizeDelta = new Vector2(Mathf.Max(0f, wR), 5f);
+                            _phR[ci].rectTransform.sizeDelta = new Vector2(wR, 5f);
                         }
                         x += m.Total * px;
                     }
                 }
                 for (int i = used; i < _chips.Count; i++)
                     _chips[i].gameObject.SetActive(false);
+
+                if (overflowF > 0)
+                {
+                    _ovfSeg.gameObject.SetActive(true);
+                    _ovfSeg.rectTransform.anchoredPosition = new Vector2(RowW + 3f, 0f);
+                    float pulse = 0.55f + Mathf.PingPong(Time.time * 1.1f, 0.35f);
+                    _ovfSeg.color = new Color(1f, 0.6f, 0.15f, pulse);
+                    _ovfLabel.text = $"»{overflowF}f";
+                }
+                else _ovfSeg.gameObject.SetActive(false);
             }
 
             Image GetChip(int i)

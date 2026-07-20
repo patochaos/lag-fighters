@@ -283,7 +283,8 @@ namespace LagFighter
 
         public void SetPrediction(PlanPreview g, int framesUsed, int available)
         {
-            int left = available - framesUsed;
+            int over = Mathf.Max(0, framesUsed - available);   // frames que cruzan al próximo turno
+            int left = Mathf.Max(0, available - framesUsed);
             int turnFrames = _mc.CurrentTurnFrames; // en Lag Mode el turno crece
             int committed = _mc.TurnStartCommitted[_mc.Picker];
             string stunNote = committed > 0
@@ -292,8 +293,11 @@ namespace LagFighter
             string extra = "";
             if (g.DamageIfStill > 0f) extra += $"  ·  pegaría {g.DamageIfStill:0} si no reacciona";
             if (g.BlockedCount > 0) extra += $"  ·  {g.BlockedCount} bloqueado(s) si se queda en neutral";
+            if (over > 0) extra += $"  ·  » el último move CRUZA {over}f al próximo turno (quedás comprometido)";
             _status.text = $"{framesUsed}/{available} frames planificados{stunNote} — quedan {left}{extra}";
-            _status.color = left == 0 ? new Color(1f, 0.85f, 0.3f) : available < SimConfig.TurnFrames ? new Color(1f, 0.65f, 0.4f) : new Color(0.5f, 1f, 0.6f);
+            _status.color = over > 0 ? new Color(1f, 0.6f, 0.15f)
+                : left == 0 ? new Color(1f, 0.85f, 0.3f)
+                : available < SimConfig.TurnFrames ? new Color(1f, 0.65f, 0.4f) : new Color(0.5f, 1f, 0.6f);
 
             // sin órdenes, confirmar es jugada válida (quieto bloqueando):
             // que el botón lo diga, no que parezca un LISTO en falso
