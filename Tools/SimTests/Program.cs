@@ -65,8 +65,13 @@ class Tests
         LaSuperArrasaYPegaCuatro();
         YomiElJabLeGanaAlAgarre();
         YomiElGolpeFuerteEsAntiaereo();
-        YomiEconomiaDeAp();
-        YomiLoInterrumpidoNoSeCobra();
+        YomiMatrizDeCerca();
+        YomiMatrizDeLejos();
+        YomiShoryuEsUnaApuesta();
+        YomiEconomiaDiscreta();
+        YomiRecoveryYCounters();
+        YomiKoYTech();
+        YomiMatrizCompletaNoExplota();
         if (SimConfig.LimbsEnabled)
         {
             TresJabsArrancanElBrazo();
@@ -387,56 +392,155 @@ class Tests
             hit.HasValue ? $"stun {s.Fighters[1].Stun}" : "no conectó");
     }
 
-    // AP: se cobran al arrancar, +ApPerTurn con tope ApMax, bloqueo banquea +1.
-    static void YomiEconomiaDeAp()
-    {
-        SimConfig.YomiEnabled = true;
-        try
-        {
-            int spent = MoveCatalog.ApCost(MoveCatalog.AttackA) + MoveCatalog.ApCost(MoveCatalog.Strong);
-            var s = NewSim(-2f, 2f, p1Blocks: false);
-            s.SetQueue(0, new List<int> { MoveCatalog.AttackA, MoveCatalog.Strong });
-            Run(s, SimConfig.TurnFrames);
-            Check(s.Fighters[0].Ap == SimConfig.ApPerTurn - spent,
-                $"jab + golpe fuerte cuestan {spent} de {SimConfig.ApPerTurn} AP", $"ap {s.Fighters[0].Ap}");
-            s.OnTurnEnd(0);
-            s.OnTurnEnd(1);
-            int expected = Math.Min(SimConfig.ApMax, SimConfig.ApPerTurn - spent + SimConfig.ApPerTurn);
-            Check(s.Fighters[0].Ap == expected, $"la recarga es +{SimConfig.ApPerTurn} por turno", $"ap {s.Fighters[0].Ap}");
+    // ---- Modo YOMI v2: la matriz discreta (YomiSim), celda por celda ----
 
-            // dos turnos enteros bloqueando: banquea hasta el tope
-            for (int turn = 0; turn < 2; turn++)
-            {
-                s.SetQueue(0, new List<int> { MoveCatalog.WalkB, MoveCatalog.WalkB }); // gratis, banquean
-                Run(s, SimConfig.TurnFrames);
-                s.OnTurnEnd(0);
-                s.OnTurnEnd(1);
-            }
-            Check(s.Fighters[0].Ap == SimConfig.ApMax,
-                $"bloquear banquea +1 por bloqueo, con tope {SimConfig.ApMax}", $"ap {s.Fighters[0].Ap}");
-        }
-        finally { SimConfig.YomiEnabled = false; }
+    static YomiSim YS(bool close, int ap0 = 3, int ap1 = 3)
+    {
+        var y = new YomiSim { Close = close };
+        y.Ap[0] = ap0;
+        y.Ap[1] = ap1;
+        return y;
     }
 
-    // Si te interrumpen, las órdenes que no arrancaron NO se cobran.
-    static void YomiLoInterrumpidoNoSeCobra()
+    static void YomiMatrizDeCerca()
     {
-        SimConfig.YomiEnabled = true;
-        try
-        {
-            int jabCost = MoveCatalog.ApCost(MoveCatalog.AttackA);
-            var s = NewSim(-1.2f, 0.6f, p1Blocks: false);
-            s.SetQueue(0, new List<int> { MoveCatalog.AttackB });                    // sweep: pega en f16
-            s.SetQueue(1, new List<int> { MoveCatalog.AttackA, MoveCatalog.Strong }); // jab whiffea, strong nunca arranca
-            Run(s, 30);
-            Check(s.Fighters[1].Ap == SimConfig.ApPerTurn - jabCost,
-                "interrumpido: solo se cobró el jab", $"ap {s.Fighters[1].Ap}");
-            int lost = s.OnTurnEnd(1);
-            int expected = Math.Min(SimConfig.ApMax, SimConfig.ApPerTurn - jabCost + SimConfig.ApPerTurn);
-            Check(lost == 1 && s.Fighters[1].Ap == expected,
-                $"la orden perdida no se cobra: queda en {expected}", $"lost {lost}, ap {s.Fighters[1].Ap}");
-        }
-        finally { SimConfig.YomiEnabled = false; }
+        var r = YS(true).Resolve(YomiAction.Jab, YomiAction.Kick);
+        Check(r.Dmg1 == 1 && r.Dmg0 == 0, "cerca: jab le gana al kick", $"d0 {r.Dmg0} d1 {r.Dmg1}");
+
+        r = YS(true).Resolve(YomiAction.Jab, YomiAction.Grab);
+        Check(r.Dmg1 == 1 && r.Dmg0 == 0, "cerca: jab le gana al agarre");
+
+        var y = YS(true);
+        r = y.Resolve(YomiAction.Parry, YomiAction.Jab);
+        Check(r.Parry0 && r.Dmg1 == 1 && y.Ap[0] == 4 && y.Hp[1] == 5,
+            "cerca: parry bloquea el jab, +1 AP y devuelve 1", $"ap {y.Ap[0]} hp1 {y.Hp[1]}");
+
+        y = YS(true);
+        r = y.Resolve(YomiAction.Grab, YomiAction.Parry);
+        Check(r.Dmg1 == 2 && !y.Close, "cerca: agarre rompe el parry y tira a LEJOS", $"d1 {r.Dmg1} close {y.Close}");
+
+        y = YS(true);
+        r = y.Resolve(YomiAction.Kick, YomiAction.Dash);
+        Check(r.Dmg1 == 2 && !y.Close, "cerca: kick caza al dash que se retira", $"d1 {r.Dmg1}");
+
+        y = YS(true);
+        r = y.Resolve(YomiAction.Jab, YomiAction.Jump);
+        Check(r.Dmg1 == 1 && y.Close, "cerca: jab baja al salto en el despegue (se queda cerca)");
+
+        y = YS(true);
+        r = y.Resolve(YomiAction.Jab, YomiAction.Dash);
+        Check(r.Dmg0 == 0 && r.Dmg1 == 0 && !y.Close, "cerca: dash esquiva el jab y se va a LEJOS");
+    }
+
+    static void YomiMatrizDeLejos()
+    {
+        Check(!YS(false).Legal(0, YomiAction.Jab) && !YS(false).Legal(0, YomiAction.Grab),
+            "lejos: jab y agarre no llegan (ilegales)");
+
+        var y = YS(false);
+        var r = y.Resolve(YomiAction.Kick, YomiAction.Dash);
+        Check(r.Dmg1 == 2 && !y.Close, "lejos: kick frena al dash que entra", $"d1 {r.Dmg1} close {y.Close}");
+
+        y = YS(false);
+        r = y.Resolve(YomiAction.Jump, YomiAction.Kick);
+        Check(r.Dmg1 == 1 && y.Close, "lejos: el salto pasa por arriba del kick y entra pegando");
+
+        y = YS(false);
+        r = y.Resolve(YomiAction.Jump, YomiAction.Parry);
+        Check(r.Parry1 && r.Dmg0 == 1 && y.Close,
+            "lejos: parry bloquea la patada del salto (que llega igual)");
+
+        y = YS(false);
+        r = y.Resolve(YomiAction.Dash, YomiAction.Parry);
+        Check(r.Dmg0 == 0 && y.Close, "lejos: dash entra gratis contra el parry");
+    }
+
+    static void YomiShoryuEsUnaApuesta()
+    {
+        // de cerca le gana a todo (acá: al jab) y derriba a LEJOS
+        var y = YS(true);
+        var r = y.Resolve(YomiAction.Shoryu, YomiAction.Jab);
+        Check(r.Dmg1 == 3 && r.Dmg0 == 0 && !y.Close, "cerca: shoryu le gana al jab y manda a LEJOS");
+
+        // el rival se fue: whiff → recovery (el turno siguiente es forzado)
+        y = YS(true);
+        r = y.Resolve(YomiAction.Shoryu, YomiAction.Dash);
+        Check(r.Dmg0 == 0 && r.Dmg1 == 0 && r.Rec0Next && y.Recovery[0] && !y.Close,
+            "cerca: shoryu whiffea al dash y queda en recovery");
+        Check(y.Legal(0, YomiAction.Recovery) && !y.Legal(0, YomiAction.Jab),
+            "en recovery la única acción legal es Recovery");
+
+        // de lejos es SOLO lectura antiaérea
+        y = YS(false);
+        r = y.Resolve(YomiAction.Shoryu, YomiAction.Jump);
+        Check(r.Dmg1 == 3 && !y.Close, "lejos: shoryu baja al salto entrante (la lectura)");
+        y = YS(false);
+        r = y.Resolve(YomiAction.Shoryu, YomiAction.Charge);
+        Check(r.Rec0Next && r.Charged1, "lejos: shoryu sin salto que bajar = whiff y recovery");
+        y = YS(false);
+        r = y.Resolve(YomiAction.Shoryu, YomiAction.Kick);
+        Check(r.Dmg0 == 2 && !r.Rec0Next, "lejos: el kick castiga el shoryu whiffeado");
+    }
+
+    static void YomiEconomiaDiscreta()
+    {
+        // costo + ingreso automático: jab 3−1+1 = 3
+        var y = YS(true);
+        y.Resolve(YomiAction.Jab, YomiAction.Kick);
+        Check(y.Ap[0] == 3, "economía: jab cuesta 1, ingreso +1 por turno", $"ap {y.Ap[0]}");
+
+        // cargar sin que te peguen: +2 (y el tope es 6)
+        y = YS(true, 3, 3);
+        var r = y.Resolve(YomiAction.Parry, YomiAction.Charge);
+        Check(r.Charged1 && y.Ap[1] == 6, "cargar limpio: +2 y el ingreso", $"ap {y.Ap[1]}");
+        y = YS(true, 6, 6);
+        y.Resolve(YomiAction.Charge, YomiAction.Charge);
+        Check(y.Ap[0] == 6 && y.Ap[1] == 6, "el tope de AP es 6");
+
+        // cargar y comerse un golpe: counter (+1) y NO cargás
+        y = YS(true);
+        r = y.Resolve(YomiAction.Jab, YomiAction.Charge);
+        Check(!r.Charged1 && r.Dmg1 == 2 && r.Counter1 && y.Ap[1] == 4,
+            "cargar interrumpido: counter de 2 y sin +2", $"d1 {r.Dmg1} ap {y.Ap[1]}");
+    }
+
+    static void YomiRecoveryYCounters()
+    {
+        // whiff de shoryu → el turno siguiente estás vendido: golpe counter
+        var y = YS(true, 6, 6);
+        y.Resolve(YomiAction.Shoryu, YomiAction.Dash);       // whiff → recovery, quedan LEJOS
+        var r = y.Resolve(YomiAction.Recovery, YomiAction.Kick);
+        Check(r.Dmg0 == 3 && r.Counter0 && !y.Recovery[0],
+            "recovery: el kick pega counter (2+1) y el flag se limpia", $"d0 {r.Dmg0}");
+    }
+
+    static void YomiKoYTech()
+    {
+        var y = YS(true);
+        y.Hp[1] = 1;
+        y.Resolve(YomiAction.Jab, YomiAction.Kick);
+        Check(y.Over && y.Winner == 0, "HP 0 = KO y hay ganador", $"over {y.Over} winner {y.Winner}");
+
+        y = YS(true);
+        var r = y.Resolve(YomiAction.Grab, YomiAction.Grab);
+        Check(r.Tech && r.Dmg0 == 0 && r.Dmg1 == 0, "agarre vs agarre sigue siendo TECH");
+    }
+
+    // Toda celda legal de ambas matrices resuelve sin romper invariantes.
+    static void YomiMatrizCompletaNoExplota()
+    {
+        bool ok = true;
+        foreach (bool close in new[] { true, false })
+            for (int a = 0; a <= (int)YomiAction.Charge; a++)
+                for (int b = 0; b <= (int)YomiAction.Charge; b++)
+                {
+                    var y = YS(close, 6, 6);
+                    if (!y.Legal(0, (YomiAction)a) || !y.Legal(1, (YomiAction)b)) continue;
+                    var r = y.Resolve((YomiAction)a, (YomiAction)b);
+                    ok &= y.Hp[0] >= 0 && y.Hp[1] >= 0 && y.Ap[0] >= 0 && y.Ap[0] <= 6 && y.Ap[1] >= 0 && y.Ap[1] <= 6;
+                    ok &= r.Dmg0 >= 0 && r.Dmg0 <= 4 && r.Dmg1 >= 0 && r.Dmg1 <= 4;
+                }
+        Check(ok, "todas las celdas legales resuelven con invariantes sanos");
     }
 
     static void WakeupAjustaElKnockdown()

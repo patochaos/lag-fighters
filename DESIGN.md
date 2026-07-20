@@ -245,71 +245,73 @@ La sim usa rects y posición X; el escenario no está acoplado. Para volver al
 - Picks secretos reales en 1v1 (ocultar ghost del picker 2, o online lockstep
   — la sim determinista ya lo permite).
 
-## Modo YOMI (experimental, 2026-07-20)
+## Modo YOMI v2 — discreto (2026-07-20)
 
-Sesión de diseño 2026-07-20: el juego muta de "lag" a **yomi** (lectura).
-Objetivo: un *Yomi Hustle casual* — pocas cartas, triángulo explícito de
-counters, costo en ACTION POINTS. Research: Sirlin (yomi layers, "Designing
-Yomi"): piedra-papel-tijera puro es malo porque no hay información; lo que
-vuelve hábil al guessing son **payoffs asimétricos + estado visible que sesga
-intenciones**. Acá el estado visible es: distancia, vida, guardia, knockdown,
-compromiso de overflow y **los AP de ambos**.
+Sesión de diseño 2026-07-20: el juego muta de "lag" a **yomi** (lectura),
+apuntando a un *Yomi Hustle casual*. Research: Sirlin (yomi layers,
+"Designing Yomi") — piedra-papel-tijera puro es malo porque no hay
+información; lo que vuelve hábil al guessing son **payoffs asimétricos +
+estado visible que sesga intenciones**.
 
-Es un **modo aparte** (menú → YOMI (NUEVO), VS IA Adaptive Normal): no pisa
-nada de lo existente. `SimConfig.YomiEnabled` (lo prende `StartMatch`, lo
-apaga `ModeMenuUI.Open`); fuerza turno fluido y oculta la super.
+**v1 (misma fecha, retirada en horas)**: AP como presupuesto sobre la sim de
+frames. Se descartó porque era una quimera: la tabla decía una cosa y los
+frames decidían otra por abajo (y el agarre trade-aba con el jab en el mismo
+frame). Pivot de Patricio: **dos distancias discretas y resolución por
+tabla — la matriz de counters ES la ley**.
 
-### Dos triángulos, la distancia elige cuál jugás
+### Las reglas (todas)
 
-- **De cerca**: Jab > Agarre > Bloqueo > Jab (y Golpe fuerte).
-- **De lejos**: Hadouken > Golpe fuerte (whiffea) · Salto > Hadouken ·
-  Golpe fuerte (antiaéreo) > Salto.
-- **Dash ±** (una carta que se abre en atrás/adelante) mueve entre bandas:
-  atrás es el esquive/bait, adelante el compromiso.
-- Pares grises a propósito (los resuelve la sim por espaciado/timing):
-  jab vs salto, agarre vs golpe fuerte de cerca (gana el agarre: startup
-  9 vs 14 — el golpe fuerte vive en la media distancia).
+- **Dos distancias**: CERCA / LEJOS (se arranca LEJOS). **Una acción por
+  turno** cada uno, revelación simultánea, resuelve la matriz de `YomiSim`.
+- **HP 6** · **AP: arrancás con 3, +1 automático por turno, tope 6**. Los AP
+  de ambos son públicos (barrita celeste + "AP n/6" en el HUD): la economía
+  ES la información — "está pobre → va a cargar → pegale".
+- 8 acciones (la dirección de dash/salto la decide la distancia):
 
-### Las 7 cartas (costos AP)
-
-| Carta | AP | Move | Rol |
+| Acción | AP | Dmg | Qué hace |
 |---|---|---|---|
-| Dash ± | 1 | DashF/DashB | elegir triángulo; no bloquea |
-| Salto | 2 | JumpF | salta hadoukens y agarres; patada al caer |
-| Bloqueo | 0 | WalkB | para golpes y **banquea +1 AP** al ejecutarse |
-| Jab | 1 | AttackA | countereá al agarre (6f vs 9f) |
-| Golpe fuerte | 2 | **Strong (17, nuevo)** | 14/4/26, alto (Y hasta 2.4 = antiaéreo), 2 dmg, KD, −12 block |
-| Agarre | 2 | **YomiGrab (18, nuevo)** | agarre clásico con startup 9 (el 6f trade-aba con el jab) |
-| Hadouken | 2 | Hadouken | control de lejos; 60f = el turno entero |
+| Jab | 1 | 1 | solo cerca; gana a Kick/Agarre; caza el salto en el despegue |
+| Kick | 2 | 2 | AMBAS distancias; caza dashes y cargadores; pierde con Jab (cerca), Salto y Parry |
+| Agarre | 2 | 2 | solo cerca; rompe Parry; derriba y manda a LEJOS; pierde con golpes |
+| Parry | 1 | (1) | si bloquea un golpe: **+1 AP y devuelve 1** (el rechazo); pierde con Agarre |
+| Shoryuken | 3 | 3 | cerca: gana a TODO, derriba a LEJOS · lejos: SOLO lectura antiaérea · **whiff = recovery (perdés el turno siguiente)** |
+| Dash | 1 | — | cerca: te vas (esquiva Jab/Agarre/Shoryu; Kick te caza) · lejos: entrás (Kick te frena) |
+| Salto | 2 | 1 | cerca: escape aéreo (esquiva Kick/Agarre; Jab te baja) · lejos: entrás con patada (gana a Kick; Parry la bloquea; Shoryu-lectura te baja) |
+| Cargar | 0 | — | +2 AP si no te pegan; **todo golpe al que carga es counter (+1)** y cancela la carga |
 
-### Economía de AP (`FighterState.Ap`, determinista, en la sim)
+- Golpe al que está en **recovery** también es counter (+1). Espejos:
+  golpes iguales = trade · Agarre vs Agarre = TECH · Shoryu vs Shoryu cerca =
+  doble KD · lejos = doble whiff.
+- El triángulo interno de cerca: **Jab > Agarre > Parry > Jab** (el parry
+  con rechazo cierra el loop — sin el rechazo, el jab spam era gratis).
+- Cada escape tiene su cazador: **Kick caza el Dash**, **Jab caza el Salto**.
+  Sin esto, retirarse era defensa gratis (no hay esquina con 2 distancias).
+- Fin: HP 0 (KO) o 20 turnos (TIME OVER por vida). Rounds al mejor de 3.
 
-- **3 por turno, tope 6** (con 4/8 el lab daba 7.6/8 promedio: no mordía).
-- Se cobran **al arrancar** el move → si te interrumpen, lo que no arrancó
-  no se cobra (te queda banqueado).
-- Bloqueo cuesta 0: **sin puntos solo podés bloquear — y el rival lo sabe.**
-  Ahí vive la lectura ("está pobre → bloquea → agarre"; "está a 6 → viene
-  cargado → bloqueo preventivo").
-- AP públicos: barrita celeste + "AP n/6" bajo la guardia (HUD), y ambos
-  valores en el prompt de planificación.
-- El turno sigue siendo de 60f simultáneos: los AP limitan CUÁNTAS cosas,
-  los frames deciden CÓMO chocan. Turno fluido siempre ON (el último move
-  cruza comprometido y visible).
+### Implementación
 
-### Implementación / verificación
-
-- IA: `SimpleAI.PlanYomi` (triángulo por distancia, castiga compromiso aéreo
-  visible con Golpe fuerte). Lab: `dotnet run --project Tools/SimHarness -- yomi N`
-  (también corre como tercera pasada del lab default). Tests yomi en
-  `Tools/SimTests` (triángulo limpio + economía AP).
-- Lab 2000 peleas: 8 turnos/pelea, 0 timeouts, las 7 cartas con uso real.
-  **Vigilar**: hit% del hadouken 87% (la IA no lo respeta; ver con humanos),
-  AP promedio post-recarga 5.5/6 (la IA gasta poco; un humano greedy debería
-  sentir la escasez), guard crush casi nulo en este modo.
-- Ideas anotadas (todavía no): personajes = tocar UNA arista del triángulo
-  ("mi agarre alcanza más", "mis bloqueos dan +2 AP"); roguelike = draftear
-  cartas/modificadores entre peleas — ambos piden un core chico y legible,
-  que es exactamente este.
+- **`YomiSim.cs`**: la matriz, pura y determinista; cada celda es un test en
+  `Tools/SimTests` (~25 tests + barrido exhaustivo de celdas legales).
+- **Teatro**: `MatchController.BeginYomiTheater` actúa el resultado sobre una
+  `MatchSim` fresca por turno (slots X: cerca ±0.45 · lejos ±0.95) con los
+  moves clásicos (Kick = Strong 17, Agarre = YomiGrab 18, etc.) y retardos
+  de coreografía (`TheaterDelay`) para que los ganadores conecten, los
+  perdedores se interrumpan y los whiffs se vean. **El HP real lo dicta
+  YomiSim** (sync al final del turno); el teatro es solo presentación.
+- UI: la grilla de PlanMenuUI en modo yomi son las 8 acciones — **click =
+  jugarla ya** (sin cola, sin LISTO); la tag de cada carta canta su fila de
+  la matriz en la distancia actual. IA: `SimpleAI.PickYomi` (pondera por
+  distancia/economía + counter-pick del hábito rival observado; Hard lee más).
+- Lab discreto: `dotnet run --project Tools/SimHarness -- yomi N` (y tercera
+  pasada del lab default). 8000 partidas: 100% KO, 7.6 turnos/partida,
+  46% de turnos en cerca, AP promedio 2.6/6 (la economía muerde), 9k parrys,
+  2.2k recoveries. Ninguna acción domina (dmg/uso: Shoryu 1.46 · Kick 1.38 ·
+  Salto 0.74 · Jab 0.73 · Agarre 0.62 · Parry 0.45).
+- **Qué queda fuera en este modo**: frames, guard gauge, wakeup, super,
+  overflow, ghost, replay (V) — todo eso sigue intacto en los modos clásicos.
+- Ideas anotadas: personajes = editar celdas/costos de la matriz ("mi agarre
+  también pega de lejos", "mi parry devuelve 2"); roguelike = draftear
+  modificadores de celdas entre peleas. El core discreto los hace triviales.
 
 ## Historial de pivots
 

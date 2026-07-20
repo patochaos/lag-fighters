@@ -171,62 +171,110 @@ namespace LagFighter
             }
         }
 
-        // ---- Modo YOMI: planifica con las 7 cartas y el presupuesto de AP.
-        // Sin perfiles finos todavía: juega el triángulo según la distancia y
-        // castiga lo comprometido visible (salto rival → Golpe fuerte).
-        public List<int> PlanYomi(MatchSim sim, int me, int turnFrames)
+        // ---- Modo YOMI v2 (discreto): elige UNA acción por turno sobre
+        // YomiSim. Base aleatoria ponderada por distancia y economía, más una
+        // capa de counter-pick contra la acción más frecuente del rival en
+        // esa distancia (los picks son públicos al revelarse). La agresividad
+        // del counter-pick escala con la dificultad.
+        readonly int[] _seenClose = new int[9];
+        readonly int[] _seenFar = new int[9];
+
+        public void ObserveYomi(YomiAction act, bool wasClose)
         {
-            int opp = 1 - me;
-            var plan = new List<int>();
-            int budget = System.Math.Max(0, turnFrames - sim.StunRemaining(me) - sim.CommittedRemaining(me));
-            int ap = sim.Fighters[me].Ap;
-            if (Difficulty == AIDifficulty.Easy) ap = System.Math.Min(ap, SimConfig.ApPerTurn); // Easy no usa lo banqueado
-            int frames = 0;
-            float myX = sim.Fighters[me].X;
-            float oppX = sim.Fighters[opp].X;
-            int face = oppX >= myX ? 1 : -1;
-            bool oppAir = sim.IsAirborne(opp); // turno fluido: el compromiso rival es info pública
-            bool oppDown = sim.StunRemaining(opp) > 20;
-            bool threwFireball = false;
-
-            while (frames < budget)
-            {
-                float dist = System.Math.Abs(oppX - myX);
-                int pick = PickYomi(dist, oppAir, oppDown, ap);
-                oppAir = false; // solo la primera decisión reacciona al compromiso
-                if (MoveCatalog.ApCost(pick) > ap) pick = MoveCatalog.WalkB;
-                if (pick == MoveCatalog.Hadouken)
-                {
-                    if (threwFireball || HasProjectile(sim, me)) pick = dist > 1.5f ? MoveCatalog.DashF : MoveCatalog.WalkB;
-                    else threwFireball = true;
-                }
-
-                var move = MoveCatalog.All[pick];
-                plan.Add(pick);
-                ap -= MoveCatalog.ApCost(pick);
-                if (frames + move.Total > budget) break; // cruza el turno: comprometido y visible
-                frames += move.Total;
-                myX += face * move.MoveDx;
-                myX = System.Math.Max(-SimConfig.StageHalfWidth, System.Math.Min(SimConfig.StageHalfWidth, myX));
-                if (oppDown && plan.Count >= 2) oppDown = false;
-                if (ap <= 0) break; // sin puntos: lo que quede del turno bloquea en neutral
-            }
-            return plan;
+            var seen = wasClose ? _seenClose : _seenFar;
+            seen[(int)act]++;
         }
 
-        int PickYomi(float dist, bool oppAir, bool oppDown, int ap)
+        public YomiAction PickYomi(YomiSim y, int me)
         {
-            if (oppAir && dist < 2.2f) return MoveCatalog.Strong; // antiaéreo al compromiso visible
-            if (oppDown && dist > 1.6f) return MoveCatalog.DashF;
+            if (y.Recovery[me]) return YomiAction.Recovery;
+            int opp = 1 - me;
+
+            // counter-pick del hábito rival (Hard lee más seguido)
+            double counterChance = Difficulty == AIDifficulty.Hard ? 0.45 :
+                                   Difficulty == AIDifficulty.Easy ? 0.0 : 0.25;
+            if (_rng.NextDouble() < counterChance)
+            {
+                var counter = CounterOfHabit(y);
+                if (counter.HasValue && y.Legal(me, counter.Value)) return counter.Value;
+            }
+
+            // el rival en recovery es un regalo: pegale lo más caro que tengas
+            if (y.Recovery[opp])
+            {
+                if (y.Close)
+                {
+                    if (y.Legal(me, YomiAction.Shoryu)) return YomiAction.Shoryu;
+                    if (y.Legal(me, YomiAction.Kick)) return YomiAction.Kick;
+                    if (y.Legal(me, YomiAction.Jab)) return YomiAction.Jab;
+                }
+                else
+                {
+                    if (y.Legal(me, YomiAction.Kick)) return YomiAction.Kick;
+                    if (y.Legal(me, YomiAction.Dash)) return YomiAction.Dash;
+                }
+            }
+
+            // base ponderada; pobre de AP → cargar más seguido
             double r = _rng.NextDouble();
-            if (dist > 2.4f)
-                return r < 0.35 ? MoveCatalog.Hadouken : r < 0.60 ? MoveCatalog.DashF :
-                       r < 0.80 ? MoveCatalog.JumpF : MoveCatalog.WalkB;
-            if (dist > 1.3f)
-                return r < 0.28 ? MoveCatalog.Strong : r < 0.50 ? MoveCatalog.DashF :
-                       r < 0.64 ? MoveCatalog.JumpF : r < 0.86 ? MoveCatalog.WalkB : MoveCatalog.Hadouken;
-            return r < 0.30 ? MoveCatalog.AttackA : r < 0.54 ? MoveCatalog.YomiGrab :
-                   r < 0.68 ? MoveCatalog.Strong : r < 0.88 ? MoveCatalog.WalkB : MoveCatalog.DashB;
+            bool poor = y.Ap[me] <= 1;
+            YomiAction pick;
+            if (y.Close)
+                pick = poor
+                    ? (r < 0.40 ? YomiAction.Jab : r < 0.60 ? YomiAction.Parry : r < 0.80 ? YomiAction.Charge : YomiAction.Dash)
+                    : r < 0.26 ? YomiAction.Jab
+                    : r < 0.42 ? YomiAction.Grab
+                    : r < 0.56 ? YomiAction.Parry
+                    : r < 0.68 ? YomiAction.Kick
+                    : r < 0.78 ? (y.Ap[me] >= 3 ? YomiAction.Shoryu : YomiAction.Jab)
+                    : r < 0.86 ? YomiAction.Dash
+                    : r < 0.93 ? YomiAction.Jump : YomiAction.Charge;
+            else
+                pick = poor
+                    ? (r < 0.45 ? YomiAction.Charge : r < 0.75 ? YomiAction.Dash : YomiAction.Parry)
+                    : r < 0.30 ? YomiAction.Kick
+                    : r < 0.48 ? YomiAction.Jump
+                    : r < 0.63 ? YomiAction.Dash
+                    : r < 0.76 ? YomiAction.Charge
+                    : r < 0.90 ? YomiAction.Parry
+                    : (y.Ap[me] >= 3 ? YomiAction.Shoryu : YomiAction.Kick); // la lectura antiaérea
+            if (!y.Legal(me, pick)) pick = y.Legal(me, YomiAction.Dash) ? YomiAction.Dash : YomiAction.Charge;
+            return pick;
+        }
+
+        // La respuesta de la matriz a lo que el rival más repite en la
+        // distancia actual (ver YomiSim: cada counter sale de una celda G).
+        YomiAction? CounterOfHabit(YomiSim y)
+        {
+            var seen = y.Close ? _seenClose : _seenFar;
+            int best = -1, bestN = 0;
+            for (int i = 0; i < seen.Length; i++)
+                if (seen[i] > bestN) { bestN = seen[i]; best = i; }
+            if (best < 0 || bestN < 2) return null; // sin muestra no hay lectura
+            var habit = (YomiAction)best;
+            if (y.Close)
+                switch (habit)
+                {
+                    case YomiAction.Jab: return YomiAction.Parry;
+                    case YomiAction.Kick: return YomiAction.Jab;
+                    case YomiAction.Grab: return YomiAction.Jab;
+                    case YomiAction.Parry: return YomiAction.Grab;
+                    case YomiAction.Shoryu: return YomiAction.Dash;
+                    case YomiAction.Dash: return YomiAction.Kick;
+                    case YomiAction.Jump: return YomiAction.Jab;
+                    case YomiAction.Charge: return YomiAction.Kick;
+                }
+            else
+                switch (habit)
+                {
+                    case YomiAction.Kick: return YomiAction.Jump;
+                    case YomiAction.Jump: return YomiAction.Shoryu;   // la lectura antiaérea
+                    case YomiAction.Dash: return YomiAction.Kick;
+                    case YomiAction.Parry: return YomiAction.Dash;
+                    case YomiAction.Charge: return YomiAction.Kick;
+                    case YomiAction.Shoryu: return YomiAction.Charge; // dejalo whiffear
+                }
+            return null;
         }
 
         int PickUnfocused(float dist)

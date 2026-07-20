@@ -38,6 +38,14 @@ namespace LagFighter
         public const int TurnsPerRound = SimConfig.TurnsPerRound; // TIME OVER: gana el que tiene más vida
 
         public MatchSim Sim { get; private set; }
+
+        // ---- Modo YOMI v2 (discreto): el estado real vive acá; Sim pasa a
+        // ser el escenario donde se ACTÚA el resultado de cada turno.
+        public YomiSim Yomi { get; private set; }
+        YomiTurnResult _yomiResult;
+        readonly int[] _yomiHpBefore = new int[2];
+        const int YomiTheaterFrames = 78;              // duración fija del teatro
+        const float YomiCloseSlot = 0.45f, YomiFarSlot = 0.95f; // X de cada distancia
         public float TickFloat => Sim == null ? 0f : Sim.Tick + _acc / SimConfig.TickDuration;
         public GameMode Mode { get; private set; }
         public bool LagMode { get; private set; }
@@ -206,10 +214,9 @@ namespace LagFighter
             Mode = mode;
             LagMode = lagMode;
             LocalSide = localSide;
-            // Modo YOMI: 7 cartas + AP; turno fluido implícito (los moves cruzan).
-            // ModeMenuUI.Open() lo apaga al volver al menú.
+            // Modo YOMI v2 (discreto): la lógica vive en YomiSim; la sim de
+            // frames queda de teatro. ModeMenuUI.Open() apaga el flag al volver.
             SimConfig.YomiEnabled = yomi;
-            if (yomi) SimConfig.CarryoverEnabled = true;
             // el toggle no viaja en el protocolo online: forzarlo OFF evita desyncs
             if (mode == GameMode.Online || mode == GameMode.Async) SimConfig.CarryoverEnabled = false;
             SelectedAIProfile = aiProfile;
@@ -243,6 +250,17 @@ namespace LagFighter
         void StartRound()
         {
             Sim = new MatchSim();
+            if (SimConfig.YomiEnabled)
+            {
+                Yomi = new YomiSim();
+                for (int i = 0; i < 2; i++)
+                {
+                    var f = Sim.Fighters[i];
+                    f.BlockEnabled = false; // la tabla decide, no el auto-bloqueo
+                    f.X = i == 0 ? -YomiFarSlot : YomiFarSlot; // arranca LEJOS
+                    f.PrevX = f.X;
+                }
+            }
             if (Mode == GameMode.Practice) Sim.Fighters[1].BlockEnabled = false; // el dummy no bloquea
             Time.timeScale = 1f;
             _koTimer = 0f;
@@ -271,6 +289,7 @@ namespace LagFighter
 
         void StartPlanning()
         {
+            if (SimConfig.YomiEnabled) { StartYomiPlanning(); return; }
             TurnNumber++;
             if (LagMode && LagLevel != _prevLagLevel)
             {
@@ -287,9 +306,7 @@ namespace LagFighter
             if (Mode == GameMode.Practice || Mode == GameMode.VsAI)
             {
                 if (Mode == GameMode.VsAI && WakeupAvailable(1)) _wakeQuick[1] = _ai.QuickRise();
-                _plans[1] = Mode == GameMode.Practice ? new List<int>()
-                    : SimConfig.YomiEnabled ? _ai.PlanYomi(Sim, 1, CurrentTurnFrames - WakeDelta(1))
-                    : _ai.Plan(Sim, 1, CurrentTurnFrames - WakeDelta(1));
+                _plans[1] = Mode == GameMode.Practice ? new List<int>() : _ai.Plan(Sim, 1, CurrentTurnFrames - WakeDelta(1));
             }
             Picker = (Mode == GameMode.Async || Mode == GameMode.Online) ? LocalSide : 0;
             State = Flow.Planning;
@@ -331,10 +348,6 @@ namespace LagFighter
                 adv += $"  ·  seguís en {MoveCatalog.All[Sim.Fighters[Picker].MoveIndex].Name} ({TurnStartCommitted[Picker]}f)";
             if (TurnStartCommitted[1 - Picker] > 0)
                 adv += $"  ·  RIVAL comprometido: {MoveCatalog.All[Sim.Fighters[1 - Picker].MoveIndex].Name} ({TurnStartCommitted[1 - Picker]}f)";
-            // YOMI: los AP de ambos son información pública — acá nace la
-            // lectura ("tiene 7 AP: viene cargado" / "le queda 1: va a bloquear")
-            if (SimConfig.YomiEnabled)
-                adv += $"  ·  AP: vos {Sim.Fighters[Picker].Ap} · rival {Sim.Fighters[1 - Picker].Ap}";
             string lag = "";
             if (LagMode && LagLevel > LagLevelForTurn(TurnNumber - 1))
                 lag = $"  ·  ¡AHORA {CurrentTurnFrames}F POR TURNO!";
@@ -388,15 +401,6 @@ namespace LagFighter
             int f = 0;
             foreach (var m in _plans[i]) f += MoveCatalog.All[m].Total;
             return f;
-        }
-
-        // Modo YOMI: los AP planificados del picker (el presupuesto es
-        // Sim.Fighters[i].Ap, info pública que también ve el rival en su HUD)
-        public int PlanApUsed(int i)
-        {
-            int ap = 0;
-            foreach (var m in _plans[i]) ap += MoveCatalog.ApCost(m);
-            return ap;
         }
 
         // ---------- wakeup options ----------
@@ -462,9 +466,6 @@ namespace LagFighter
             Sim.MoveAllowed(Picker, moveIndex) &&
             // la barra se gasta al ejecutar: una sola super por plan
             !(moveIndex == MoveCatalog.Super && _plans[Picker].Contains(MoveCatalog.Super)) &&
-            // modo YOMI: además de arrancar dentro del turno, tiene que alcanzar el AP
-            (!SimConfig.YomiEnabled ||
-             PlanApUsed(Picker) + MoveCatalog.ApCost(moveIndex) <= Sim.Fighters[Picker].Ap) &&
             (SimConfig.CarryoverEnabled
                 ? PlanFramesUsed(Picker) < PlanFramesAvailable(Picker)
                 : PlanFramesUsed(Picker) + MoveCatalog.All[moveIndex].Total <= PlanFramesAvailable(Picker));
@@ -503,6 +504,7 @@ namespace LagFighter
 
         public void PlanConfirm()
         {
+            if (SimConfig.YomiEnabled) return; // en YOMI el turno se cierra con YomiPick
             if (_tipStage >= 1) AdvanceTip(); // cada turno confirmado avanza el tutorial
             if (Mode == GameMode.PvP && Picker == 0)
             {
@@ -594,8 +596,201 @@ namespace LagFighter
             }
             _ghost.Show(basis, Picker, _plans[Picker], CurrentTurnFrames);
             var g = PlanPreview.Build(basis, Picker, _plans[Picker], CurrentTurnFrames);
-            _menu.SetPrediction(g, PlanFramesUsed(Picker), PlanFramesAvailable(Picker),
-                PlanApUsed(Picker), Sim.Fighters[Picker].Ap, Sim.Fighters[1 - Picker].Ap);
+            _menu.SetPrediction(g, PlanFramesUsed(Picker), PlanFramesAvailable(Picker));
+        }
+
+        // ---------- modo YOMI v2: una acción por turno, resolución por tabla ----------
+
+        void StartYomiPlanning()
+        {
+            TurnNumber++;
+            for (int i = 0; i < 2; i++)
+            {
+                TurnStartStun[i] = 0;
+                TurnStartStunKind[i] = StunKind.None;
+                TurnStartCommitted[i] = 0;
+                _plans[i].Clear();
+            }
+            Picker = 0;
+            State = Flow.Planning;
+            if (Yomi.Recovery[0])
+            {
+                // whiffeaste el Shoryu: este turno no se elige, se sufre
+                _hud.Feedback(0, "RECOVERY: perdés el turno", new Color(1f, 0.5f, 0.4f));
+                YomiPick(YomiAction.Recovery);
+                return;
+            }
+            _menu.Open(0);
+            UpdateYomiPrompt();
+        }
+
+        void UpdateYomiPrompt()
+        {
+            string dist = Yomi.Close ? "CERCA" : "LEJOS";
+            string rec = Yomi.Recovery[1] ? "  ·  ¡RIVAL EN RECOVERY: golpe gratis!" : "";
+            string turnLabel = $"TURNO {TurnNumber}/{TurnsPerRound}";
+            if (TurnNumber >= TurnsPerRound - 2) turnLabel += " · ¡SE ACABA!";
+            _hud.SetPrompt($"{turnLabel} — DISTANCIA: {dist}  ·  AP: vos {Yomi.Ap[0]} · rival {Yomi.Ap[1]}{rec}");
+        }
+
+        // El pick del jugador cierra el turno: la IA elige en secreto, la tabla
+        // resuelve y el teatro lo actúa. Una acción, una lectura, un resultado.
+        public void YomiPick(YomiAction act)
+        {
+            if (!SimConfig.YomiEnabled || State != Flow.Planning) return;
+            if (!Yomi.Legal(0, act)) return;
+            var aiAct = _ai.PickYomi(Yomi, 1);
+            bool closeBefore = Yomi.Close;
+            _yomiHpBefore[0] = Yomi.Hp[0];
+            _yomiHpBefore[1] = Yomi.Hp[1];
+            _yomiResult = Yomi.Resolve(act, aiAct);
+            _ai.ObserveYomi(act, closeBefore); // la IA aprende del pick ya revelado
+            BeginYomiTheater();
+        }
+
+        // Teatro: sim de frames nueva por turno, posicionada según la
+        // distancia, con los moves que actúan cada acción y retardos de
+        // coreografía para que la sim reproduzca el resultado de la tabla
+        // (los golpes del ganador conectan, los del perdedor se interrumpen,
+        // los whiffs whiffean). El HP final lo dicta YomiSim, no la sim.
+        void BeginYomiTheater()
+        {
+            var r = _yomiResult;
+            _menu.Close();
+            _ghost.Clear();
+            Sim = new MatchSim();
+            float slot = r.CloseBefore ? YomiCloseSlot : YomiFarSlot;
+            for (int i = 0; i < 2; i++)
+            {
+                var f = Sim.Fighters[i];
+                f.BlockEnabled = false;
+                f.X = i == 0 ? -slot : slot;
+                f.PrevX = f.X;
+                f.Hp = _yomiHpBefore[i];
+            }
+            for (int i = 0; i < 2; i++)
+            {
+                int mv = TheaterMove(r.Act(i), r.CloseBefore);
+                if (mv >= 0) Sim.SetQueue(i, new List<int> { mv });
+                int delay = TheaterDelay(r, i);
+                if (delay > 0)
+                {
+                    Sim.Fighters[i].Stun = StunKind.Hitstun; // retardo invisible de coreografía
+                    Sim.Fighters[i].StunEndTick = delay;
+                }
+            }
+            TurnStartTick = Sim.Tick;
+            _acc = 0f;
+            _turnDmg[0] = _turnDmg[1] = 0f;
+            _turnHitCount[0] = _turnHitCount[1] = 0;
+            State = Flow.Executing;
+            _hud.SetPrompt($"TURNO {TurnNumber} — {YomiConfig.Name(r.A0).ToUpperInvariant()} vs {YomiConfig.Name(r.A1).ToUpperInvariant()}");
+            SfxLib.Play(SfxLib.Kind.TurnStart, 0.6f);
+        }
+
+        static int TheaterMove(YomiAction a, bool close)
+        {
+            switch (a)
+            {
+                case YomiAction.Jab: return MoveCatalog.AttackA;
+                case YomiAction.Kick: return MoveCatalog.Strong;
+                case YomiAction.Grab: return MoveCatalog.YomiGrab;
+                case YomiAction.Parry: return MoveCatalog.Parry;
+                case YomiAction.Shoryu: return MoveCatalog.Shoryuken;
+                case YomiAction.Dash: return close ? MoveCatalog.DashB : MoveCatalog.DashF;
+                case YomiAction.Jump: return close ? MoveCatalog.JumpB : MoveCatalog.JumpF;
+                default: return -1; // Cargar / Recovery: quieto
+            }
+        }
+
+        // primer frame de contacto del move teatral (−1 = no pega)
+        static int TheaterContact(YomiAction a, bool close)
+        {
+            switch (a)
+            {
+                case YomiAction.Jab: return 6;
+                case YomiAction.Kick: return 14;
+                case YomiAction.Grab: return 9;
+                case YomiAction.Shoryu: return 4;
+                case YomiAction.Jump: return close ? -1 : 20; // solo la entrada patea
+                default: return -1;
+            }
+        }
+
+        int TheaterDelay(YomiTurnResult r, int i)
+        {
+            int o = 1 - i;
+            var mine = r.Act(i);
+            var theirs = r.Act(o);
+            bool close = r.CloseBefore;
+            int myC = TheaterContact(mine, close), theirC = TheaterContact(theirs, close);
+            // parry exitoso: alinear la ventana f3-7 con el contacto del atacante
+            if (r.Parried(i) && theirC >= 0) return Mathf.Max(0, theirC - 5);
+            // shoryu antiaéreo de lejos: esperar a que el salto llegue encima
+            if (mine == YomiAction.Shoryu && !close && theirs == YomiAction.Jump) return 16;
+            // me pegaron y yo también tiraba: que el golpe rival entre primero
+            if (r.Dmg(i) > 0 && myC >= 0 && theirC >= 0) return Mathf.Max(0, theirC + 8 - myC);
+            // me cazaron moviéndome (kick al dash, jab al salto): frená un toque
+            if (r.Dmg(i) > 0 && (mine == YomiAction.Dash || mine == YomiAction.Jump)) return 6;
+            // mi golpe whiffeó porque el rival se fue: tirarlo tarde, que se VEA el whiff
+            if (myC >= 0 && r.Dmg(o) == 0 && !r.Parried(o) &&
+                (theirs == YomiAction.Dash || theirs == YomiAction.Jump)) return 18;
+            return 0;
+        }
+
+        void TickYomiTheater()
+        {
+            if (_hitstop > 0f) { _hitstop -= Time.deltaTime * PlaybackSpeed; return; }
+            _acc += Time.deltaTime * PlaybackSpeed;
+            while (_acc >= SimConfig.TickDuration)
+            {
+                _acc -= SimConfig.TickDuration;
+                Sim.Step();
+                DispatchEvents();
+                if (Sim.Over || Sim.Tick - TurnStartTick >= YomiTheaterFrames)
+                {
+                    _acc = 0f;
+                    EndYomiTurn();
+                    return;
+                }
+                if (_hitstop > 0f) return;
+            }
+        }
+
+        void EndYomiTurn()
+        {
+            var r = _yomiResult;
+            // el HP real lo dicta la tabla (el teatro puede diferir en detalles)
+            for (int i = 0; i < 2; i++) Sim.Fighters[i].Hp = Yomi.Hp[i];
+            if (!Yomi.Over) { Sim.Over = false; Sim.Winner = -1; } // el teatro no decide KOs
+            for (int i = 0; i < 2; i++)
+            {
+                if (r.Charged(i)) _hud.Feedback(i, "+2 AP", new Color(1f, 0.85f, 0.3f));
+                if (r.Parried(i)) _hud.Feedback(i, "¡PARRY! +1 AP y devuelve 1", new Color(0.3f, 0.95f, 1f));
+                if (r.RecNext(i)) _hud.Feedback(i, "¡WHIFF! Recovery: pierde el turno", new Color(1f, 0.5f, 0.3f));
+                if (i == 0 ? r.Counter0 : r.Counter1) _hud.Feedback(i, "¡COUNTER!", new Color(1f, 0.55f, 0.15f));
+            }
+            _hud.AddTurnLog($"T{TurnNumber}  <color=#8cc8ff>{YomiConfig.Chip(r.A0)}</color> −{r.Dmg1}  ·  <color=#ffa080>{YomiConfig.Chip(r.A1)}</color> −{r.Dmg0}");
+            _hud.SetTurnSummary($"último turno: {YomiConfig.Name(r.A0)} vs {YomiConfig.Name(r.A1)} — vos −{r.Dmg0} · rival −{r.Dmg1}");
+
+            if (Yomi.Over)
+            {
+                Sim.Over = true;
+                Sim.Winner = Yomi.Winner;
+                _koTimer = 1.4f;
+                Time.timeScale = 0.35f;
+                _hud.ShowBigMessage("K.O.", new Color(1f, 0.3f, 0.25f));
+                Announcer.Play();
+                return; // _koTimer → BeginRoundReplay → (log frame vacío) → OnRoundEnd
+            }
+            if (TurnNumber >= TurnsPerRound)
+            {
+                _hud.ShowBigMessage("TIME OVER", new Color(1f, 0.85f, 0.3f));
+                SfxLib.Play(SfxLib.Kind.Ko, 0.6f);
+                OnRoundEnd();
+                return;
+            }
+            StartPlanning();
         }
 
         // ---------- execution ----------
@@ -748,7 +943,11 @@ namespace LagFighter
                 return;
             }
 
-            if (State == Flow.Executing) TickExecuting();
+            if (State == Flow.Executing)
+            {
+                if (SimConfig.YomiEnabled) TickYomiTheater();
+                else TickExecuting();
+            }
             else if (State == Flow.Replay) TickReplay();
         }
 

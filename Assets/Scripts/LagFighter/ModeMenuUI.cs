@@ -26,7 +26,7 @@ namespace LagFighter
             ("VS IA", "Directo a pelear: la IA adaptativa en dificultad normal planifica en secreto, igual que vos.", GameMode.VsAI),
             ("IA CUSTOM", "Elegí perfil de IA (Zoner, Aggressive, Trickster…) y dificultad.", GameMode.VsAI),
             ("ONLINE", "Sala con código de invitación: uno crea, el otro se une. Turnos con timer de 30s.", GameMode.Online),
-            ("YOMI (NUEVO)", "El experimento: 7 cartas, ACTION POINTS y triángulo explícito — GOLPE › AGARRE › BLOQUEO › GOLPE. VS IA.", GameMode.VsAI),
+            ("YOMI (NUEVO)", "El experimento: UNA acción por turno, dos distancias (cerca/lejos) y ACTION POINTS. Piedra-papel-tijera con plata. VS IA.", GameMode.VsAI),
         };
 
         static readonly (string label, string desc)[] OnlineOptions =

@@ -620,7 +620,7 @@ namespace LagFighter
                 // los AP — info pública de ambos lados, el corazón de la lectura
                 if (SimConfig.YomiEnabled)
                 {
-                    _limbLabel[i].text = $"AP {lf.Ap}/{SimConfig.ApMax}";
+                    _limbLabel[i].text = _mc.Yomi == null ? "" : $"AP {_mc.Yomi.Ap[i]}/{YomiConfig.ApCap}";
                     _limbLabel[i].color = new Color(0.45f, 0.9f, 1f);
                 }
                 else
@@ -645,9 +645,10 @@ namespace LagFighter
                 }
                 if (yomiBar)
                 {
-                    float ap = Mathf.Clamp01(sim.Fighters[i].Ap / (float)SimConfig.ApMax);
+                    int apNow = _mc.Yomi == null ? 0 : _mc.Yomi.Ap[i];
+                    float ap = Mathf.Clamp01(apNow / (float)YomiConfig.ApCap);
                     _superFill[i].rectTransform.sizeDelta = new Vector2(GuardBarW * ap, 6f);
-                    _superFill[i].color = sim.Fighters[i].Ap >= SimConfig.ApMax
+                    _superFill[i].color = apNow >= YomiConfig.ApCap
                         ? Color.Lerp(new Color(0.35f, 0.85f, 1f), Color.white, Mathf.PingPong(Time.time * 3f, 0.6f))
                         : new Color(0.35f, 0.85f, 1f, 0.95f);
                 }

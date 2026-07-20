@@ -22,7 +22,7 @@ class Program
         }
         if (args.Length > 0 && args[0] == "yomi")
         {
-            RunLab(args.Length > 1 ? int.Parse(args[1]) : 3000, carryover: true, yomi: true);
+            RunYomiLab(args.Length > 1 ? int.Parse(args[1]) : 5000);
             return;
         }
         int matches = args.Length > 0 ? int.Parse(args[0]) : 3000;
@@ -31,23 +31,88 @@ class Program
         Console.WriteLine("=== TURNO FLUIDO (overflow + SUPER habilitados) ===");
         RunLab(matches, carryover: true);
         Console.WriteLine();
-        Console.WriteLine("=== MODO YOMI (7 cartas + AP, triángulo explícito) ===");
-        RunLab(matches, carryover: true, yomi: true);
+        Console.WriteLine("=== MODO YOMI (discreto: 2 distancias, 1 acción/turno) ===");
+        RunYomiLab(matches);
     }
 
-    // Una pasada completa del lab. Con carryover, la IA cruza el límite del
-    // turno (45% cuando el presupuesto no alcanza), carga la barra y tira
-    // el Shinku: acá se calibra la economía de la super.
-    // Con yomi, planifica con las 7 cartas y el presupuesto de AP.
-    static void RunLab(int matches, bool carryover, bool yomi = false)
+    // Lab del modo YOMI v2: partidas discretas sobre YomiSim con la IA de
+    // picks. Acá se ve si alguna acción domina, si el juego se estanca en
+    // una distancia y cómo respira la economía de AP.
+    static void RunYomiLab(int matches)
+    {
+        const int n = 9;
+        var usesClose = new int[n];
+        var usesFar = new int[n];
+        var dmgBy = new double[n];
+        int wins0 = 0, wins1 = 0, draws = 0, timeouts = 0, kos = 0;
+        int techs = 0, parries = 0, recoveries = 0, counters = 0;
+        long turnsTotal = 0, closeTurns = 0, totalTurns = 0, apSum = 0, apSamples = 0;
+        int seed = 5000;
+
+        for (int m = 0; m < matches; m++)
+        {
+            var y = new YomiSim();
+            var ai0 = new SimpleAI(seed++);
+            var ai1 = new SimpleAI(seed++);
+            int turn = 0;
+            for (; turn < YomiConfig.TurnsPerRound && !y.Over; turn++)
+            {
+                bool close = y.Close;
+                var a0 = ai0.PickYomi(y, 0);
+                var a1 = ai1.PickYomi(y, 1);
+                var r = y.Resolve(a0, a1);
+                ai0.ObserveYomi(a1, close); // cada IA aprende del pick rival ya revelado
+                ai1.ObserveYomi(a0, close);
+                var uses = close ? usesClose : usesFar;
+                uses[(int)a0]++;
+                uses[(int)a1]++;
+                dmgBy[(int)a0] += r.Dmg1;
+                dmgBy[(int)a1] += r.Dmg0;
+                if (r.Tech) techs++;
+                if (r.Parry0) parries++;
+                if (r.Parry1) parries++;
+                if (r.Rec0Next) recoveries++;
+                if (r.Rec1Next) recoveries++;
+                if (r.Counter0) counters++;
+                if (r.Counter1) counters++;
+                if (close) closeTurns++;
+                totalTurns++;
+                apSum += y.Ap[0] + y.Ap[1];
+                apSamples += 2;
+            }
+            turnsTotal += turn;
+            if (y.Over) kos++;
+            else timeouts++;
+            int w = y.Over ? y.Winner : y.Hp[0] > y.Hp[1] ? 0 : y.Hp[1] > y.Hp[0] ? 1 : -1;
+            if (w == 0) wins0++;
+            else if (w == 1) wins1++;
+            else draws++;
+        }
+
+        Console.WriteLine($"partidas: {matches} · P0 {wins0} · P1 {wins1} · empates {draws} · KO {100.0 * kos / matches:0.0}% · timeout {timeouts}");
+        Console.WriteLine($"turnos/partida: {(double)turnsTotal / matches:0.0} · turnos CERCA: {100.0 * closeTurns / totalTurns:0.0}% · AP promedio: {(double)apSum / apSamples:0.0}/{YomiConfig.ApCap}");
+        Console.WriteLine($"parrys exitosos: {parries} · counters: {counters} · recoveries (shoryu whiff): {recoveries} · techs: {techs}");
+        Console.WriteLine();
+        Console.WriteLine($"{"acción",-12}{"usos cerca",12}{"usos lejos",12}{"dmg/uso",9}");
+        for (int i = 0; i < n; i++)
+        {
+            int total = usesClose[i] + usesFar[i];
+            if (total == 0) continue;
+            Console.WriteLine($"{YomiConfig.Name((YomiAction)i),-12}{usesClose[i],12}{usesFar[i],12}{dmgBy[i] / total,9:0.00}");
+        }
+    }
+
+    // Una pasada completa del lab clásico. Con carryover, la IA cruza el
+    // límite del turno (45% cuando el presupuesto no alcanza), carga la barra
+    // y tira el Shinku: acá se calibra la economía de la super.
+    static void RunLab(int matches, bool carryover)
     {
         SimConfig.CarryoverEnabled = carryover;
-        SimConfig.YomiEnabled = yomi;
-        try { RunLabInner(matches, carryover, yomi); }
-        finally { SimConfig.CarryoverEnabled = false; SimConfig.YomiEnabled = false; }
+        try { RunLabInner(matches, carryover); }
+        finally { SimConfig.CarryoverEnabled = false; }
     }
 
-    static void RunLabInner(int matches, bool carryover, bool yomi)
+    static void RunLabInner(int matches, bool carryover)
     {
         int n = MoveCatalog.All.Length;
         var uses = new int[n];
@@ -61,7 +126,6 @@ class Program
         int totalTurns = 0, totalCrushes = 0, matchesWithCrush = 0;
         double guardSum = 0; long guardSamples = 0;
         long overflowFrames = 0; int supersFull = 0; // economía del turno fluido
-        long apSum = 0; int apSamples = 0;           // economía de AP (yomi)
 
         for (int m = 0; m < matches; m++)
         {
@@ -73,8 +137,8 @@ class Program
             // TurnsPerRound, como el juego real (TIME OVER → juez por vida)
             for (int turn = 0; turn < SimConfig.TurnsPerRound && !sim.Over; turn++)
             {
-                var p0 = yomi ? ai0.PlanYomi(sim, 0, SimConfig.TurnFrames) : ai0.Plan(sim, 0, SimConfig.TurnFrames);
-                var p1 = yomi ? ai1.PlanYomi(sim, 1, SimConfig.TurnFrames) : ai1.Plan(sim, 1, SimConfig.TurnFrames);
+                var p0 = ai0.Plan(sim, 0, SimConfig.TurnFrames);
+                var p1 = ai1.Plan(sim, 1, SimConfig.TurnFrames);
                 foreach (var mv in p0) uses[mv]++;
                 foreach (var mv in p1) uses[mv]++;
                 sim.SetQueue(0, p0);
@@ -103,7 +167,6 @@ class Program
                 sim.OnTurnEnd(1);
                 if (sim.Fighters[0].Super >= SimConfig.SuperMax) supersFull++;
                 if (sim.Fighters[1].Super >= SimConfig.SuperMax) supersFull++;
-                if (yomi) { apSum += sim.Fighters[0].Ap + sim.Fighters[1].Ap; apSamples += 2; }
                 totalTurns++;
             }
 
@@ -119,10 +182,8 @@ class Program
         Console.WriteLine($"turnos/pelea: {(double)totalTurns / matches:0.0}");
         Console.WriteLine($"GUARD CRUSH: {totalCrushes} total · {(double)totalCrushes / matches:0.00}/pelea · {100.0 * matchesWithCrush / matches:0.0}% de peleas con >=1");
         Console.WriteLine($"guardia promedio en juego: {guardSum / guardSamples:0.0}/{SimConfig.GuardMax:0}");
-        if (carryover && !yomi)
+        if (carryover)
             Console.WriteLine($"OVERFLOW: {(double)overflowFrames / matches:0.0} frames/pelea · turnos con barra llena: {supersFull} · supers tiradas: {uses[MoveCatalog.Super]}");
-        if (yomi)
-            Console.WriteLine($"AP promedio al cerrar turno: {(double)apSum / apSamples:0.0}/{SimConfig.ApMax}");
         Console.WriteLine();
         Console.WriteLine($"{"mov",-18}{"usos",8}{"hit",7}{"block",7}{"whiff",7}{"parry",7}{"crush",7}{"hit%",7}{"dmg/uso",9}");
         for (int i = 0; i < n; i++)

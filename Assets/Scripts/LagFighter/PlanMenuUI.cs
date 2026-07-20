@@ -28,24 +28,20 @@ namespace LagFighter
             // MoveCatalog.LowKick, MoveCatalog.Crouch,
         };
 
-        // Modo YOMI: 7 cartas en una fila. DashF es la carta "DASH ±": al
-        // clickearla se abre en ATRÁS / ADELANTE (DashB no ocupa slot).
+        // Modo YOMI v2 (discreto): 8 acciones en una fila, UNA por turno —
+        // click en la carta = jugarla. La dirección de dash/salto la decide
+        // la distancia actual (cerca: te vas · lejos: entrás).
         static readonly int[] YomiOrder =
         {
-            MoveCatalog.DashF, MoveCatalog.JumpF, MoveCatalog.WalkB,
-            MoveCatalog.AttackA, MoveCatalog.Strong, MoveCatalog.YomiGrab,
-            MoveCatalog.Hadouken,
+            (int)YomiAction.Jab, (int)YomiAction.Kick, (int)YomiAction.Grab,
+            (int)YomiAction.Shoryu, (int)YomiAction.Parry, (int)YomiAction.Dash,
+            (int)YomiAction.Jump, (int)YomiAction.Charge,
         };
 
         int[] _order = ClassicOrder;
         int _cols = 6;
         bool _builtYomi;
         RectTransform _canvasRt;
-        // popup del dash (solo yomi): dos botones ATRÁS / ADELANTE
-        GameObject _dashPop;
-        Image _dashBackBtn, _dashFwdBtn;
-        bool _dashOpen;
-        int _dashSlot = -1;
 
         MatchController _mc;
         Font _font;
@@ -94,8 +90,6 @@ namespace LagFighter
             _builtYomi = SimConfig.YomiEnabled;
             _order = _builtYomi ? YomiOrder : ClassicOrder;
             _cols = _builtYomi ? YomiOrder.Length : 6;
-            _dashSlot = _builtYomi ? System.Array.IndexOf(YomiOrder, MoveCatalog.DashF) : -1;
-            _dashOpen = false;
             _sel = 0;
             Build(_canvasRt);
             _root.SetActive(false);
@@ -116,25 +110,51 @@ namespace LagFighter
             return new Color(0.3f, 0.7f, 0.45f);
         }
 
-        // En YOMI las tags cantan el triángulo: qué le gana y qué la castiga.
-        static string YomiTag(int mi)
+        // En YOMI la tag canta la fila de la matriz EN la distancia actual:
+        // qué le gana y qué la castiga, sin letra chica.
+        static string YomiTag(YomiAction a, bool close)
         {
-            switch (mi)
+            if (close)
+                switch (a)
+                {
+                    case YomiAction.Jab: return "GANA A: KICK, AGARRE, SALTO · PIERDE CON: PARRY, SHORYU";
+                    case YomiAction.Kick: return "GANA A: AGARRE, CARGAR · CAZA EL DASH · PIERDE CON: JAB, PARRY";
+                    case YomiAction.Grab: return "ROMPE EL PARRY, TIRA A LEJOS · PIERDE CON: GOLPES";
+                    case YomiAction.Parry: return "BLOQUEA GOLPES: +1 AP Y DEVUELVE 1 · PIERDE CON: AGARRE, SHORYU";
+                    case YomiAction.Shoryu: return "LE GANA A TODO DE CERCA · SI SE VAN: WHIFF Y RECOVERY";
+                    case YomiAction.Dash: return "TE VAS A LEJOS · ESQUIVA JAB, AGARRE Y SHORYU · KICK TE CAZA";
+                    case YomiAction.Jump: return "ESCAPÁS SALTANDO · ESQUIVA KICK Y AGARRE · JAB TE BAJA";
+                    default: return "+2 AP SI NO TE PEGAN · TODO GOLPE ES COUNTER (+1)";
+                }
+            switch (a)
             {
-                case MoveCatalog.AttackA: return "GANA A AGARRE · PIERDE CON BLOQUEO";
-                case MoveCatalog.Strong: return "ANTIAÉREO · PIERDE CON BLOQUEO y AGARRE cerca";
-                case MoveCatalog.YomiGrab: return "ROMPE BLOQUEO · PIERDE CON GOLPES";
-                case MoveCatalog.WalkB: return "PARA GOLPES · +1 AP · PIERDE CON AGARRE";
-                case MoveCatalog.JumpF: return "SALTA HADOUKENS y AGARRES · PIERDE CON GOLPE FUERTE";
-                case MoveCatalog.Hadouken: return "CONTROLA LEJOS · SE SALTA";
-                case MoveCatalog.DashF: return "MOVERTE ELIGE EL TRIÁNGULO · no bloquea";
-                default: return "";
+                case YomiAction.Jab: case YomiAction.Grab: return "NO LLEGA DESDE LEJOS";
+                case YomiAction.Kick: return "LA ZONEADORA: CAZA DASH Y CARGAR · PIERDE CON: SALTO, PARRY";
+                case YomiAction.Parry: return "BLOQUEA KICK Y PATADA: +1 AP Y DEVUELVE 1";
+                case YomiAction.Shoryu: return "SOLO LECTURA: BAJA AL SALTO ENTRANTE · SI NO, WHIFF Y RECOVERY";
+                case YomiAction.Dash: return "ENTRÁS · GRATIS VS PARRY/CARGAR · KICK TE FRENA";
+                case YomiAction.Jump: return "ENTRÁS CON PATADA · LE GANA A KICK · PARRY LA BLOQUEA";
+                default: return "+2 AP SI NO TE PEGAN · KICK TE CASTIGA";
+            }
+        }
+
+        static string YomiDesc(YomiAction a)
+        {
+            switch (a)
+            {
+                case YomiAction.Jab: return "El golpe rápido y seguro: 1 de daño. Solo llega de cerca.";
+                case YomiAction.Kick: return "2 de daño y llega a AMBAS distancias, pero es lenta: el jab la gana de cerca.";
+                case YomiAction.Grab: return "2 de daño, derriba y manda el combate a LEJOS. La respuesta al que parrea.";
+                case YomiAction.Parry: return "La lectura defensiva: si comés un golpe con el parry listo, lo devolvés.";
+                case YomiAction.Shoryu: return "3 de daño, derriba, imparable de cerca. Carísimo, y si whiffea perdés el turno siguiente.";
+                case YomiAction.Dash: return "Cambiás de distancia por 1 AP. La dirección la decide dónde estás parado.";
+                case YomiAction.Jump: return "El cambio de distancia con patada (1): entra pegando desde lejos.";
+                default: return "No hacés nada… y juntás 2 AP. El rival lo sabe: cargar es una apuesta.";
             }
         }
 
         static string CardTag(int mi)
         {
-            if (SimConfig.YomiEnabled) return YomiTag(mi);
             var m = MoveCatalog.All[mi];
             switch (mi)
             {
@@ -156,18 +176,28 @@ namespace LagFighter
             }
         }
 
-        // Nombre en la carta: en YOMI son cortos y de rol (el dash es "DASH ±"
-        // porque al clickearlo se abre en atrás/adelante).
-        string DisplayName(int pos, int mi)
+        // Nombre en la carta: en YOMI el valor de _order es una YomiAction.
+        string DisplayName(int mi)
         {
-            if (!_builtYomi) return MoveCatalog.All[mi].Name.ToUpperInvariant();
-            switch (mi)
+            return _builtYomi
+                ? YomiConfig.Name((YomiAction)mi).ToUpperInvariant()
+                : MoveCatalog.All[mi].Name.ToUpperInvariant();
+        }
+
+        // color de categoría según el modo (en YOMI, por acción)
+        Color CardColor(int v)
+        {
+            if (!_builtYomi) return CategoryColor(v);
+            switch ((YomiAction)v)
             {
-                case MoveCatalog.DashF: return pos == _dashSlot ? "DASH ±" : "DASH +";
-                case MoveCatalog.JumpF: return "SALTO";
-                case MoveCatalog.WalkB: return "BLOQUEO";
-                case MoveCatalog.AttackA: return "JAB";
-                default: return MoveCatalog.All[mi].Name.ToUpperInvariant();
+                case YomiAction.Jab: return new Color(0.9f, 0.32f, 0.24f);
+                case YomiAction.Kick: return new Color(0.95f, 0.55f, 0.2f);
+                case YomiAction.Grab: return new Color(0.85f, 0.3f, 0.75f);
+                case YomiAction.Parry: return new Color(0.25f, 0.75f, 0.95f);
+                case YomiAction.Shoryu: return new Color(0.95f, 0.7f, 0.15f);
+                case YomiAction.Dash: return new Color(0.2f, 0.72f, 0.72f);
+                case YomiAction.Jump: return new Color(0.55f, 0.8f, 0.35f);
+                default: return new Color(1f, 0.8f, 0.3f); // cargar: dorado
             }
         }
 
@@ -199,11 +229,10 @@ namespace LagFighter
             for (int pos = 0; pos < _order.Length; pos++)
             {
                 int mi = _order[pos];
-                var m = MoveCatalog.All[mi];
                 int col = pos % _cols, row = pos / _cols;
                 float x = -totalW / 2f + CardW / 2f + col * (CardW + Gap);
                 float y = totalH / 2f - CardH / 2f - row * (CardH + Gap);
-                var cat = CategoryColor(mi);
+                var cat = CardColor(mi);
 
                 // carta compacta: solo el nombre, grande. La data vive en el
                 // panel de info de la derecha (se llena con el hover).
@@ -216,7 +245,7 @@ namespace LagFighter
                 _cardEdge[pos] = MakeImage(card.rectTransform, "Edge", new Vector2(0f, 0.5f), new Vector2(3f, 0f),
                     new Vector2(6f, CardH - 6f), new Color(cat.r, cat.g, cat.b, 0.9f));
 
-                _cardName[pos] = MakeText(card.rectTransform, "Name", DisplayName(pos, mi), new Vector2(0.5f, 0.5f), new Vector2(6f, 0f),
+                _cardName[pos] = MakeText(card.rectTransform, "Name", DisplayName(mi), new Vector2(0.5f, 0.5f), new Vector2(6f, 0f),
                     new Vector2(CardW - 26f, 30f), 8, new Color(1f, 1f, 1f, 0.92f), TextAnchor.MiddleCenter);
                 _cardName[pos].font = UIFonts.Pixel;
 
@@ -225,10 +254,10 @@ namespace LagFighter
                     new Vector2(20f, 16f), 8, new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleLeft);
                 keyT.font = UIFonts.Pixel;
 
-                // YOMI: el costo en AP abajo a la derecha (0 = gratis: bloqueo)
+                // YOMI: el costo en AP abajo a la derecha (0 = gratis: cargar)
                 if (_builtYomi)
                 {
-                    int cost = MoveCatalog.ApCost(mi);
+                    int cost = YomiConfig.Cost((YomiAction)mi);
                     var costT = MakeText(card.rectTransform, "Cost", cost == 0 ? "GRATIS" : $"{cost} AP",
                         new Vector2(1f, 0f), new Vector2(-8f, 10f), new Vector2(60f, 14f), 8,
                         new Color(0.5f, 0.95f, 1f, 0.85f), TextAnchor.MiddleRight);
@@ -247,28 +276,6 @@ namespace LagFighter
                     new Vector2(22f, 26f), 20, new Color(1f, 0.6f, 0.15f, 0.95f), TextAnchor.MiddleCenter);
                 _cardOvfMark[pos].fontStyle = FontStyle.Bold;
                 _cardOvfMark[pos].gameObject.SetActive(false);
-            }
-
-            // popup del DASH (yomi): dos botones sobre la carta, ATRÁS / ADELANTE
-            if (_builtYomi && _dashSlot >= 0)
-            {
-                _dashPop = new GameObject("DashPop", typeof(RectTransform));
-                var dpRt = _dashPop.GetComponent<RectTransform>();
-                dpRt.SetParent(_cardRt[_dashSlot], false);
-                dpRt.anchorMin = dpRt.anchorMax = new Vector2(0.5f, 1f);
-                dpRt.anchoredPosition = new Vector2(78f, 28f);
-                dpRt.sizeDelta = Vector2.zero;
-                _dashBackBtn = MakeImage(dpRt, "Back", new Vector2(0.5f, 0.5f), new Vector2(-78f, 0f),
-                    new Vector2(150f, 40f), new Color(0.16f, 0.3f, 0.3f, 0.98f));
-                var bt = MakeText(_dashBackBtn.rectTransform, "T", "« ATRÁS (bait)", new Vector2(0.5f, 0.5f), Vector2.zero,
-                    new Vector2(146f, 30f), 8, Color.white, TextAnchor.MiddleCenter);
-                bt.font = UIFonts.Pixel;
-                _dashFwdBtn = MakeImage(dpRt, "Fwd", new Vector2(0.5f, 0.5f), new Vector2(78f, 0f),
-                    new Vector2(150f, 40f), new Color(0.16f, 0.3f, 0.3f, 0.98f));
-                var ft = MakeText(_dashFwdBtn.rectTransform, "T", "ADELANTE »", new Vector2(0.5f, 0.5f), Vector2.zero,
-                    new Vector2(146f, 30f), 8, Color.white, TextAnchor.MiddleCenter);
-                ft.font = UIFonts.Pixel;
-                _dashPop.SetActive(false);
             }
 
             // LISTO y BORRAR apilados a la izquierda de la grilla
@@ -344,9 +351,16 @@ namespace LagFighter
                 new Vector2(900f, 22f), 14, new Color(0.5f, 1f, 0.6f), TextAnchor.MiddleRight);
             _status.rectTransform.pivot = new Vector2(1f, 0.5f);
             MakeText(rootRt, "Help", _builtYomi
-                    ? "GOLPE gana a AGARRE · AGARRE rompe BLOQUEO · BLOQUEO para GOLPES — y de lejos: HADOUKEN › GOLPE FUERTE › SALTO › HADOUKEN\nclick o 1-7 agrega · Backspace borra · ESPACIO cierra el turno · los AP no gastados se acumulan (tope 6)"
+                    ? "UNA acción por turno: click (o 1-8) la juega YA · de cerca: JAB › AGARRE › PARRY › JAB · el SHORYU gana pero whiffear = recovery\nlos AP no gastados se acumulan (tope 6) · CARGAR junta +2 pero todo golpe es counter"
                     : "click o 1-9 agrega  ·  Backspace borra  ·  ESPACIO cierra el turno\narrastrá tu timeline para mover el ghost cuadro a cuadro  ·  click derecho en una ficha la borra",
                 new Vector2(0.5f, 0f), new Vector2(0f, 14f), new Vector2(1300f, 36f), 13, new Color(1f, 1f, 1f, 0.45f), TextAnchor.MiddleCenter);
+
+            // en YOMI no hay cola: sin LISTO ni BORRAR (la carta se juega al click)
+            if (_builtYomi)
+            {
+                _doneBtn.gameObject.SetActive(false);
+                _undoBtn.gameObject.SetActive(false);
+            }
         }
 
         // Rango de ventaja REAL: la ventaja depende de en qué frame activo
@@ -383,7 +397,6 @@ namespace LagFighter
             if (_builtYomi != SimConfig.YomiEnabled) Rebuild(); // el modo cambió: otra grilla
             _root.SetActive(true);
             _active = true;
-            _dashOpen = false;
             RefreshWake();
             Highlight(_sel);
         }
@@ -401,13 +414,11 @@ namespace LagFighter
         public void Close()
         {
             _active = false;
-            CloseDash();
             if (_root != null) _root.SetActive(false);
             RangePreview.Clear();
         }
 
-        public void SetPrediction(PlanPreview g, int framesUsed, int available,
-            int apUsed = 0, int apBudget = 0, int oppAp = 0)
+        public void SetPrediction(PlanPreview g, int framesUsed, int available)
         {
             int over = Mathf.Max(0, framesUsed - available);   // frames que cruzan al próximo turno
             int left = Mathf.Max(0, available - framesUsed);
@@ -420,22 +431,10 @@ namespace LagFighter
             if (g.DamageIfStill > 0f) extra += $"  ·  pegaría {g.DamageIfStill:0} si no reacciona";
             if (g.BlockedCount > 0) extra += $"  ·  {g.BlockedCount} bloqueado(s) si se queda en neutral";
             if (over > 0) extra += $"  ·  » el último move CRUZA {over}f al próximo turno (quedás comprometido)";
-            if (SimConfig.YomiEnabled)
-            {
-                // en YOMI el presupuesto que se lee es el de AP; los frames
-                // quedan de fondo (el turno sigue durando 60f)
-                int apLeft = Mathf.Max(0, apBudget - apUsed);
-                _status.text = $"AP {apUsed}/{apBudget} — te quedan {apLeft}{stunNote}  ·  rival: {oppAp} AP{extra}";
-                _status.color = over > 0 ? new Color(1f, 0.6f, 0.15f)
-                    : apLeft == 0 ? new Color(1f, 0.85f, 0.3f) : new Color(0.5f, 1f, 0.6f);
-            }
-            else
-            {
-                _status.text = $"{framesUsed}/{available} frames planificados{stunNote} — quedan {left}{extra}";
-                _status.color = over > 0 ? new Color(1f, 0.6f, 0.15f)
-                    : left == 0 ? new Color(1f, 0.85f, 0.3f)
-                    : available < SimConfig.TurnFrames ? new Color(1f, 0.65f, 0.4f) : new Color(0.5f, 1f, 0.6f);
-            }
+            _status.text = $"{framesUsed}/{available} frames planificados{stunNote} — quedan {left}{extra}";
+            _status.color = over > 0 ? new Color(1f, 0.6f, 0.15f)
+                : left == 0 ? new Color(1f, 0.85f, 0.3f)
+                : available < SimConfig.TurnFrames ? new Color(1f, 0.65f, 0.4f) : new Color(0.5f, 1f, 0.6f);
 
             // sin órdenes, confirmar es jugada válida (quieto bloqueando):
             // que el botón lo diga, no que parezca un LISTO en falso
@@ -453,6 +452,20 @@ namespace LagFighter
         void RefreshCardStates()
         {
             if (_cardOverlay == null) return;
+            if (_builtYomi)
+            {
+                // legalidad de la matriz: distancia + AP + recovery
+                var y = _mc.Yomi;
+                for (int i = 0; i < _order.Length; i++)
+                {
+                    bool ok = y != null && y.Legal(0, (YomiAction)_order[i]);
+                    _cardOverlay[i].gameObject.SetActive(!ok);
+                    _cardOvfMark[i].gameObject.SetActive(false);
+                    var cc = CardColor(_order[i]);
+                    _cardEdge[i].color = new Color(cc.r, cc.g, cc.b, 0.9f);
+                }
+                return;
+            }
             int used = _mc.PlanFramesUsed(_mc.Picker);
             int avail = _mc.PlanFramesAvailable(_mc.Picker);
             for (int i = 0; i < _order.Length; i++)
@@ -482,16 +495,37 @@ namespace LagFighter
             }
             RefreshCardStates();
 
-            // panel de info: toda la data que antes vivía apretada en la carta
             int mi = _order[_sel];
-            var m = MoveCatalog.All[mi];
-            var cat = CategoryColor(mi);
-            _detailTitle.text = DisplayName(_sel, mi);
+            var cat = CardColor(mi);
+            _detailTitle.text = DisplayName(mi);
             _detailTitle.color = new Color(cat.r * 0.5f + 0.5f, cat.g * 0.5f + 0.5f, cat.b * 0.5f + 0.5f);
 
+            // panel de info YOMI: costo, daño, y la fila de la matriz en la
+            // distancia actual — sin framedata (acá no existen los frames)
+            if (_builtYomi)
+            {
+                var act = (YomiAction)mi;
+                int cost = YomiConfig.Cost(act);
+                int dmgY = YomiConfig.Damage(act);
+                _detailFrames.text = (cost == 0 ? "GRATIS" : $"CUESTA {cost} AP") +
+                                     (dmgY > 0 ? $"   ·   {dmgY} DMG" : "");
+                _segS.rectTransform.sizeDelta = new Vector2(0f, 8f);
+                _segA.rectTransform.sizeDelta = new Vector2(0f, 8f);
+                _segR.rectTransform.sizeDelta = new Vector2(0f, 8f);
+                bool close = _mc.Yomi != null && _mc.Yomi.Close;
+                _detailAdv.text = close ? "DISTANCIA ACTUAL: CERCA" : "DISTANCIA ACTUAL: LEJOS";
+                _detailTag.text = YomiTag(act, close);
+                _detailTag.color = new Color(cat.r * 0.6f + 0.4f, cat.g * 0.6f + 0.4f, cat.b * 0.6f + 0.4f);
+                _detail.text = YomiDesc(act);
+                _status.text = "elegí UNA acción: click la juega ya · el rival ya eligió en secreto";
+                _status.color = new Color(0.5f, 1f, 0.6f);
+                return;
+            }
+
+            // panel de info clásico: framedata con mini-barra S/A/R
+            var m = MoveCatalog.All[mi];
             string dmg = m.TotalDamage > 0f ? $"   ·   {m.TotalDamage:0} DMG" + (m.Hits.Length > 1 ? $" ({m.Hits.Length} hits)" : "") : "";
-            string apStr = _builtYomi ? (MoveCatalog.ApCost(mi) == 0 ? "GRATIS  ·  " : $"{MoveCatalog.ApCost(mi)} AP  ·  ") : "";
-            _detailFrames.text = $"{apStr}{m.Startup} / {m.Active} / {m.Recovery}  ·  {m.Total}f{dmg}";
+            _detailFrames.text = $"{m.Startup} / {m.Active} / {m.Recovery}  ·  {m.Total}f{dmg}";
 
             float px = _segW / m.Total;
             _segS.rectTransform.sizeDelta = new Vector2(m.Startup * px, 8f);
@@ -535,46 +569,26 @@ namespace LagFighter
             if (_wakeBtn.gameObject.activeSelf) _wakeBtn.color = HoverTint(_wakeBtn, WakeC, mp);
             RefreshSuper();
 
-            // popup del DASH abierto: captura la entrada hasta elegir dirección
-            if (_dashOpen)
-            {
-                var dashBase = new Color(0.16f, 0.3f, 0.3f, 0.98f);
-                _dashBackBtn.color = HoverTint(_dashBackBtn, dashBase, mp);
-                _dashFwdBtn.color = HoverTint(_dashFwdBtn, dashBase, mp);
-                if (GameInput.ClickPressed())
-                {
-                    var dp = GameInput.MousePos();
-                    if (RectTransformUtility.RectangleContainsScreenPoint(_dashBackBtn.rectTransform, dp, null))
-                        TryAdd(MoveCatalog.DashB);
-                    else if (RectTransformUtility.RectangleContainsScreenPoint(_dashFwdBtn.rectTransform, dp, null))
-                        TryAdd(MoveCatalog.DashF);
-                    CloseDash();
-                    Highlight(_sel);
-                    return;
-                }
-                if (GameInput.LeftPressed()) { TryAdd(MoveCatalog.DashB); CloseDash(); Highlight(_sel); return; }
-                if (GameInput.RightPressed()) { TryAdd(MoveCatalog.DashF); CloseDash(); Highlight(_sel); return; }
-                if (GameInput.CancelPressed() || GameInput.UndoPressed() || GameInput.AddPressed()) { CloseDash(); return; }
-            }
-
             if (GameInput.ClickPressed())
             {
                 var pos = GameInput.MousePos();
                 for (int i = 0; i < _cardRt.Length; i++)
                 {
                     if (!RectTransformUtility.RectangleContainsScreenPoint(_cardRt[i], pos, null)) continue;
-                    if (_builtYomi && i == _dashSlot) { OpenDash(); Highlight(i); return; }
+                    if (_builtYomi) { TryPlayYomi(i); return; } // una acción = el turno entero
                     TryAdd(_order[i]);
                     Highlight(i);
                     return;
                 }
-                if (RectTransformUtility.RectangleContainsScreenPoint(_undoBtn.rectTransform, pos, null))
+                if (_undoBtn.gameObject.activeSelf &&
+                    RectTransformUtility.RectangleContainsScreenPoint(_undoBtn.rectTransform, pos, null))
                 {
                     TryUndo();
                     Highlight(_sel);
                     return;
                 }
-                if (RectTransformUtility.RectangleContainsScreenPoint(_doneBtn.rectTransform, pos, null))
+                if (_doneBtn.gameObject.activeSelf &&
+                    RectTransformUtility.RectangleContainsScreenPoint(_doneBtn.rectTransform, pos, null))
                 {
                     SfxLib.Play(SfxLib.Kind.UiClick, 0.8f);
                     _mc.PlanConfirm();
@@ -605,31 +619,27 @@ namespace LagFighter
             int num = GameInput.NumberPressed();
             if (num > 0 && num <= _order.Length)
             {
-                if (_builtYomi && num - 1 == _dashSlot) { OpenDash(); Highlight(num - 1); }
+                if (_builtYomi) { Highlight(num - 1); TryPlayYomi(num - 1); }
                 else { TryAdd(_order[num - 1]); Highlight(num - 1); }
             }
             else if (GameInput.AddPressed())
             {
-                if (_builtYomi && _sel == _dashSlot) OpenDash();
-                else TryAdd(_order[_sel]);
+                if (_builtYomi) { TryPlayYomi(_sel); return; }
+                TryAdd(_order[_sel]);
                 Highlight(_sel);
             }
+            if (_builtYomi) return; // sin cola: no hay BORRAR ni cerrar turno aparte
             if (GameInput.UndoPressed()) { TryUndo(); Highlight(_sel); }
             if (GameInput.EndTurnPressed()) _mc.PlanConfirm();
         }
 
-        void OpenDash()
+        // YOMI: jugar la carta seleccionada resuelve el turno entero
+        void TryPlayYomi(int idx)
         {
-            if (_dashPop == null) return;
-            _dashOpen = true;
-            _dashPop.SetActive(true);
-            SfxLib.Play(SfxLib.Kind.UiTick, 0.5f);
-        }
-
-        void CloseDash()
-        {
-            _dashOpen = false;
-            if (_dashPop != null) _dashPop.SetActive(false);
+            var act = (YomiAction)_order[idx];
+            bool ok = _mc.Yomi != null && _mc.Yomi.Legal(0, act);
+            SfxLib.Play(ok ? SfxLib.Kind.UiClick : SfxLib.Kind.UiCancel, ok ? 0.8f : 0.5f);
+            if (ok) _mc.YomiPick(act);
         }
 
         // botón SUPER: porcentaje mientras carga, dorado latiendo cuando está lista
