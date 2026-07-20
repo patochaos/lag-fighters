@@ -13,6 +13,7 @@ namespace LagFighter
 
         Transform _rig;
         Transform _torso, _head, _armF, _armB, _legF, _legB;
+        Renderer _armFR, _fistFR, _legFR, _footFR; // para el tinte de fase del limb que ataca
         readonly List<Renderer> _tintRenderers = new List<Renderer>();
         readonly List<Color> _origColors = new List<Color>();
         TrailRenderer _trailArm, _trailLeg;
@@ -70,11 +71,25 @@ namespace LagFighter
             _armB = Part(ArmBPos, new Vector3(0.15f, 0.15f, 0.5f), dark);
             _legF = Part(LegFPos, new Vector3(0.17f, 0.95f, 0.2f), dark);
             _legB = Part(LegBPos, new Vector3(0.17f, 0.95f, 0.2f), dark);
+            _armFR = _armF.GetComponent<Renderer>();
+            _legFR = _legF.GetComponent<Renderer>();
+
+            // puños y pies: bloques brillantes en la punta de cada limb. Son
+            // el punto de contacto real de los golpes, así que destacan igual
+            // que la cabeza y viajan gratis con la rotación del limb padre.
+            var bright = baseColor * 1.15f;
+            var fistF = Extremity(_armF, new Vector3(0f, 0f, 0.66f), new Vector3(0.22f, 0.22f, 0.22f), bright);
+            Extremity(_armB, new Vector3(0f, 0f, 0.68f), new Vector3(0.2f, 0.2f, 0.2f), bright);
+            var footF = Extremity(_legF, new Vector3(0f, -0.52f, 0.15f), new Vector3(0.24f, 0.13f, 0.34f), bright);
+            Extremity(_legB, new Vector3(0f, -0.52f, 0.15f), new Vector3(0.24f, 0.13f, 0.34f), bright);
+            _fistFR = fistF.GetComponent<Renderer>();
+            _footFR = footF.GetComponent<Renderer>();
 
             if (!_ghostMode)
             {
-                _trailArm = MakeTrail(_armF, baseColor);
-                _trailLeg = MakeTrail(_legF, baseColor);
+                // los trails salen del puño/pie: marcan el punto de contacto
+                _trailArm = MakeTrail(fistF, baseColor);
+                _trailLeg = MakeTrail(footF, baseColor);
 
                 // sombra de contacto: queda en el piso cuando el rig salta,
                 // así se lee de un vistazo dónde va a caer
@@ -113,6 +128,24 @@ namespace LagFighter
             MatLib.Apply(go, color);
             var r = go.GetComponent<Renderer>();
             _tintRenderers.Add(r);
+            _origColors.Add(color);
+            return go.transform;
+        }
+
+        // Cubo hijo de un limb (puño/pie): hereda posición y rotación del
+        // padre. localPos va en unidades locales del padre; worldSize se
+        // compensa contra la escala no uniforme del limb.
+        Transform Extremity(Transform limb, Vector3 localPos, Vector3 worldSize, Color color)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.transform.SetParent(limb, false);
+            var ps = limb.localScale;
+            go.transform.localScale = new Vector3(worldSize.x / ps.x, worldSize.y / ps.y, worldSize.z / ps.z);
+            go.transform.localPosition = localPos;
+            var col = go.GetComponent<Collider>();
+            if (col != null) Destroy(col);
+            MatLib.Apply(go, color);
+            _tintRenderers.Add(go.GetComponent<Renderer>());
             _origColors.Add(color);
             return go.transform;
         }
@@ -170,6 +203,28 @@ namespace LagFighter
                 else pk = m.Recovery <= 0 ? 0f : 1f - (phase - m.Startup - m.Active) / m.Recovery;
             }
 
+            // Curva de ataque con anticipación (usar con LerpUnclamped):
+            // startup = CARGA hacia atrás (t negativo), primeros frames activos
+            // = SNAP a extensión con overshoot, recovery = vuelta lenta (1-t²,
+            // se queda extendido: se LEE que es castigable). pk lineal queda
+            // para los moves de movimiento.
+            float atk = 0f;
+            if (m != null)
+            {
+                if (phase < m.Startup)
+                    atk = m.Startup <= 0 ? 1f : -0.45f * Mathf.Sin(phase / m.Startup * Mathf.PI * 0.5f);
+                else if (phase < m.Startup + m.Active)
+                {
+                    float ap = m.Active <= 0 ? 1f : (phase - m.Startup) / m.Active;
+                    atk = 1f + 0.12f * Mathf.Max(0f, 1f - ap * 3f);
+                }
+                else
+                {
+                    float rp = m.Recovery <= 0 ? 1f : (phase - m.Startup - m.Active) / m.Recovery;
+                    atk = 1f - rp * rp;
+                }
+            }
+
             bool stunned = sim.IsStunned(_index);
             bool down = stunned && f.Stun == StunKind.Knockdown;
             bool loser = sim.Over && sim.Winner != _index;
@@ -186,6 +241,7 @@ namespace LagFighter
             float breathe = Mathf.Sin(Time.time * 2.5f + _index) * 0.015f;
             var armF = ArmFPos; var armB = ArmBPos; var legF = LegFPos; var legB = LegBPos;
             var legFRot = Quaternion.identity; var legBRot = Quaternion.identity;
+            var torsoRot = Quaternion.identity; var head = HeadPos;
             float rigPitch = 0f, rigZOff = 0f, spinYaw = 0f, crouchY = 0f;
 
             if (m != null && !stunned)
@@ -218,23 +274,33 @@ namespace LagFighter
                         }
                         break;
                     case AnimKind.AttackA:
-                        armF = Vector3.Lerp(ArmFPos, new Vector3(0.1f, 1.42f, 0.78f), pk);
-                        rigZOff = pk * 0.1f;
+                        // jab: carga atrás en startup, snap al frente en activos,
+                        // el torso y la cabeza acompañan el golpe
+                        armF = Vector3.LerpUnclamped(ArmFPos, new Vector3(0.1f, 1.42f, 0.78f), atk);
+                        rigZOff = Mathf.Max(0f, atk) * 0.1f;
+                        torsoRot = Quaternion.Euler(0f, atk * 16f, 0f);
+                        head = HeadPos + new Vector3(0f, 0f, atk * 0.05f);
                         break;
                     case AnimKind.AttackB:
-                        legF = Vector3.Lerp(LegFPos, new Vector3(0.08f, 0.9f, 0.55f), pk);
-                        legFRot = Quaternion.Euler(Mathf.Lerp(0f, 80f, pk), 0f, 0f);
-                        rigPitch = -pk * 10f;
+                        // barrida: la pierna se arma atrás y barre con snap
+                        legF = Vector3.LerpUnclamped(LegFPos, new Vector3(0.08f, 0.9f, 0.55f), atk);
+                        legFRot = Quaternion.Euler(Mathf.LerpUnclamped(0f, 80f, atk), 0f, 0f);
+                        rigPitch = -Mathf.Max(0f, atk) * 10f;
+                        torsoRot = Quaternion.Euler(Mathf.Max(0f, atk) * 10f, 0f, 0f);
                         break;
                     case AnimKind.Fireball:
-                        // las dos manos juntas al frente
-                        armF = Vector3.Lerp(ArmFPos, new Vector3(0.06f, 1.2f, 0.7f), pk);
-                        armB = Vector3.Lerp(ArmBPos, new Vector3(-0.06f, 1.2f, 0.66f), pk);
-                        rigZOff = pk * 0.06f;
+                        // carga: las manos van a la cadera en startup y DISPARAN
+                        // juntas al frente en el frame de spawn
+                        armF = Vector3.LerpUnclamped(ArmFPos, new Vector3(0.06f, 1.2f, 0.7f), atk);
+                        armB = Vector3.LerpUnclamped(ArmBPos, new Vector3(-0.06f, 1.2f, 0.66f), atk);
+                        rigZOff = Mathf.Max(0f, atk) * 0.06f;
+                        torsoRot = Quaternion.Euler(0f, atk * 10f, 0f);
                         break;
                     case AnimKind.Dragon:
-                        // uppercut: brazo al cielo, cuerpo subiendo
-                        armF = Vector3.Lerp(ArmFPos, new Vector3(0.1f, 2.05f, 0.3f), Mathf.Clamp01(phase / Mathf.Max(1, m.Startup + m.Active)));
+                        // uppercut: se agacha un toque en la carga y sube con el
+                        // brazo al cielo; en recovery el brazo baja (vulnerable)
+                        armF = Vector3.LerpUnclamped(ArmFPos, new Vector3(0.1f, 2.05f, 0.3f), Mathf.Max(atk, -0.3f));
+                        crouchY = atk < 0f ? atk * 0.5f : 0f;
                         legFRot = Quaternion.Euler(45f, 0f, 0f);
                         rigPitch = -6f;
                         break;
@@ -288,7 +354,11 @@ namespace LagFighter
                 }
             }
 
-            if (stunned && !down) rigPitch = f.Stun == StunKind.Blockstun ? -6f : -16f;
+            if (stunned && !down)
+            {
+                rigPitch = f.Stun == StunKind.Blockstun ? -6f : -16f;
+                if (f.Stun == StunKind.Hitstun) head = HeadPos + new Vector3(0f, 0.02f, -0.1f); // cabeza sacudida
+            }
 
             // festejo: saltitos + burst dorado una sola vez + público eufórico
             float winBounce = 0f;
@@ -307,7 +377,24 @@ namespace LagFighter
             float lieAngle = down || loser ? -85f : rigPitch;
             var wantRot = Quaternion.Euler(lieAngle, _faceYaw + spinYaw, 0f);
             _rig.localRotation = spinYaw > 0.01f ? wantRot : Quaternion.Slerp(_rig.localRotation, wantRot, 1f - Mathf.Exp(-9f * dt));
-            _rig.localPosition = new Vector3(0f, (down || loser) ? 0.25f : airY + breathe + crouchY + winBounce, 0f);
+
+            // sacudida corta al comer un golpe (el envelope reusa el flash del hit)
+            float shake = stunned && !down && f.Stun == StunKind.Hitstun
+                ? Mathf.Sin(Time.time * 68f) * 0.05f * _flash : 0f;
+            _rig.localPosition = new Vector3(shake, (down || loser) ? 0.25f : airY + breathe + crouchY + winBounce, 0f);
+
+            // squash & stretch del salto: estira al despegar, comprime cayendo
+            // y aplasta 5f al aterrizar; el volumen se conserva en x/z
+            float sy = 1f;
+            if (m != null && !stunned && m.HasAir)
+            {
+                if (phase >= m.AirStart && phase < m.AirEnd)
+                    sy = 1f + 0.1f * Mathf.Cos((phase - m.AirStart) / (float)(m.AirEnd - m.AirStart) * Mathf.PI);
+                else if (phase >= m.AirEnd && phase < m.AirEnd + 5f)
+                    sy = 0.88f + 0.12f * ((phase - m.AirEnd) / 5f);
+            }
+            float sxz = 1f / Mathf.Sqrt(sy);
+            _rig.localScale = new Vector3(sxz, sy, sxz);
 
             if (winner) armF = new Vector3(0.12f, 1.7f, 0.1f);
 
@@ -333,6 +420,8 @@ namespace LagFighter
                 armB = new Vector3(-0.1f, 1.44f, 0.36f);
             }
 
+            _torso.localRotation = torsoRot;
+            _head.localPosition = head;
             _armF.localPosition = armF + new Vector3(0f, 0f, rigZOff);
             _armB.localPosition = armB;
             _legF.localPosition = legF;
@@ -340,33 +429,56 @@ namespace LagFighter
             _legF.localRotation = legFRot;
             _legB.localRotation = legBRot;
 
-            // trails encendidos solo mientras hay una HitWindow REAL viva
-            // (antes usaban Startup/Active genéricos: el salto "brillaba" 28f
-            // cuando la patada pega 8)
+            // ventana de golpe REAL viva y ventana por venir, compartidas por
+            // los trails y el tinte de fase (antes los trails usaban
+            // Startup/Active genéricos: el salto "brillaba" 28f cuando la
+            // patada pega 8)
+            bool liveWindow = false, windowPending = false;
+            if (m != null && !stunned && m.Hits.Length > 0)
+            {
+                for (int wi = 0; wi < m.Hits.Length; wi++)
+                {
+                    var h = m.Hits[wi];
+                    if ((f.WindowHit & (1u << wi)) != 0) continue;
+                    if (phase >= h.Start && phase < h.Start + h.Duration) { liveWindow = true; break; }
+                    if (phase < h.Start) windowPending = true;
+                }
+            }
+            bool armMove = m != null && (m.Anim == AnimKind.AttackA || m.Anim == AnimKind.Dragon || m.Anim == AnimKind.Grab || m.Anim == AnimKind.Fireball);
             if (_trailArm != null)
             {
-                bool active = false;
-                if (m != null && !stunned && m.Hits.Length > 0)
-                {
-                    for (int wi = 0; wi < m.Hits.Length; wi++)
-                    {
-                        var h = m.Hits[wi];
-                        if (phase >= h.Start && phase < h.Start + h.Duration && (f.WindowHit & (1u << wi)) == 0)
-                        {
-                            active = true;
-                            break;
-                        }
-                    }
-                }
-                bool armMove = m != null && (m.Anim == AnimKind.AttackA || m.Anim == AnimKind.Dragon || m.Anim == AnimKind.Grab);
-                _trailArm.emitting = active && armMove;
-                _trailLeg.emitting = active && !armMove;
+                _trailArm.emitting = liveWindow && armMove;
+                _trailLeg.emitting = liveWindow && !armMove;
+            }
+
+            // Tinte de fase en el limb que pega: el mismo lenguaje que la
+            // mini-barra de framedata (amarillo = por pegar, rojo = pegando,
+            // azul = recovery castigable), llevado al muñeco.
+            bool phaseTint = false; var phaseC = Color.white;
+            if (m != null && !stunned && m.IsAttack)
+            {
+                phaseTint = true;
+                if (m.Hits.Length > 0)
+                    phaseC = liveWindow ? new Color(1f, 0.25f, 0.18f)
+                        : windowPending ? new Color(0.95f, 0.8f, 0.2f)
+                        : new Color(0.35f, 0.55f, 0.95f);
+                else // hadouken: fases S/A/R clásicas
+                    phaseC = phase < m.Startup ? new Color(0.95f, 0.8f, 0.2f)
+                        : phase < m.Startup + m.Active ? new Color(1f, 0.25f, 0.18f)
+                        : new Color(0.35f, 0.55f, 0.95f);
             }
 
             _flash = Mathf.Max(0f, _flash - dt * 4f);
             for (int i = 0; i < _tintRenderers.Count; i++)
             {
                 Color shown = f.Stun == StunKind.Blockstun && stunned ? Color.Lerp(_origColors[i], new Color(0.4f, 0.6f, 1f), 0.4f) : _origColors[i];
+                var r = _tintRenderers[i];
+                if (phaseTint && (armMove ? (r == _armFR || r == _fistFR) : (r == _legFR || r == _footFR)))
+                {
+                    var pc = phaseC;
+                    pc.a = shown.a; // el ghost conserva su transparencia
+                    shown = Color.Lerp(shown, pc, 0.7f);
+                }
                 shown = Color.Lerp(shown, _flashColor, _flash);
                 _tintRenderers[i].material.color = shown;
             }
