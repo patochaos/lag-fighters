@@ -2,6 +2,17 @@
 
 Cada subida a GitHub agrega acá sus change notes.
 
+## 0.4.5 — 2026-07-19 (hotfix WebGL: el mundo invisible)
+
+- **Fix: fondo y peleadores invisibles en WebGL.** El SRP Batcher en
+  WebGL2 emitía los draws del URP Lit con los datos por objeto (UBOs)
+  rotos: 68 draw calls por frame sin pintar un solo pixel (verificado
+  hookeando el contexto GL del navegador). Arena, skyline, público y
+  peleadores no se dibujaban; solo sobrevivía lo que usa Sprites/Default
+  (ghost, sombras, cajas de debug). El batcher ahora se apaga solo en
+  WebGL (`ArenaBuilder.TuneForWebGL`), junto con los ajustes de FSR y
+  luces que ya vivían ahí.
+
 ## 0.4.4 — 2026-07-19 (turno fluido + SUPER + animación legible)
 
 ### Turno fluido (toggle experimental)

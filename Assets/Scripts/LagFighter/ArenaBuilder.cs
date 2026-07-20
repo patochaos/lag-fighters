@@ -21,6 +21,12 @@ namespace LagFighter
         static void TuneForWebGL(Camera cam)
         {
             if (Application.platform != RuntimePlatform.WebGLPlayer) return;
+            // SRP Batcher roto en WebGL2: los draws del Lit se emiten (verificado
+            // hookeando el contexto GL: 68 draws del programa Lit por frame) pero
+            // no pintan un solo pixel — los UBOs por objeto llegan rotos y la
+            // geometría degenera. Arena y peleadores invisibles; Sprites/Default,
+            // que va por el camino clásico sin batcher, dibuja normal.
+            GraphicsSettings.useScriptableRenderPipelineBatching = false;
             if (GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset rp)
             {
                 rp.renderScale = 1f;
