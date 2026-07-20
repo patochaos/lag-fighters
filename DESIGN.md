@@ -19,19 +19,22 @@ advantage) + *Your Only Move Is HUSTLE* (framedata visible, ghost, replay).
 - Counter hit: pegarle a alguien en el startup de su ataque = más stun, y +1
   daño SOLO en golpes de 1 (un DP counter de 3/6 HP decidía medio round).
 
-### Comandos (16) — `MoveCatalog` en `Sim.cs` (sabor Ryu vs Ken)
+### Comandos (16 en catálogo, 12 en el menú) — `MoveCatalog` en `Sim.cs` (sabor Ryu vs Ken)
+
+Los retirados (OFF) quedan en `MoveCatalog` con sus índices intactos para no
+romper replays viejos ni tests; solo salen de `PlanMenuUI.Order` y `SimpleAI`.
 
 Balanceado contra la framedata real de ST Ryu (supercombo.gg, 2026-07-17):
 
 | # | Comando | Frames (S/A/R) | Notas |
 |---|---------|------------|-------|
-| 1 | Caminar + | 20f | +0.55, NO bloquea |
-| 2 | Caminar − | 20f | −0.38 (atrás más lento, como SF2), **bloquea** |
+| 1 | Caminar + (OFF) | 20f | +0.55, NO bloquea. **Retirado 2026-07-19**: redundante con Dash + |
+| 2 | Bloquear | 20f | −0.38 (ex Caminar −): la defensa base, **bloquea** retrocediendo |
 | 3 | Dash + | 16f | +1.0, no bloquea |
 | 4 | Dash − | 16f | −1.0, el bait, no bloquea |
 | 5 | Salto + | 6/28/10 | +1.9, aéreo 6..34, **patada de jump-in** (hit 20..28; la ventana de 10 daba hasta +11) |
 | 6 | Salto N | 6/28/6 | vertical, **patada al caer** (hit 18..30, corta: el wakeup que pega) |
-| 7 | Salto − | 6/28/6 | −1.9 |
+| 7 | Salto − (OFF) | 6/28/6 | −1.9. **Retirado 2026-07-19**: Salto N ya esquiva proyectiles y Dash − retrocede |
 | 8 | Golpe A | 6/4/14 | 1 dmg, hs20/bs13 → **+2 on hit / −5 on block** (jab de ST: +4/+2) |
 | 9 | Patada B | 16/6/30 | 2 dmg, soft KD 42f, bs26 → **−10 on block** (sweep ST: −9) |
 | 10 | Hadouken | 14/2/44 = **60f** | ocupa el turno ENTERO; el salto lo castiga (ST: 52-54f, acá nerf extra a pedido) |

@@ -119,12 +119,14 @@ namespace LagFighter
 
         public static readonly MoveDef[] All =
         {
+            // Caminar + retirado del menú (2026-07-19, redundante con Dash +).
+            // Queda en el catálogo: los índices no se mueven y los replays viejos siguen andando.
             new MoveDef { Id = "walkF", Name = "Caminar +", Anim = AnimKind.Walk, Startup = 2, Active = 16, Recovery = 2,
                 Desc = "Avanza un paso corto. Caminando hacia adelante NO bloqueás.",
                 MoveDx = 0.55f, MotionStart = 0, MotionEnd = 20 },
 
-            new MoveDef { Id = "walkB", Name = "Caminar −", Anim = AnimKind.Walk, Startup = 2, Active = 16, Recovery = 2,
-                Desc = "Retrocede bloqueando (más lento que avanzar, como en SF2).",
+            new MoveDef { Id = "walkB", Name = "Bloquear", Anim = AnimKind.Walk, Startup = 2, Active = 16, Recovery = 2,
+                Desc = "La defensa base: bloquea retrocediendo despacio. Come guardia, no vida. El agarre la rompe.",
                 MoveDx = -0.38f, MotionStart = 0, MotionEnd = 20 },
 
             new MoveDef { Id = "dashF", Name = "Dash +", Anim = AnimKind.Dash, Startup = 2, Active = 10, Recovery = 4,
@@ -147,6 +149,7 @@ namespace LagFighter
                 Hits = new[] { new HitWindow { Start = 18, Duration = 12, Fwd0 = 0.05f, Fwd1 = 0.7f, Y0 = 0.8f, Y1 = 1.6f,
                     Damage = 1f, Hitstun = 24, Blockstun = 14, CounterStun = 34, Push = 0.15f, GuardDamage = 15f } } },
 
+            // Salto − retirado del menú (2026-07-19: Salto N esquiva proyectiles y Dash − retrocede).
             new MoveDef { Id = "jumpB", Name = "Salto −", Anim = AnimKind.Jump, Startup = 6, Active = 28, Recovery = 6,
                 Desc = "Salto atrás. La retirada elegante sobre el hadouken.",
                 MoveDx = -1.9f, MotionStart = 6, MotionEnd = 34, AirStart = 6, AirEnd = 34 },

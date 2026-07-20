@@ -73,10 +73,10 @@ namespace LagFighter
 
                 if (pick == MoveCatalog.Hadouken)
                 {
-                    if (threwFireball || HasProjectile(sim, me)) pick = dist > 1.5f ? MoveCatalog.WalkF : MoveCatalog.WalkB;
+                    if (threwFireball || HasProjectile(sim, me)) pick = dist > 1.5f ? MoveCatalog.DashF : MoveCatalog.WalkB;
                     else threwFireball = true;
                 }
-                if (!sim.MoveAllowed(me, pick)) pick = dist > 1.5f ? MoveCatalog.WalkF : MoveCatalog.WalkB;
+                if (!sim.MoveAllowed(me, pick)) pick = dist > 1.5f ? MoveCatalog.DashF : MoveCatalog.WalkB;
 
                 var move = MoveCatalog.All[pick];
                 if (frames + move.Total > budget) break;
@@ -105,7 +105,7 @@ namespace LagFighter
 
                 case AIProfile.Aggressive:
                     if (dist > 2.2f) return r < 0.48 ? MoveCatalog.DashF : r < 0.78 ? MoveCatalog.JumpF : MoveCatalog.Tatsu;
-                    if (dist > 1.3f) return r < 0.32 ? MoveCatalog.WalkF : r < 0.62 ? MoveCatalog.AttackB : r < 0.82 ? MoveCatalog.Tatsu : MoveCatalog.DashF;
+                    if (dist > 1.3f) return r < 0.42 ? MoveCatalog.DashF : r < 0.72 ? MoveCatalog.AttackB : MoveCatalog.Tatsu;
                     return r < 0.35 ? MoveCatalog.AttackA : r < 0.60 ? MoveCatalog.Grab : r < 0.82 ? MoveCatalog.AttackB : MoveCatalog.Shoryuken;
 
                 case AIProfile.Defensive:
@@ -116,7 +116,7 @@ namespace LagFighter
                 case AIProfile.Trickster:
                     if (dist > 2.2f) return r < 0.25 ? MoveCatalog.Hadouken : r < 0.50 ? MoveCatalog.DashF : r < 0.75 ? MoveCatalog.JumpF : MoveCatalog.WalkB;
                     if (dist > 1.3f) return r < 0.22 ? MoveCatalog.DashB : r < 0.44 ? MoveCatalog.DashF : r < 0.65 ? MoveCatalog.Parry : r < 0.83 ? MoveCatalog.Tatsu : MoveCatalog.JumpN;
-                    return r < 0.25 ? MoveCatalog.Grab : r < 0.46 ? MoveCatalog.Parry : r < 0.66 ? MoveCatalog.JumpB : r < 0.84 ? MoveCatalog.AttackA : MoveCatalog.Shoryuken;
+                    return r < 0.25 ? MoveCatalog.Grab : r < 0.46 ? MoveCatalog.Parry : r < 0.66 ? MoveCatalog.JumpN : r < 0.84 ? MoveCatalog.AttackA : MoveCatalog.Shoryuken;
 
                 case AIProfile.Adaptive:
                     return PickAdaptive(dist, r);
@@ -137,7 +137,7 @@ namespace LagFighter
             switch (best)
             {
                 case 0: // proyectiles: saltarlos DE LEJOS, parriarlos, castigarlo de cerca
-                    if (dist > 2.3f) return r < 0.50 ? MoveCatalog.JumpF : r < 0.78 ? MoveCatalog.Parry : MoveCatalog.WalkF;
+                    if (dist > 2.3f) return r < 0.50 ? MoveCatalog.JumpF : r < 0.78 ? MoveCatalog.Parry : MoveCatalog.DashF;
                     if (dist > 1.4f) return r < 0.42 ? MoveCatalog.Tatsu : r < 0.72 ? MoveCatalog.DashF : MoveCatalog.JumpF;
                     return r < 0.45 ? MoveCatalog.AttackA : r < 0.75 ? MoveCatalog.Grab : MoveCatalog.AttackB;
                 case 1: // ataques: guardia/parry en rango, poke fuera de rango
@@ -145,12 +145,12 @@ namespace LagFighter
                     return r < 0.40 ? MoveCatalog.Parry : r < 0.72 ? MoveCatalog.WalkB : MoveCatalog.Shoryuken;
                 case 2: // agarres: los saltos y el jab (más rápido) ganan
                     if (dist > 1.6f) return r < 0.55 ? MoveCatalog.AttackB : MoveCatalog.WalkB;
-                    return r < 0.45 ? MoveCatalog.AttackA : r < 0.75 ? MoveCatalog.JumpB : MoveCatalog.JumpN;
+                    return r < 0.45 ? MoveCatalog.AttackA : r < 0.75 ? MoveCatalog.JumpN : MoveCatalog.DashB;
                 case 3: // defensa: agarre, presión que chipea y avance
-                    if (dist > 1.6f) return r < 0.48 ? MoveCatalog.WalkF : r < 0.78 ? MoveCatalog.DashF : MoveCatalog.AttackB;
-                    return r < 0.50 ? MoveCatalog.Grab : r < 0.80 ? MoveCatalog.AttackB : MoveCatalog.WalkF;
+                    if (dist > 1.6f) return r < 0.60 ? MoveCatalog.DashF : MoveCatalog.AttackB;
+                    return r < 0.50 ? MoveCatalog.Grab : r < 0.80 ? MoveCatalog.AttackB : MoveCatalog.DashF;
                 default: // movilidad: pokes largos y control de espacio
-                    if (dist > 2.2f) return r < 0.50 ? MoveCatalog.Hadouken : MoveCatalog.WalkF;
+                    if (dist > 2.2f) return r < 0.50 ? MoveCatalog.Hadouken : MoveCatalog.DashF;
                     return r < 0.55 ? MoveCatalog.AttackB : MoveCatalog.AttackA;
             }
         }
@@ -158,8 +158,8 @@ namespace LagFighter
         int PickUnfocused(float dist)
         {
             double r = _rng.NextDouble();
-            if (dist > 2.4f) return r < 0.30 ? MoveCatalog.Hadouken : r < 0.56 ? MoveCatalog.WalkF : r < 0.75 ? MoveCatalog.JumpF : r < 0.9 ? MoveCatalog.WalkB : MoveCatalog.Parry;
-            if (dist > 1.4f) return r < 0.22 ? MoveCatalog.WalkF : r < 0.43 ? MoveCatalog.AttackB : r < 0.60 ? MoveCatalog.WalkB : r < 0.75 ? MoveCatalog.Tatsu : r < 0.88 ? MoveCatalog.Parry : MoveCatalog.DashB;
+            if (dist > 2.4f) return r < 0.30 ? MoveCatalog.Hadouken : r < 0.56 ? MoveCatalog.DashF : r < 0.75 ? MoveCatalog.JumpF : r < 0.9 ? MoveCatalog.WalkB : MoveCatalog.Parry;
+            if (dist > 1.4f) return r < 0.22 ? MoveCatalog.DashF : r < 0.43 ? MoveCatalog.AttackB : r < 0.60 ? MoveCatalog.WalkB : r < 0.75 ? MoveCatalog.Tatsu : r < 0.88 ? MoveCatalog.Parry : MoveCatalog.DashB;
             return r < 0.25 ? MoveCatalog.AttackA : r < 0.45 ? MoveCatalog.AttackB : r < 0.62 ? MoveCatalog.Grab : r < 0.76 ? MoveCatalog.Parry : r < 0.88 ? MoveCatalog.DashB : MoveCatalog.Shoryuken;
         }
 

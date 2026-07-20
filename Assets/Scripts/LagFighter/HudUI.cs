@@ -889,6 +889,7 @@ namespace LagFighter
                 case MoveCatalog.Tatsu: return new Color(0.9f, 0.45f, 0.15f);
                 case MoveCatalog.Grab: return Palette.GrabC;
                 case MoveCatalog.Parry: return new Color(0.25f, 0.75f, 0.95f);
+                case MoveCatalog.WalkB: // bloquear: azul defensivo, como agacharse
                 case MoveCatalog.Crouch: return new Color(0.35f, 0.55f, 0.85f);
                 case MoveCatalog.LowKick: return new Color(0.75f, 0.28f, 0.3f);
                 default: return new Color(0.25f, 0.72f, 0.45f); // caminar
@@ -906,8 +907,8 @@ namespace LagFighter
                 case MoveCatalog.JumpF: return "J→";
                 case MoveCatalog.JumpN: return "J";
                 case MoveCatalog.JumpB: return "J←";
-                case MoveCatalog.WalkF: return "→";
-                case MoveCatalog.WalkB: return "←";
+                case MoveCatalog.WalkF: return "→"; // retirado del menú; aparece en replays viejos
+                case MoveCatalog.WalkB: return "BL";
                 case MoveCatalog.DashF: return "»";
                 case MoveCatalog.DashB: return "«";
                 case MoveCatalog.Tatsu: return "T";

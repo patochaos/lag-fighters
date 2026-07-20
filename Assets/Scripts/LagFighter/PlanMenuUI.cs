@@ -4,8 +4,8 @@ using UnityEngine.UI;
 
 namespace LagFighter
 {
-    // Menú de planificación del turno (tiempo pausado). Grilla 7x2:
-    // fila de arriba = movimiento, fila de abajo = ataques y defensa.
+    // Menú de planificación del turno (tiempo pausado). Grilla 6x2:
+    // fila de arriba = movimiento y defensa, fila de abajo = ataques.
     // Cada carta lleva una franja de color por categoría y una mini-barra
     // de framedata (startup amarillo / activo rojo / recovery azul), el
     // mismo lenguaje visual que la barra de fases del HUD.
@@ -13,16 +13,18 @@ namespace LagFighter
     // Espacio (o botón ¡LISTO!) cierra el turno.
     public class PlanMenuUI : MonoBehaviour
     {
-        const int Cols = 7;
+        const int Cols = 6;
         const float CardW = 168f, CardH = 44f, Gap = 6f;
 
-        // orden de display: movimiento arriba, acción abajo
+        // orden de display: movimiento y defensa arriba, ataques abajo.
+        // Caminar + y Salto − retirados (2026-07-19): redundantes con Dash +
+        // y con Salto N / Dash −. Siguen en MoveCatalog por replays viejos.
         static readonly int[] Order =
         {
-            MoveCatalog.WalkF, MoveCatalog.WalkB, MoveCatalog.DashF, MoveCatalog.DashB,
-            MoveCatalog.JumpF, MoveCatalog.JumpN, MoveCatalog.JumpB,
-            MoveCatalog.AttackA, MoveCatalog.AttackB, MoveCatalog.Tatsu, MoveCatalog.Hadouken,
-            MoveCatalog.Shoryuken, MoveCatalog.Grab, MoveCatalog.Parry,
+            MoveCatalog.WalkB, MoveCatalog.DashF, MoveCatalog.DashB,
+            MoveCatalog.JumpF, MoveCatalog.JumpN, MoveCatalog.Parry,
+            MoveCatalog.AttackA, MoveCatalog.AttackB, MoveCatalog.Grab,
+            MoveCatalog.Tatsu, MoveCatalog.Hadouken, MoveCatalog.Shoryuken,
             // agachado desactivado — reactivar junto con SimConfig.CrouchEnabled:
             // MoveCatalog.LowKick, MoveCatalog.Crouch,
         };
@@ -94,12 +96,11 @@ namespace LagFighter
                 case MoveCatalog.LowKick: return "PEGA BAJO · agachado";
                 case MoveCatalog.JumpF: return "PATADA AL CAER · +1.9";
                 case MoveCatalog.JumpN: return "PATADA AL CAER · vertical";
-                case MoveCatalog.JumpB: return "sobre hadoukens · −1.9";
                 case MoveCatalog.AttackA: return "+2 hit / −5 block";
                 case MoveCatalog.AttackB: return "DERRIBA · −10 block";
                 case MoveCatalog.DashF: return "cierra distancia · no bloquea";
                 case MoveCatalog.DashB: return "el bait · no bloquea";
-                default: return "PASO CORTO · ajuste fino"; // caminar +: la mitad del dash
+                default: return "";
             }
         }
 
