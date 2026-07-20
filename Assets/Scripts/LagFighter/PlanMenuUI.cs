@@ -33,7 +33,7 @@ namespace LagFighter
         Font _font;
         GameObject _root;
         Image[] _cardBg, _cardEdge, _cardOverlay;
-        Text[] _cardName;
+        Text[] _cardName, _cardOvfMark; // "»" sutil: este move cruzaría el turno
         RectTransform[] _cardRt;
         Image _undoBtn, _doneBtn, _wakeBtn, _superBtn;
         Text _wakeLabel, _doneLabel, _superLabel;
@@ -126,6 +126,7 @@ namespace LagFighter
             _cardBg = new Image[Order.Length];
             _cardEdge = new Image[Order.Length];
             _cardName = new Text[Order.Length];
+            _cardOvfMark = new Text[Order.Length];
             _cardOverlay = new Image[Order.Length];
             _cardRt = new RectTransform[Order.Length];
 
@@ -162,6 +163,13 @@ namespace LagFighter
                 _cardOverlay[pos] = MakeImage(card.rectTransform, "Overlay", new Vector2(0.5f, 0.5f), Vector2.zero,
                     new Vector2(CardW, CardH), new Color(0.02f, 0.02f, 0.03f, 0.78f));
                 _cardOverlay[pos].gameObject.SetActive(false);
+
+                // marca sutil de overflow: "»" a la derecha (la carta sigue
+                // viéndose usable — cruzar no es un error, es una decisión)
+                _cardOvfMark[pos] = MakeText(card.rectTransform, "Ovf", "»", new Vector2(1f, 0.5f), new Vector2(-14f, 0f),
+                    new Vector2(22f, 26f), 20, new Color(1f, 0.6f, 0.15f, 0.95f), TextAnchor.MiddleCenter);
+                _cardOvfMark[pos].fontStyle = FontStyle.Bold;
+                _cardOvfMark[pos].gameObject.SetActive(false);
             }
 
             // LISTO y BORRAR apilados a la izquierda de la grilla
@@ -318,7 +326,8 @@ namespace LagFighter
 
         // Estado visual de cada carta según lo que queda del turno:
         // - gris oscuro: no entra (estricto) o ni siquiera arranca (fluido)
-        // - lavado rojo-naranja: entra pero CRUZA el turno (identidad overflow)
+        // - franja naranja + "»": entra pero CRUZARÍA el turno — sutil, no
+        //   parece prohibido (cruzar es una decisión válida, no un error)
         void RefreshCardStates()
         {
             if (_cardOverlay == null) return;
@@ -330,10 +339,12 @@ namespace LagFighter
                 bool startable = _mc.PlanFits(mi);
                 bool crosses = SimConfig.CarryoverEnabled && startable &&
                                used + MoveCatalog.All[mi].Total > avail;
-                _cardOverlay[i].gameObject.SetActive(!startable || crosses);
-                _cardOverlay[i].color = !startable
-                    ? new Color(0.02f, 0.02f, 0.03f, 0.78f)
-                    : new Color(0.95f, 0.3f, 0.05f, 0.30f);
+                _cardOverlay[i].gameObject.SetActive(!startable);
+                _cardOvfMark[i].gameObject.SetActive(crosses);
+                var cat = CategoryColor(mi);
+                _cardEdge[i].color = crosses
+                    ? new Color(1f, 0.6f, 0.15f, 0.95f)
+                    : new Color(cat.r, cat.g, cat.b, 0.9f);
             }
         }
 
