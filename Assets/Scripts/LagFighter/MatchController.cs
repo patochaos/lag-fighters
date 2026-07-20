@@ -157,7 +157,7 @@ namespace LagFighter
         // (primera orden, cada turno confirmado) y no vuelven (PlayerPrefs).
         static readonly string[] Tips =
         {
-            "TIP: pasá el mouse por las cartas para ver qué hacen · click las agrega al turno (probá DASH + y después GOLPE A)",
+            "TIP: pasá el mouse por las cartas para ver qué hacen · click las agrega al turno (probá DASH + y después JAB)",
             "TIP: el fantasma es tu plan · arrastrá tu barra de abajo para verlo cuadro a cuadro · click derecho en una ficha la borra",
             "TIP: H muestra las cajas de golpe · el panel derecho da startup / activo / recovery de cada movimiento",
             "TIP: \"pegaría N si no se mueve\" es contra un rival quieto — en VS IA va a reaccionar · M vuelve al menú",

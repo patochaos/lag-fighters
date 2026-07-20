@@ -154,12 +154,12 @@ namespace LagFighter
                 Desc = "Salto atrás. La retirada elegante sobre el hadouken.",
                 MoveDx = -1.9f, MotionStart = 6, MotionEnd = 34, AirStart = 6, AirEnd = 34 },
 
-            new MoveDef { Id = "atkA", Name = "Golpe A", Anim = AnimKind.AttackA, Startup = 6, Active = 4, Recovery = 14,
+            new MoveDef { Id = "atkA", Name = "Jab", Anim = AnimKind.AttackA, Startup = 6, Active = 4, Recovery = 14,
                 Desc = "El jab: rápido y corto (+2 on hit, −5 on block). Atrapa avances y saltos cercanos. Guardia −15.",
                 Hits = new[] { new HitWindow { Start = 6, Duration = 4, Fwd0 = 0.45f, Fwd1 = 1.1f, Y0 = 1.0f, Y1 = 1.6f,
                     Damage = 1f, Hitstun = 20, Blockstun = 13, CounterStun = 32, Push = 0.35f, GuardDamage = 15f } } },
 
-            new MoveDef { Id = "atkB", Name = "Patada B", Anim = AnimKind.AttackB, Startup = 16, Active = 6, Recovery = 30,
+            new MoveDef { Id = "atkB", Name = "Barrida", Anim = AnimKind.AttackB, Startup = 16, Active = 6, Recovery = 30,
                 Desc = "El sweep: lenta, larga, 2 de daño, DERRIBA (soft). −10 si la bloquean. Guardia −30.",
                 Hits = new[] { new HitWindow { Start = 16, Duration = 6, Fwd0 = 0.5f, Fwd1 = 1.6f, Y0 = 0.5f, Y1 = 1.2f,
                     Damage = 2f, Hitstun = 42, Blockstun = 26, CounterStun = 55, Push = 0.55f, Knockdown = true, GuardDamage = 30f } } },

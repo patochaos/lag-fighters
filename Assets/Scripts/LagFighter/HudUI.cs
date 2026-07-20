@@ -900,8 +900,8 @@ namespace LagFighter
         {
             switch (moveIndex)
             {
-                case MoveCatalog.AttackA: return "A";
-                case MoveCatalog.AttackB: return "B";
+                case MoveCatalog.AttackA: return "JAB";
+                case MoveCatalog.AttackB: return "BAR";
                 case MoveCatalog.Hadouken: return "HD";
                 case MoveCatalog.Shoryuken: return "DP";
                 case MoveCatalog.JumpF: return "J→";
