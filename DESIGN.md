@@ -247,6 +247,9 @@ La sim usa rects y posición X; el escenario no está acoplado. Para volver al
 
 ## Modo YOMI v2 — discreto (2026-07-20)
 
+> Ver **[YOMI-BIBLE.md](YOMI-BIBLE.md)**: las leyes de diseño del género
+> (Sirlin, Yomi 1/2, Exceed) destiladas + auditoría de este modo contra ellas.
+
 Sesión de diseño 2026-07-20: el juego muta de "lag" a **yomi** (lectura),
 apuntando a un *Yomi Hustle casual*. Research: Sirlin (yomi layers,
 "Designing Yomi") — piedra-papel-tijera puro es malo porque no hay
