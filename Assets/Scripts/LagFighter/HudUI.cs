@@ -33,6 +33,7 @@ namespace LagFighter
 
         // ---- modo YOMI: circulitos de AP + cartas de revelación ----
         readonly Image[][] _apPips = new Image[2][];
+        readonly Text[] _apLabel = new Text[2];
         readonly Image[] _yomiCard = new Image[2];
         readonly Image[] _yomiCardEdge = new Image[2];
         readonly Text[] _yomiCardName = new Text[2];
@@ -456,17 +457,23 @@ namespace LagFighter
                 8, new Color(1f, 0.45f, 0.35f), left ? TextAnchor.UpperLeft : TextAnchor.UpperRight);
             _limbLabel[i].rectTransform.pivot = new Vector2(left ? 0f : 1f, 1f);
 
-            // circulitos de AP (modo YOMI): lleno = punto disponible, vacío = gastado
+            // circulitos de AP (modo YOMI): GRANDES, abajo del lado de cada
+            // peleador — lleno = punto disponible, vacío = no hay
             _apPips[i] = new Image[YomiConfig.ApCap];
             for (int p = 0; p < YomiConfig.ApCap; p++)
             {
-                var pip = MakeImage(pr, $"ApPip{p}", new Vector2(left ? 0f : 1f, 1f),
-                    new Vector2(sign * (14f + p * 17f), -90f), new Vector2(12f, 12f), Color.white);
-                pip.rectTransform.pivot = new Vector2(left ? 0f : 1f, 1f);
+                var pip = MakeImage(_canvasRt, $"ApPip{i}_{p}", new Vector2(left ? 0f : 1f, 0f),
+                    new Vector2(sign * (52f + p * 42f), 84f), new Vector2(32f, 32f), Color.white);
                 pip.sprite = CircleSprite();
                 pip.gameObject.SetActive(false);
                 _apPips[i][p] = pip;
             }
+            var apT = MakeTextP(_canvasRt, "ApLabel" + i, "AP", new Vector2(left ? 0f : 1f, 0f),
+                new Vector2(sign * 52f, 118f), new Vector2(80f, 20f), 8,
+                new Color(0.45f, 0.9f, 1f, 0.8f), left ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight);
+            apT.rectTransform.pivot = new Vector2(left ? 0f : 1f, 0.5f);
+            _apLabel[i] = apT;
+            _apLabel[i].gameObject.SetActive(false);
         }
 
         // circulito procedural (el proyecto no usa assets: todo se genera)
@@ -685,16 +692,10 @@ namespace LagFighter
                 }
 
                 var lf = sim.Fighters[i];
-                // en YOMI el label de miembros (siempre libre: limbs off) muestra
-                // los AP — info pública de ambos lados, el corazón de la lectura
-                if (SimConfig.YomiEnabled)
-                {
-                    _limbLabel[i].text = _mc.Yomi == null ? "" : $"AP {_mc.Yomi.Ap[i]}/{YomiConfig.ApCap}";
-                    _limbLabel[i].color = new Color(0.45f, 0.9f, 1f);
-                }
-                else
-                    _limbLabel[i].text = lf.ArmHp <= 0f && lf.LegHp <= 0f ? "SIN BRAZO · SIN PIERNA"
-                                       : lf.ArmHp <= 0f ? "SIN BRAZO" : lf.LegHp <= 0f ? "SIN PIERNA" : "";
+                // en YOMI los AP viven en los circulitos grandes de abajo
+                _limbLabel[i].text = SimConfig.YomiEnabled ? ""
+                    : lf.ArmHp <= 0f && lf.LegHp <= 0f ? "SIN BRAZO · SIN PIERNA"
+                    : lf.ArmHp <= 0f ? "SIN BRAZO" : lf.LegHp <= 0f ? "SIN PIERNA" : "";
 
                 float g = sim.Fighters[i].Guard / SimConfig.GuardMax;
                 _guardFill[i].rectTransform.sizeDelta = new Vector2(GuardBarW * g, 9f);
@@ -720,9 +721,12 @@ namespace LagFighter
                         : new Color(1f, 0.75f, 0.2f, 0.9f);
                 }
 
-                // circulitos de AP: lleno = disponible, vacío = no hay
+                // circulitos de AP: lleno = disponible, vacío = no hay.
+                // Muestran el AP del ARRANQUE del turno durante la acción
+                // (YomiDisplayAp): el cobro se ve recién al cerrar el turno.
                 bool pipsOn = yomiOn && _mc.Yomi != null;
-                int apNow = pipsOn ? _mc.Yomi.Ap[i] : 0;
+                int apNow = pipsOn ? _mc.YomiDisplayAp(i) : 0;
+                if (_apLabel[i].gameObject.activeSelf != pipsOn) _apLabel[i].gameObject.SetActive(pipsOn);
                 for (int p = 0; p < _apPips[i].Length; p++)
                 {
                     if (_apPips[i][p].gameObject.activeSelf != pipsOn)
@@ -730,7 +734,7 @@ namespace LagFighter
                     if (pipsOn)
                         _apPips[i][p].color = p < apNow
                             ? new Color(0.35f, 0.85f, 1f, 1f)
-                            : new Color(0.25f, 0.32f, 0.4f, 0.55f);
+                            : new Color(0.22f, 0.28f, 0.36f, 0.5f);
                 }
 
                 for (int w = 0; w < MatchController.RoundsToWin; w++)

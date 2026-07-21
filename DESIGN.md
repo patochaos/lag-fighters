@@ -306,9 +306,27 @@ tabla — la matriz de counters ES la ley**.
   dos cartas GIGANTES con animación de entrada (ease-out-back) + "VS" por
   2.4s antes de que pase nada (espacio/click la apura); después se achican y
   quedan **dockeadas a los costados durante la acción** para que se lea qué
-  hizo cada uno; el teatro corre al 60% de velocidad. AP como **circulitos**
-  (sprite circular procedural): lleno = punto disponible, vacío = gastado,
-  bajo la barra de guardia de cada lado.
+  hizo cada uno; el teatro corre al 60% de velocidad. AP como **circulitos
+  GRANDES abajo a los costados** (sprite circular procedural): lleno =
+  disponible, vacío = no hay.
+- **La sim es un títere MUDO (fix 2026-07-20)**: los bugs de la primera
+  tanda de juego venían todos de reusar la voz de la sim de frames — el
+  retardo de coreografía era un hitstun falso (el parrier "parecía golpeado"),
+  los popups salían de eventos de la sim ("AL AIRE" contradiciendo a la
+  tabla) y los AP se actualizaban al resolver (parecía que cargar pagaba
+  aunque te agarraran: era el ingreso +1 adelantado). Fixes: retardo
+  invisible (`FighterState.QueueDelayTick`, espera en neutral), popups y
+  números 100% desde `YomiTurnResult` al cerrar el turno ("−N HP",
+  "CARGA CANCELADA", counters), AP en HUD congelados al valor de arranque
+  hasta el cierre, y al golpeado se le limpia la cola (no salen moves
+  fantasma tarde). **Decisión**: NO proyecto aparte — mismo proyecto,
+  pero la tabla es la única voz; la sim solo pone poses, sparks y sfx.
+- **Distancias legibles (fix 2026-07-20)**: CERCA = 1.0 de separación,
+  LEJOS = 3.4 (antes 0.9/1.9: no se distinguían). Moves de entrada larga
+  solo-teatro en el catálogo (StrongFar 19, JumpInFar 20, DashInFar 21)
+  para que los golpes lleguen; en la revelación los peleadores CAMINAN a su
+  marca (sin teleports); franja de piso pintada por distancia (fría =
+  LEJOS, cálida = CERCA) + cartel "→ CERCA / → LEJOS" al cambiar.
 - Lab discreto: `dotnet run --project Tools/SimHarness -- yomi N` (y tercera
   pasada del lab default). 8000 partidas: 100% KO, 7.6 turnos/partida,
   46% de turnos en cerca, AP promedio 2.6/6 (la economía muerde), 9k parrys,

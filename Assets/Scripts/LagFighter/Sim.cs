@@ -141,7 +141,8 @@ namespace LagFighter
                          JumpF = 4, JumpN = 5, JumpB = 6,
                          AttackA = 7, AttackB = 8, Hadouken = 9, Shoryuken = 10, Parry = 11,
                          Tatsu = 12, Grab = 13, Crouch = 14, LowKick = 15, Super = 16,
-                         Strong = 17, YomiGrab = 18;
+                         Strong = 17, YomiGrab = 18,
+                         StrongFar = 19, JumpInFar = 20, DashInFar = 21; // teatro yomi (entradas largas)
 
         public static readonly MoveDef[] All =
         {
@@ -248,6 +249,26 @@ namespace LagFighter
                 Desc = "Rompe la guardia y tira (KD). Pierde contra golpes (más rápidos) y whiffea contra saltos y a distancia.",
                 Hits = new[] { new HitWindow { Start = 9, Duration = 4, Fwd0 = 0.15f, Fwd1 = 0.9f, Y0 = 0.5f, Y1 = 1.6f,
                     Damage = 1f, Hitstun = 45, Blockstun = 0, CounterStun = 45, Push = 1.2f, Knockdown = true, IsGrab = true } } },
+
+            // ---- Versiones "de entrada" para el TEATRO del modo YOMI v2 ----
+            // Con LEJOS a 3.4 de separación (que se VEA), los moves clásicos no
+            // llegan: estos clones cubren la distancia. Solo presentación:
+            // la tabla ya decidió, acá el golpe tiene que llegar hasta el rival.
+            new MoveDef { Id = "strongFar", Name = "Kick", Anim = AnimKind.AttackA, Startup = 14, Active = 4, Recovery = 26,
+                Desc = "(teatro yomi) Kick con embestida: cruza el escenario para pegar de lejos.",
+                MoveDx = 1.7f, MotionStart = 0, MotionEnd = 14,
+                Hits = new[] { new HitWindow { Start = 14, Duration = 4, Fwd0 = 0.4f, Fwd1 = 1.5f, Y0 = 0.6f, Y1 = 2.4f,
+                    Damage = 2f, Hitstun = 45, Blockstun = 18, CounterStun = 58, Push = 0.5f, Knockdown = true, GuardDamage = 30f } } },
+
+            new MoveDef { Id = "jumpInFar", Name = "Salto", Anim = AnimKind.Jump, Startup = 6, Active = 28, Recovery = 10,
+                Desc = "(teatro yomi) Salto de entrada largo: cruza desde LEJOS con la patada al caer.",
+                MoveDx = 3.0f, MotionStart = 6, MotionEnd = 34, AirStart = 6, AirEnd = 34,
+                Hits = new[] { new HitWindow { Start = 20, Duration = 10, Fwd0 = 0.2f, Fwd1 = 0.95f, Y0 = 0.85f, Y1 = 1.65f,
+                    Damage = 1f, Hitstun = 26, Blockstun = 15, CounterStun = 36, Push = 0.2f, GuardDamage = 15f } } },
+
+            new MoveDef { Id = "dashInFar", Name = "Dash", Anim = AnimKind.Dash, Startup = 2, Active = 10, Recovery = 4,
+                Desc = "(teatro yomi) Dash de entrada largo: de LEJOS a CERCA de una.",
+                MoveDx = 2.4f, MotionStart = 2, MotionEnd = 12 },
         };
     }
 
@@ -287,6 +308,10 @@ namespace LagFighter
         public StunKind Stun = StunKind.None;
         public int StunEndTick;
         public bool BlockEnabled = true; // el dummy de práctica no bloquea
+        // Retardo de coreografía (teatro YOMI): la cola no arranca antes de
+        // este tick, SIN stun falso — el peleador espera en neutral, sin
+        // badge ni pose de golpeado. 0 = sin efecto (modos clásicos).
+        public int QueueDelayTick;
 
         public FighterState Clone()
         {
@@ -549,7 +574,7 @@ namespace LagFighter
                     f.Stun = StunKind.None;
                     f.Crushed = false;
                     // apenas puede, sigue ejecutando lo que le quedaba
-                    if (f.MoveIndex < 0 && f.QueueIndex < f.Queue.Count)
+                    if (f.MoveIndex < 0 && f.QueueIndex < f.Queue.Count && Tick >= f.QueueDelayTick)
                         StartQueuedMove(i);
                 }
                 if (f.MoveIndex < 0)
