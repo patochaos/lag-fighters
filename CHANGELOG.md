@@ -2,6 +2,51 @@
 
 Cada subida a GitHub agrega acá sus change notes.
 
+## 0.5.0 — 2026-07-20 (action points, modo YOMI y la gran pasada de legibilidad)
+
+### Clásico en ACTION POINTS
+- El turno se juega en **AP**: 5 por turno (60f = 5 slots de 12f), cada
+  carta cuesta AP y **lo que no gastás SE GUARDA** (tope 5). Bloquear un
+  golpe con la carta BLOQUEAR banca +1. La economía es información
+  pública: las bolitas de stock de ambos lados están siempre a la vista.
+- **Wakeup con reversal** (1 por round, cuesta AP): te levanta YA y separa.
+- Rebalance con la biblia (Sirlin/Yomi/Exceed) y 9 experimentos A/B en el
+  lab: dash a 1 AP, jab 2, hadouken 5, acción al 50% para que se LEA.
+- Grilla **3×3 anti-clutter**: DASH y SALTO son una carta que pregunta la
+  dirección; el Parry salió del clásico (BLOQUEAR es LA defensa).
+- Menú principal directo: **PRÁCTICA / VS IA / ONLINE**.
+
+### Modo YOMI v2 (experimental)
+- Un modo discreto estilo mesa: **una acción por turno**, resolución por
+  tabla (jab > agarre > parry > jab…), dos distancias (CERCA/LEJOS) y
+  economía de AP con cargar como apuesta. La sim de frames queda de
+  teatro: actúa el fallo que la tabla ya decidió, con revelación de
+  cartas gigantes y el fallo del turno cantado.
+- `YOMI-BIBLE.md`: las leyes del género destiladas (por qué el triángulo,
+  por qué whiffear duele, por qué el knockdown es un minijuego).
+
+### La gran pasada de legibilidad (feedback de testers: "no se entiende")
+- **Cartel con el nombre del move** sobre cada peleador al arrancar cada
+  ataque, en el color del lado.
+- **Mini-reveal al ejecutar**: las cartas de ambos planes (secuencia
+  completa, "DASH + » JAB » JAB") entran al centro y se dockean al
+  costado de referencia.
+- **Popups en carriles**: daño, frame advantage y carteles ya no se pisan
+  entre sí; se apilan si coinciden.
+- **Iconos pictograma** (pixel-art procedural) en las fichas de la
+  timeline y las cartas del menú — chau "BL"/"DP" crípticos.
+- **Blockman más expresivo**: ojos (se lee el facing y el estado),
+  anticipación bien gorda en startup, tinte de fase más saturado.
+- **Juice**: afterimages en el dash, polvo al aterrizar/dashear/levantarse,
+  impact flash blanco en counter/guard crush/KO, sparks proporcionales al
+  daño, micro-zoom de cámara (punch-in en hits fuertes, framing por
+  distancia).
+- **KO al 25% de velocidad**: el golpe final se saborea.
+- **Replay en RÁPIDO por defecto** (la acción ya se vio en vivo).
+- Recap post-turno en color, escudito en la barra de guardia, tooltip con
+  framedata al hoverear tus fichas. Fix: el click derecho borraba la
+  ficha equivocada después de un move con padding (DP).
+
 ## 0.4.5 — 2026-07-19 (hotfix WebGL: el mundo invisible)
 
 - **Fix: fondo y peleadores invisibles en WebGL.** El SRP Batcher en
