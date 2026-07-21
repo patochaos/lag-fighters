@@ -162,7 +162,11 @@ namespace LagFighter
         // Modo AP: costo en action points (redondeo hacia arriba: un move que
         // pisa un slot lo paga entero) y duración padded — el move ocupa sus
         // slots completos, el sobrante se espera en neutral.
-        public int ApCost => (Total + SimConfig.FramesPerAp - 1) / SimConfig.FramesPerAp;
+        // ApCostExtra: sobreprecio de diseño (Dash − paga 2: la retirada
+        // tributa). Solo puede ENCARECER — abaratar rompería la garantía de
+        // que un plan validado por AP entra en los frames del turno.
+        public int ApCostExtra;
+        public int ApCost => (Total + SimConfig.FramesPerAp - 1) / SimConfig.FramesPerAp + ApCostExtra;
         public int PaddedTotal => SimConfig.ApActive ? ApCost * SimConfig.FramesPerAp : Total;
         public bool IsAttack => Hits.Length > 0 || SpawnFrame >= 0;
         public bool HasAir => AirEnd > AirStart;
@@ -197,9 +201,12 @@ namespace LagFighter
                 Desc = "Arremetida hacia adelante. NO bloquea: es puro compromiso.",
                 MoveDx = 1.0f, MotionStart = 2, MotionEnd = 10 },
 
+            // Dash − paga 2 AP (sobreprecio anti-turtle, 2026-07-20): huir
+            // cuesta el doble que entrar — sin el tributo, dashear fuera de
+            // rango era la defensa gratis que la biblia prohíbe (Ley 3).
             new MoveDef { Id = "dashB", Name = "Dash −", Anim = AnimKind.Dash, Startup = 2, Active = 8, Recovery = 2,
-                Desc = "Salto atrás rápido. Tampoco bloquea, pero te saca del rango.",
-                MoveDx = -1.0f, MotionStart = 2, MotionEnd = 10 },
+                Desc = "Salto atrás rápido. No bloquea, y huir tributa: cuesta 2 AP.",
+                MoveDx = -1.0f, MotionStart = 2, MotionEnd = 10, ApCostExtra = 1 },
 
             new MoveDef { Id = "jumpF", Name = "Salto + (patada)", Anim = AnimKind.Jump, Startup = 6, Active = 28, Recovery = 10,
                 Desc = "Jump-in con patada en la bajada (hit 20..28) + 10f de recovery al caer. Pasa hadoukens; en el aire no bloqueás. Guardia −15.",
@@ -223,9 +230,12 @@ namespace LagFighter
                 Hits = new[] { new HitWindow { Start = 6, Duration = 4, Fwd0 = 0.45f, Fwd1 = 1.1f, Y0 = 1.0f, Y1 = 1.6f,
                     Damage = 1f, Hitstun = 20, Blockstun = 13, CounterStun = 32, Push = 0.35f, GuardDamage = 15f } } },
 
-            new MoveDef { Id = "atkB", Name = "Barrida", Anim = AnimKind.AttackB, Startup = 16, Active = 6, Recovery = 30,
-                Desc = "El sweep: lenta, larga, 2 de daño, DERRIBA (soft). −10 si la bloquean. Guardia −30.",
-                Hits = new[] { new HitWindow { Start = 16, Duration = 6, Fwd0 = 0.5f, Fwd1 = 1.6f, Y0 = 0.5f, Y1 = 1.2f,
+            // Barrida a 48f = 4 AP (rebalance 2026-07-20: costaba 5, lo mismo
+            // que un hadouken de turno entero — startup 16→12, el −10 on
+            // block se preserva: bs26 − (48−12) = −10).
+            new MoveDef { Id = "atkB", Name = "Barrida", Anim = AnimKind.AttackB, Startup = 12, Active = 6, Recovery = 30,
+                Desc = "El sweep: larga, 2 de daño, DERRIBA (soft). −10 si la bloquean. Guardia −30.",
+                Hits = new[] { new HitWindow { Start = 12, Duration = 6, Fwd0 = 0.5f, Fwd1 = 1.6f, Y0 = 0.5f, Y1 = 1.2f,
                     Damage = 2f, Hitstun = 42, Blockstun = 26, CounterStun = 55, Push = 0.55f, Knockdown = true, GuardDamage = 30f } } },
 
             new MoveDef { Id = "hadouken", Name = "Hadouken", Anim = AnimKind.Fireball, Startup = 14, Active = 2, Recovery = 44,
@@ -250,7 +260,9 @@ namespace LagFighter
                     new HitWindow { Start = 24, Duration = 5, Fwd0 = 0.3f, Fwd1 = 0.95f, Y0 = 0.9f, Y1 = 1.3f,
                         Damage = 1f, Hitstun = 45, Blockstun = 16, CounterStun = 55, Push = 0.5f, Knockdown = true, GuardDamage = 15f } } },
 
-            new MoveDef { Id = "grab", Name = "Agarre", Anim = AnimKind.Grab, Startup = 6, Active = 4, Recovery = 20,
+            // Agarre a 24f = 2 AP (rebalance 2026-07-20: costaba 3 y el
+            // mixup contra la tortuga salía caro — recovery 20→14).
+            new MoveDef { Id = "grab", Name = "Agarre", Anim = AnimKind.Grab, Startup = 6, Active = 4, Recovery = 14,
                 Desc = "Rompe la guardia y tira corto (KD). Los saltos lo ignoran; agarre vs agarre = TECH.",
                 Hits = new[] { new HitWindow { Start = 6, Duration = 4, Fwd0 = 0.15f, Fwd1 = 0.9f, Y0 = 0.5f, Y1 = 1.6f,
                     Damage = 1f, Hitstun = 45, Blockstun = 0, CounterStun = 45, Push = 1.2f, Knockdown = true, IsGrab = true } } },

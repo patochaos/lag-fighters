@@ -437,13 +437,14 @@ class Tests
         Check(SimConfig.TurnFrames / SimConfig.FramesPerAp == 5, "turno de 60f = 5 AP");
         (int move, int ap)[] esperados =
         {
-            // dash a 1 AP (rebalance 2026-07-20): el move barato del modo
-            (MoveCatalog.DashF, 1), (MoveCatalog.DashB, 1),
+            // dash adelante 1 AP (el move barato) · dash atrás 2 (sobreprecio
+            // anti-turtle) · agarre 2 y barrida 4 (rebalance ofensivo)
+            (MoveCatalog.DashF, 1), (MoveCatalog.DashB, 2),
             (MoveCatalog.Parry, 1), (MoveCatalog.WalkB, 2), (MoveCatalog.AttackA, 2),
-            (MoveCatalog.Grab, 3),
+            (MoveCatalog.Grab, 2),
             (MoveCatalog.Shoryuken, 4), (MoveCatalog.JumpF, 4), (MoveCatalog.JumpN, 4),
             (MoveCatalog.JumpB, 4), (MoveCatalog.Tatsu, 4),
-            (MoveCatalog.AttackB, 5), (MoveCatalog.Hadouken, 5), (MoveCatalog.Super, 5),
+            (MoveCatalog.AttackB, 4), (MoveCatalog.Hadouken, 5), (MoveCatalog.Super, 5),
         };
         foreach (var (move, ap) in esperados)
         {
@@ -452,17 +453,17 @@ class Tests
         }
     }
 
-    // El move ocupa su slot ENTERO: tras un agarre (30f, slots hasta 36f) la
-    // próxima orden espera el fin del slot en neutral (bloqueando).
+    // El move ocupa su slot ENTERO: tras un Bloquear (20f, slots hasta 24f)
+    // la próxima orden espera el fin del slot en neutral (bloqueando).
     static void ElSlotDeApEspaciaLaCola()
     {
         var s = NewSim(-3f, 3f, p1Blocks: false);
-        s.SetQueue(0, new List<int> { MoveCatalog.Grab, MoveCatalog.AttackA });
-        Run(s, 33); // el agarre whiffeó y terminó en f30; su slot va hasta f36
+        s.SetQueue(0, new List<int> { MoveCatalog.WalkB, MoveCatalog.AttackA });
+        Run(s, 22); // el bloqueo terminó en f20; su slot va hasta f24
         Check(s.Fighters[0].MoveIndex == -1, "en el resto del slot se espera en neutral",
             $"move {s.Fighters[0].MoveIndex}");
         Check(s.IsBlockingState(0), "y en neutral se bloquea (el padding no es un hueco indefenso)");
-        Run(s, 5); // f38: el jab ya tuvo que arrancar en f36
+        Run(s, 5); // f27: el jab ya tuvo que arrancar en f24
         Check(s.Fighters[0].MoveIndex == MoveCatalog.AttackA, "la orden siguiente arranca al abrirse el slot",
             $"move {s.Fighters[0].MoveIndex}");
     }

@@ -132,7 +132,10 @@ namespace LagFighter
 
         // modo de visualización del replay, cambiable EN VIVO desde el HUD
         // (se recuerda dentro de la sesión)
-        public ReplayViewMode ReplayMode { get; private set; } = ReplayViewMode.Lag;
+        // Lag teatral DORMIDO (2026-07-20, pedido): el replay arranca NORMAL
+        // y solo se ofrece RÁPIDO. Todo el código de ReplayLagFX y el modo
+        // Lag quedan intactos para cuando vuelva la temática.
+        public ReplayViewMode ReplayMode { get; private set; } = ReplayViewMode.Normal;
 
         public void SetReplayMode(ReplayViewMode m)
         {
@@ -160,6 +163,11 @@ namespace LagFighter
         // velocidad de playback (solo presentación, la sim no cambia)
         public float PlaybackSpeed { get; private set; } = 1f;
         public void SetPlaybackSpeed(float s) => PlaybackSpeed = s;
+        // La acción del modo clásico corre al 50% (2026-07-20: a velocidad
+        // real no se entendía qué pasó). Afecta ejecución Y replay — RÁPIDO
+        // (×2) del replay queda en tiempo real. El teatro YOMI tiene su
+        // propio ritmo (YomiTheaterSpeed) y no pasa por acá.
+        const float ClassicPace = 0.5f;
 
         // stats del turno para el resumen post-turno y el log
         readonly float[] _turnDmg = new float[2];
@@ -1085,6 +1093,12 @@ namespace LagFighter
             _hud.AddTurnLog($"T{TurnNumber}  <color=#8cc8ff>{q0}</color> −{_turnDmg[1]:0}  ·  <color=#ffa080>{q1}</color> −{_turnDmg[0]:0}");
         }
 
+        // El plan completo que ese lado ejecutó el turno PASADO (ya es
+        // público): durante la planificación, la fila rival de la timeline
+        // lo muestra como recap — "qué acaba de pasar", congelado y legible.
+        public List<int> LastTurnQueue(int side) =>
+            _turnLog.Count == 0 ? null : side == 0 ? _turnLog[_turnLog.Count - 1].q0 : _turnLog[_turnLog.Count - 1].q1;
+
         // Log de aperturas (Ley 5 de la biblia: info pública para LEER, no
         // adivinar): las primeras cartas de los últimos planes YA REVELADOS
         // de ese lado, la más reciente al final. "—" = pasó el turno.
@@ -1198,7 +1212,7 @@ namespace LagFighter
         {
             if (_hitstop > 0f) { _hitstop -= Time.deltaTime * PlaybackSpeed; return; } // pausa cosmética, la sim no avanza
 
-            _acc += Time.deltaTime * PlaybackSpeed;
+            _acc += Time.deltaTime * PlaybackSpeed * ClassicPace; // la acción al 50%: que se LEA
             while (_acc >= SimConfig.TickDuration)
             {
                 _acc -= SimConfig.TickDuration;
@@ -1411,7 +1425,8 @@ namespace LagFighter
                 }
             }
 
-            _acc += dt * PlaybackSpeed * lagMult * (ReplayMode == ReplayViewMode.Fast ? 2f : 1f);
+            // mismo ritmo 50% que la ejecución; RÁPIDO (×2) = tiempo real
+            _acc += dt * PlaybackSpeed * lagMult * (ReplayMode == ReplayViewMode.Fast ? 2f : 1f) * ClassicPace;
             while (_acc >= SimConfig.TickDuration)
             {
                 _acc -= SimConfig.TickDuration;

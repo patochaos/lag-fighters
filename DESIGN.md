@@ -30,18 +30,18 @@ Balanceado contra la framedata real de ST Ryu (supercombo.gg, 2026-07-17):
 |---|---------|------------|-------|
 | 1 | Caminar + (OFF) | 20f | +0.55, NO bloquea. **Retirado 2026-07-19**: redundante con Dash + |
 | 2 | Bloquear | 20f | −0.38 (ex Caminar −): la defensa base, **bloquea** retrocediendo |
-| 3 | Dash + | 16f | +1.0, no bloquea |
-| 4 | Dash − | 16f | −1.0, el bait, no bloquea |
+| 3 | Dash + | 12f | +1.0, no bloquea, **1 AP** (2026-07-20: 16f→12f, el move barato) |
+| 4 | Dash − | 12f | −1.0, el bait, no bloquea, **2 AP** (sobreprecio anti-turtle) |
 | 5 | Salto + | 6/28/10 | +1.9, aéreo 6..34, **patada de jump-in** (hit 20..28; la ventana de 10 daba hasta +11) |
 | 6 | Salto N | 6/28/6 | vertical, **patada al caer** (hit 18..30, corta: el wakeup que pega) |
 | 7 | Salto − (OFF) | 6/28/6 | −1.9. **Retirado 2026-07-19**: Salto N ya esquiva proyectiles y Dash − retrocede |
 | 8 | Jab (ex Golpe A) | 6/4/14 | 1 dmg, hs20/bs13 → **+2 on hit / −5 on block** (jab de ST: +4/+2) |
-| 9 | Barrida (ex Patada B) | 16/6/30 | 2 dmg, soft KD 42f, bs26 → **−10 on block** (sweep ST: −9) |
+| 9 | Barrida (ex Patada B) | 12/6/30 | 2 dmg, soft KD 42f, bs26 → **−10 on block** (2026-07-20: startup 16→12, baja a 4 AP — costaba lo mismo que un hadouken de turno entero) |
 | 10 | Hadouken | 14/2/44 = **60f** | ocupa el turno ENTERO; el salto lo castiga (ST: 52-54f, acá nerf extra a pedido) |
 | 11 | Shoryuken | 4/5/32 = 41f | **invuln 1..10**, hard KD 60f, −15 block; **anti-aéreo especializado** (Y 1.0–2.5, alcance 0.75): ya no pega OTG ni domina el suelo (nerf 2026-07-18: 76%→61% en el lab) |
-| 12 | Parry | 2/5/5 = 12f | rechaza golpes/proyectiles en f3–7 e interrumpe ataques cuerpo a cuerpo; pierde vs agarre y delay; **no bloquea** |
+| 12 | Parry (OFF clásico) | 2/5/5 = 12f | rechaza golpes/proyectiles en f3–7; **retirado del clásico 2026-07-20** (Bloquear es LA defensa y banca AP) — sigue vivo en YOMI y replays |
 | 13 | Tatsumaki | 12/18/16 = 46f | viaja +1.6, 2 hits, el 2° derriba; **atraviesa hadoukens** (girando 8..34: el final es castigable con proyectil); hitbox baja: los saltos la pasan |
-| 14 | Agarre | 6/4/20 = 30f | **rompe guardia**, tira 1.2 + KD 45f; los saltos y caídos lo ignoran; **agarre vs agarre = TECH** |
+| 14 | Agarre | 6/4/14 = 24f | **rompe guardia**, tira 1.2 + KD 45f; los saltos y caídos lo ignoran; **agarre vs agarre = TECH** (2026-07-20: recovery 20→14, baja a 2 AP — el mixup anti-tortuga tiene que ser barato) |
 | 15 | Agacharse (OFF) | 14f | **bloquea** con hurtbox 0.9: jab y hadouken **pasan por arriba**; sweep/baja/agarre pegan. Desactivado: `SimConfig.CrouchEnabled` |
 | 16 | Patada baja (OFF) | 8/4/16 | 1 dmg, pega BAJO, **+2 hit / −3 block**, agachado todo el move. Desactivado con el agachado |
 
@@ -65,6 +65,15 @@ vulnerable por off-by-one; lo pescó el test de framedata).
   `SimConfig.LimbsEnabled = true`** (los tests se reactivan solos). Ídem
   agachado: `SimConfig.CrouchEnabled` + descomentar cartas en
   `PlanMenuUI.Order` y opciones en `SimpleAI`.
+- **La acción corre al 50%** (2026-07-20, `ClassicPace`): a velocidad real
+  no se entendía qué pasó — afecta ejecución y replay (RÁPIDO ×2 = tiempo
+  real); el teatro YOMI tiene su propio ritmo. Y durante la planificación
+  la fila rival de la timeline RECAPITULA su turno anterior (chips
+  atenuadas + "↩ TURNO ANTERIOR"): antes mostraba "? ? ?" — inútil — y lo
+  que pasó se esfumaba al abrir el menú.
+- **Lag teatral DORMIDO en el replay** (2026-07-20): el replay arranca en
+  NORMAL y solo ofrece RÁPIDO; el botón LAG y todos los `ReplayLagFX`
+  quedan en el código para cuando vuelva la temática.
 - **UX de lectura**: velocidad de playback ×0.5/×1/×2 (solo presentación),
   resumen post-turno en el prompt ("pegaste N · recibiste M · perdiste K
   órdenes"), log de turnos lateral colapsable (tecla L).
@@ -80,10 +89,13 @@ Pedido de Patricio: que el turno diga CLARITO qué entra y qué no, y después
 
 - **1 AP = 12 frames → el turno de 60f banca 5 AP** (Lag Mode: 90f→7,
   135f→11, 202f→16, 303f→25). Costo por move = `ceil(frames/12)`
-  (`MoveDef.ApCost`): **Dash 1** (rebalance 2026-07-20: pasó de 16f a 12f
-  para que exista el move de 1 AP — el turno se sentía de a ladrillos) ·
-  Bloquear/Jab 2 · Agarre 3 · Shoryu/Saltos/Tatsu 4 · Barrida/Hadouken/
-  Super 5.
+  (`MoveDef.ApCost`, con `ApCostExtra` para sobreprecios de diseño — solo
+  puede ENCARECER, abaratar rompería la garantía slot=tiempo): **Dash + 1**
+  (16f→12f: el move barato) · **Dash − 2** (mismo move, sobreprecio
+  anti-turtle: huir tributa) · Bloquear/Jab/**Agarre 2** · Shoryu/Saltos/
+  Tatsu/**Barrida 4** · Hadouken/Super 5. Segundo rebalance del día: lo
+  ofensivo pesado bajó (agarre 3→2, barrida 5→4 vía framedata) porque
+  bloquear+dashear fuera de rango dominaba.
 - **Cada move OCUPA su slot entero** (`PaddedTotal`): un dash de 16f reserva
   24f; el sobrante se espera en neutral (bloqueando — el padding no es un
   hueco indefenso). Así los AP nunca mienten sobre los frames: el combate

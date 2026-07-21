@@ -242,8 +242,10 @@ namespace LagFighter
             // y ocultan con él): cambian cómo se ve la repetición en vivo
             for (int m = 0; m < 3; m++)
             {
+                // LAG (m=0) dormido con toda la temática: los dos botones
+                // vivos (NORMAL/RÁPIDO) se centran entre ellos
                 var btn = MakeImage(_replayPanel.rectTransform, "Mode" + m, new Vector2(0.5f, 0f),
-                    new Vector2((m - 1) * 168f, -36f), new Vector2(158f, 50f), new Color(0.1f, 0.12f, 0.16f, 0.95f));
+                    new Vector2((m - 1.5f) * 168f, -36f), new Vector2(158f, 50f), new Color(0.1f, 0.12f, 0.16f, 0.95f));
                 var ol = btn.gameObject.AddComponent<Outline>();
                 ol.effectColor = new Color(1f, 1f, 1f, 0.18f);
                 ol.effectDistance = new Vector2(1.5f, -1.5f);
@@ -251,6 +253,7 @@ namespace LagFighter
                 _replayModeLabels[m] = MakeTextP(btn.rectTransform, "T", ReplayModeNames[m],
                     new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(154f, 24f),
                     16, Color.white, TextAnchor.MiddleCenter);
+                if (m == 0) btn.gameObject.SetActive(false); // lag teatral dormido, no borrado
             }
             _replayPanel.gameObject.SetActive(false);
             RegisterHover(_skipBtn);
@@ -470,12 +473,11 @@ namespace LagFighter
                 8, new Color(1f, 0.45f, 0.35f), left ? TextAnchor.UpperLeft : TextAnchor.UpperRight);
             _limbLabel[i].rectTransform.pivot = new Vector2(left ? 0f : 1f, 1f);
 
-            // STOCK de AP (modo clásico): fila de bolitas grandes justo bajo
-            // el panel del jugador — zona libre auditada: el panel termina en
-            // y≈−146 y las timelines viven abajo (anchor bottom), así que
-            // −152 en adelante no pisa nada
+            // STOCK de AP (modo clásico): fila de bolitas grandes bajo el
+            // panel del jugador — a −186 para no pisar el botón OPC del lado
+            // derecho (−150..−180); las timelines viven abajo (anchor bottom)
             _stockLabel[i] = MakeTextP(_canvasRt, "ApStockLabel" + i, "AP", new Vector2(left ? 0f : 1f, 1f),
-                new Vector2(sign * 28f, -140f), new Vector2(60f, 14f), 8,
+                new Vector2(sign * 28f, -174f), new Vector2(60f, 14f), 8,
                 new Color(0.45f, 0.9f, 1f, 0.8f), left ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight);
             _stockLabel[i].rectTransform.pivot = new Vector2(left ? 0f : 1f, 0.5f);
             _stockLabel[i].gameObject.SetActive(false);
@@ -492,7 +494,7 @@ namespace LagFighter
             // aperturas reveladas del rival ("ABRIÓ: DASH · JAB · —"):
             // se llena solo del lado rival mientras planificás
             _openingsLabel[i] = MakeTextP(_canvasRt, "Openings" + i, "", new Vector2(left ? 0f : 1f, 1f),
-                new Vector2(sign * 28f, -196f), new Vector2(460f, 16f), 8,
+                new Vector2(sign * 28f, -232f), new Vector2(460f, 16f), 8,
                 new Color(1f, 1f, 1f, 0.65f), left ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight);
             _openingsLabel[i].rectTransform.pivot = new Vector2(left ? 0f : 1f, 0.5f);
             _openingsLabel[i].gameObject.SetActive(false);
@@ -640,6 +642,7 @@ namespace LagFighter
                 // LAG / NORMAL / RÁPIDO: quedan en pantalla y conmutan en vivo
                 for (int m = 0; m < 3; m++)
                 {
+                    if (!_replayModeBtns[m].gameObject.activeSelf) continue; // LAG dormido
                     bool on = (int)_mc.ReplayMode == m;
                     var c = on ? new Color(0.2f, 0.4f, 0.6f, 0.95f) : new Color(0.1f, 0.12f, 0.16f, 0.95f);
                     bool over = Inside(_replayModeBtns[m], rmp);
@@ -821,7 +824,7 @@ namespace LagFighter
                         ? new Color(0.35f, 0.85f, 1f, 1f)
                         : new Color(0.45f, 0.58f, 0.72f, 0.5f);
                     _stockPips[i][p].rectTransform.anchoredPosition =
-                        new Vector2(sSign * (28f + (p % perRow) * dotGap), -152f - (p / perRow) * (dotS + 6f));
+                        new Vector2(sSign * (28f + (p % perRow) * dotGap), -186f - (p / perRow) * (dotS + 6f));
                     _stockPips[i][p].rectTransform.sizeDelta = new Vector2(dotS, dotS);
                 }
 
@@ -835,7 +838,7 @@ namespace LagFighter
                 {
                     _openingsLabel[i].text = "ABRIÓ: " + opens;
                     _openingsLabel[i].rectTransform.anchoredPosition =
-                        new Vector2(sSign * 28f, -152f - rowsUsed * (dotS + 6f) - 10f);
+                        new Vector2(sSign * 28f, -186f - rowsUsed * (dotS + 6f) - 10f);
                 }
 
                 for (int w = 0; w < MatchController.RoundsToWin; w++)
@@ -876,8 +879,20 @@ namespace LagFighter
             }
 
             float playX = executing ? Mathf.Clamp((_mc.TickFloat - _mc.TurnStartTick) * PxPerFrame, 0f, RowW) : -1f;
-            _row0.UpdateRow(_mc.GetPlan(0), _mc.RowRevealed(0), playX, _mc.TimelineOffset(0), _mc.TurnStartStunKind[0]);
-            _row1.UpdateRow(_mc.GetPlan(1), _mc.RowRevealed(1), playX, _mc.TimelineOffset(1), _mc.TurnStartStunKind[1]);
+            // Durante la planificación, la fila del rival no tiene nada que
+            // mostrar ("? ? ?") — en su lugar RECAPITULA el turno anterior
+            // (su plan ya revelado, congelado y legible: la acción pasa
+            // rápido y esto es lo que queda para estudiarla).
+            for (int r = 0; r < 2; r++)
+            {
+                var row = r == 0 ? _row0 : _row1;
+                bool recap = flow == MatchController.Flow.Planning && !SimConfig.YomiEnabled &&
+                             r != _mc.Picker && _mc.Mode != GameMode.Practice &&
+                             _mc.LastTurnQueue(r) != null;
+                row.SetRecap(recap);
+                if (recap) row.UpdateRow(_mc.LastTurnQueue(r), true, -1f, 0, StunKind.None);
+                else row.UpdateRow(_mc.GetPlan(r), _mc.RowRevealed(r), playX, _mc.TimelineOffset(r), _mc.TurnStartStunKind[r]);
+            }
 
             UpdateTimelineInteraction(flow);
             UpdateConnStrip(sim);
@@ -1183,6 +1198,10 @@ namespace LagFighter
             readonly List<Image> _phR = new List<Image>();
             // grilla de slots de AP: rayitas verticales cada 12f (modo AP)
             readonly List<Image> _slotTicks = new List<Image>();
+            // recap: durante la planificación esta fila muestra el turno
+            // ANTERIOR del rival (chips atenuadas + etiqueta)
+            bool _recap;
+            Text _recapLabel;
 
             public RectTransform AreaRt => _area;
 
@@ -1233,6 +1252,19 @@ namespace LagFighter
 
                 _playhead = hud.MakeImage(_area, "Playhead", new Vector2(0f, 0.5f), Vector2.zero, new Vector2(4f, height), Color.white);
                 _playhead.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+
+                // etiqueta del recap (esquina izquierda de la fila)
+                _recapLabel = hud.MakeTextP(_area, "Recap", "↩ TURNO ANTERIOR", new Vector2(0f, 1f),
+                    new Vector2(8f, -3f), new Vector2(260f, 12f), 8,
+                    new Color(1f, 1f, 1f, 0.55f), TextAnchor.UpperLeft);
+                _recapLabel.rectTransform.pivot = new Vector2(0f, 1f);
+                _recapLabel.gameObject.SetActive(false);
+            }
+
+            public void SetRecap(bool on)
+            {
+                _recap = on;
+                if (_recapLabel.gameObject.activeSelf != on) _recapLabel.gameObject.SetActive(on);
             }
 
             // destaca la zona nueva de la barra: "de acá para allá es TODO nuevo"
@@ -1307,6 +1339,7 @@ namespace LagFighter
                         if (ovfChip)
                             c = Color.Lerp(c, new Color(1f, 0.55f, 0.1f), 0.4f + 0.25f * Mathf.PingPong(Time.time * 1.4f, 1f));
                         if (_dim) c = new Color(c.r, c.g, c.b, 0.8f);
+                        if (_recap) c = new Color(c.r, c.g, c.b, 0.55f); // el pasado, atenuado
                         chip.color = c;
                         _labels[used - 1].text = ovfChip ? ChipLabel(mi) + "»" : ChipLabel(mi);
 

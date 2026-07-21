@@ -80,6 +80,7 @@ namespace LagFighter
         float _segW;
         int _sel;
         bool _active;
+        bool _mouseOnCards;
         Vector2 _lastMouse;
 
         public static PlanMenuUI Create(MatchController mc)
@@ -621,12 +622,22 @@ namespace LagFighter
             if ((mp - _lastMouse).sqrMagnitude > 4f)
             {
                 _lastMouse = mp;
+                int hover = -1;
                 for (int i = 0; i < _cardRt.Length; i++)
+                    if (RectTransformUtility.RectangleContainsScreenPoint(_cardRt[i], mp, null)) { hover = i; break; }
+                if (hover >= 0)
                 {
-                    if (!RectTransformUtility.RectangleContainsScreenPoint(_cardRt[i], mp, null)) continue;
-                    if (i != _sel) { Highlight(i); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
-                    break;
+                    if (hover != _sel) SfxLib.Play(SfxLib.Kind.UiTick, 0.3f);
+                    if (hover != _sel || !_mouseOnCards) Highlight(hover); // re-entrar re-arma el preview
                 }
+                else if (_mouseOnCards)
+                {
+                    // salió de la grilla (p.ej. hacia ¡LISTO!/PASAR): el ghost
+                    // muestra SOLO el plan — nada de la última carta hovereada
+                    _mc.PreviewHover(-1);
+                    RangePreview.Clear();
+                }
+                _mouseOnCards = hover >= 0;
             }
 
             // tinte de hover en los botones laterales
@@ -790,13 +801,15 @@ namespace LagFighter
                 _subBtn[o].color = over ? new Color(0.28f, 0.38f, 0.52f, 1f) : new Color(0.16f, 0.2f, 0.28f, 1f);
                 if (over) hovered = o;
             }
-            // el ghost SIEMPRE actúa una variante concreta (sin hover: la 1ra
-            // — antes quedaba clavado en lo último hovereado y "andaba mal")
-            _mc.PreviewHover(_subMoves[hovered >= 0 ? hovered : 0]);
+            // el ghost Y el rango SIEMPRE actúan una variante concreta (sin
+            // hover: la 1ra — antes quedaba lo último hovereado y "andaba mal")
+            int shown = _subMoves[hovered >= 0 ? hovered : 0];
+            _mc.PreviewHover(shown);
+            RangePreview.Show(_mc.Sim, _mc.Picker, shown);
             int num = GameInput.NumberPressed();
             if (num > 0 && num <= _subCount) { PickSub(num - 1); return; }
             if (GameInput.AddPressed()) { PickSub(0); return; } // Enter = adelante
-            if (GameInput.UndoPressed()) { CloseSubPicker(); return; }
+            if (GameInput.UndoPressed()) { CloseSubPicker(); Highlight(_sel); return; }
             if (!GameInput.ClickPressed()) return;
             for (int o = 0; o < _subCount; o++)
                 if (RectTransformUtility.RectangleContainsScreenPoint(_subBtn[o].rectTransform, mp, null))
@@ -805,6 +818,7 @@ namespace LagFighter
                     return;
                 }
             CloseSubPicker(); // click afuera = cancelar
+            Highlight(_sel);  // y el preview vuelve a la selección
         }
 
         void PickSub(int o)
