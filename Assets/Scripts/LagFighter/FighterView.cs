@@ -23,6 +23,8 @@ namespace LagFighter
         float _flash;
         Color _flashColor;
         float _faceYaw;
+        MoveDef _calloutMove;
+        float _calloutStart;
 
         static readonly Vector3 TorsoPos = new Vector3(0f, 1.22f, 0f);
         static readonly Vector3 HeadPos = new Vector3(0f, 1.66f, 0f);
@@ -67,6 +69,13 @@ namespace LagFighter
             var dark = baseColor * 0.55f;
             _torso = Part(TorsoPos, new Vector3(0.44f, 0.62f, 0.3f), baseColor);
             _head = Part(HeadPos, new Vector3(0.28f, 0.28f, 0.28f), baseColor * 1.25f);
+
+            // ojos: un cubito oscuro por lateral de la cabeza, pegado al borde
+            // delantero (la cámara es lateral: en la cara frontal no se veían).
+            // La cabeza lisa obligaba a leer los brazos para saber el facing.
+            var eyeC = new Color(0.07f, 0.08f, 0.11f);
+            Extremity(_head, new Vector3(0.5f, 0.16f, 0.28f), new Vector3(0.035f, 0.08f, 0.08f), eyeC);
+            Extremity(_head, new Vector3(-0.5f, 0.16f, 0.28f), new Vector3(0.035f, 0.08f, 0.08f), eyeC);
             _armF = Part(ArmFPos, new Vector3(0.15f, 0.15f, 0.55f), dark);
             _armB = Part(ArmBPos, new Vector3(0.15f, 0.15f, 0.5f), dark);
             _legF = Part(LegFPos, new Vector3(0.17f, 0.95f, 0.2f), dark);
@@ -195,6 +204,17 @@ namespace LagFighter
 
             var m = sim.CurrentMove(_index);
             float phase = m != null ? Mathf.Clamp(tf - f.MoveStartTick, 0f, m.Total) : 0f;
+
+            // cartel con el nombre del ataque al arrancar: se entiende QUÉ tiró
+            // cada uno sin tener que leer las fichas de la timeline
+            if (!_ghostMode && showBlockPose && m != null && m.IsAttack
+                && (m != _calloutMove || f.MoveStartTick != _calloutStart))
+            {
+                _calloutMove = m;
+                _calloutStart = f.MoveStartTick;
+                WorldFX.Popup(f.X, m.Name.ToUpperInvariant(),
+                    _index == 0 ? new Color(0.55f, 0.85f, 1f) : new Color(1f, 0.7f, 0.5f), 0.85f);
+            }
             float pk = 0f;
             if (m != null)
             {
