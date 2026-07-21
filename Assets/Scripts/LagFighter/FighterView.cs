@@ -25,6 +25,11 @@ namespace LagFighter
         float _faceYaw;
         MoveDef _calloutMove;
         float _calloutStart;
+        Color _baseColor;
+        float _lastAfterimage;
+        MoveDef _dustMove;
+        float _dustStart;
+        bool _prevAir, _prevDown;
 
         static readonly Vector3 TorsoPos = new Vector3(0f, 1.22f, 0f);
         static readonly Vector3 HeadPos = new Vector3(0f, 1.66f, 0f);
@@ -63,6 +68,7 @@ namespace LagFighter
 
         void BuildRig(Color baseColor)
         {
+            _baseColor = baseColor;
             _rig = new GameObject("Rig").transform;
             _rig.SetParent(transform, false);
 
@@ -74,8 +80,8 @@ namespace LagFighter
             // delantero (la cámara es lateral: en la cara frontal no se veían).
             // La cabeza lisa obligaba a leer los brazos para saber el facing.
             var eyeC = new Color(0.07f, 0.08f, 0.11f);
-            Extremity(_head, new Vector3(0.5f, 0.16f, 0.28f), new Vector3(0.035f, 0.08f, 0.08f), eyeC);
-            Extremity(_head, new Vector3(-0.5f, 0.16f, 0.28f), new Vector3(0.035f, 0.08f, 0.08f), eyeC);
+            Extremity(_head, new Vector3(0.5f, 0.16f, 0.26f), new Vector3(0.045f, 0.11f, 0.11f), eyeC);
+            Extremity(_head, new Vector3(-0.5f, 0.16f, 0.26f), new Vector3(0.045f, 0.11f, 0.11f), eyeC);
             _armF = Part(ArmFPos, new Vector3(0.15f, 0.15f, 0.55f), dark);
             _armB = Part(ArmBPos, new Vector3(0.15f, 0.15f, 0.5f), dark);
             _legF = Part(LegFPos, new Vector3(0.17f, 0.95f, 0.2f), dark);
@@ -213,7 +219,7 @@ namespace LagFighter
                 _calloutMove = m;
                 _calloutStart = f.MoveStartTick;
                 WorldFX.Popup(f.X, m.Name.ToUpperInvariant(),
-                    _index == 0 ? new Color(0.55f, 0.85f, 1f) : new Color(1f, 0.7f, 0.5f), 0.85f);
+                    _index == 0 ? new Color(0.55f, 0.85f, 1f) : new Color(1f, 0.7f, 0.5f), 0.85f, WorldFX.LaneCallout);
             }
             float pk = 0f;
             if (m != null)
@@ -228,11 +234,13 @@ namespace LagFighter
             // = SNAP a extensión con overshoot, recovery = vuelta lenta (1-t²,
             // se queda extendido: se LEE que es castigable). pk lineal queda
             // para los moves de movimiento.
+            // wind-up gordo (−0.7): la regla de oro de legibilidad es que el
+            // startup se TELEGRAFÍE — acá además es info de juego (counters)
             float atk = 0f;
             if (m != null)
             {
                 if (phase < m.Startup)
-                    atk = m.Startup <= 0 ? 1f : -0.45f * Mathf.Sin(phase / m.Startup * Mathf.PI * 0.5f);
+                    atk = m.Startup <= 0 ? 1f : -0.7f * Mathf.Sin(phase / m.Startup * Mathf.PI * 0.5f);
                 else if (phase < m.Startup + m.Active)
                 {
                     float ap = m.Active <= 0 ? 1f : (phase - m.Startup) / m.Active;
@@ -380,6 +388,31 @@ namespace LagFighter
                 if (f.Stun == StunKind.Hitstun) head = HeadPos + new Vector3(0f, 0.02f, -0.1f); // cabeza sacudida
             }
 
+            // FX de movimiento (solo la vista real, no el ghost de preview):
+            // estela en el dash, polvo al dashear, aterrizar y levantarse
+            if (!_ghostMode)
+            {
+                if (m != null && m.Anim == AnimKind.Dash && !stunned)
+                {
+                    if (m != _dustMove || f.MoveStartTick != _dustStart)
+                    {
+                        _dustMove = m;
+                        _dustStart = f.MoveStartTick;
+                        SparkFX.Dust(transform.position, 6);
+                    }
+                    if (Time.time - _lastAfterimage > 0.045f)
+                    {
+                        _lastAfterimage = Time.time;
+                        AfterimageFX.Spawn(transform.position, _baseColor);
+                    }
+                }
+                bool airNow = airY > 0.05f;
+                if (_prevAir && !airNow) SparkFX.Dust(transform.position, 8);
+                _prevAir = airNow;
+                if (_prevDown && !down && !sim.Over) SparkFX.Dust(transform.position, 5);
+                _prevDown = down;
+            }
+
             // festejo: saltitos + burst dorado una sola vez + público eufórico
             float winBounce = 0f;
             if (winner && !_ghostMode)
@@ -497,7 +530,7 @@ namespace LagFighter
                 {
                     var pc = phaseC;
                     pc.a = shown.a; // el ghost conserva su transparencia
-                    shown = Color.Lerp(shown, pc, 0.7f);
+                    shown = Color.Lerp(shown, pc, 0.85f);
                 }
                 shown = Color.Lerp(shown, _flashColor, _flash);
                 _tintRenderers[i].material.color = shown;

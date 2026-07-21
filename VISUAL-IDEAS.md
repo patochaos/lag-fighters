@@ -1,5 +1,11 @@
 # Legibilidad visual — análisis y plan (2026-07-20)
 
+> **Estado:** los puntos 1-15 (quick wins + UI) quedaron IMPLEMENTADOS el
+> mismo día — carriles de popups, iconos en fichas y cartas, anticipación,
+> afterimages, polvo, impact flash, sparks proporcionales, micro-zoom,
+> mini-reveal, recap en color, escudo de guardia y tooltip de fichas.
+> La sección de assets queda como referencia para un futuro salto estético.
+
 Feedback de usuarios: **a veces no se entiende qué está pasando**. Modelos de
 bloques + animaciones simples = los moves se confunden. Este doc sale de una
 sesión de análisis con el juego corriendo en el editor (VS IA, varios turnos

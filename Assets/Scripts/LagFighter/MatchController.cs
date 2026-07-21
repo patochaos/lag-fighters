@@ -402,9 +402,18 @@ namespace LagFighter
             if (_hasTurnSummary && Mode != GameMode.Practice)
             {
                 int p = Picker, o = 1 - Picker;
-                _hud.SetTurnSummary(
-                    $"último turno: pegaste {_turnHitCount[p]} (−{_turnDmg[p]:0} HP) · " +
-                    $"recibiste {_turnHitCount[o]} (−{_turnDmg[o]:0} HP) · perdiste {_turnLost[p]} órdenes");
+                // rich text con el color = significado de la paleta: lo bueno
+                // verde, lo malo rojo, lo perdido ámbar — se escanea de reojo
+                string pega = _turnHitCount[p] > 0
+                    ? $"<color=#59d96b>pegaste {_turnHitCount[p]} (−{_turnDmg[p]:0} HP)</color>"
+                    : "pegaste 0";
+                string recibe = _turnHitCount[o] > 0
+                    ? $"<color=#f25549>recibiste {_turnHitCount[o]} (−{_turnDmg[o]:0} HP)</color>"
+                    : "recibiste 0";
+                string perdio = _turnLost[p] > 0
+                    ? $"<color=#ffd94d>perdiste {_turnLost[p]} órdenes</color>"
+                    : "no perdiste órdenes";
+                _hud.SetTurnSummary($"último turno: {pega} · {recibe} · {perdio}");
             }
             else _hud.SetTurnSummary("");
         }
@@ -1037,6 +1046,10 @@ namespace LagFighter
             _turnHitCount[0] = _turnHitCount[1] = 0;
             _hud.SetTurnSummary("");
             _hud.SetPrompt($"TURNO {TurnNumber} — ¡EJECUTANDO!");
+            // mini-reveal: la primera carta de cada lado, con la presentación
+            // de las cartas YOMI — responde "¿con qué abrió?" antes del caos
+            _hud.ShowOpeners(_plans[0].Count > 0 ? _plans[0][0] : -1,
+                             _plans[1].Count > 0 ? _plans[1][0] : -1);
             SfxLib.Play(SfxLib.Kind.TurnStart, 0.6f);
         }
 
@@ -1137,6 +1150,9 @@ namespace LagFighter
                 AudioListener.volume = 1f;
 
             if (State == Flow.ModeSelect) return;
+
+            // framing suave según la distancia entre los peleadores
+            if (Sim != null) CamFx()?.SetDistance(Mathf.Abs(Sim.Fighters[1].X - Sim.Fighters[0].X));
 
             // KO slow-mo: cámara lenta cosmética antes de cerrar el round
             if (_koTimer > 0f)
@@ -1488,11 +1504,20 @@ namespace LagFighter
                         _turnDmg[ev.Attacker] += ev.Damage;
                         _turnHitCount[ev.Attacker]++;
                         _views[def].FlashHit(ev.Counter);
-                        SparkFX.Burst(ContactPos(def), ev.Counter ? new Color(1f, 0.55f, 0.1f) : Color.white, ev.Counter ? 14 : 9);
+                        // sparks PROPORCIONALES al daño: un jab no puede pesar
+                        // visualmente lo mismo que un shoryuken
+                        int shards = Mathf.RoundToInt(4f + ev.Damage * 5f) + (ev.Counter ? 5 : 0);
+                        SparkFX.Burst(ContactPos(def), ev.Counter ? new Color(1f, 0.55f, 0.1f) : Color.white,
+                            shards, 2.8f + ev.Damage * 0.5f);
                         SfxLib.Play(ev.Counter ? SfxLib.Kind.Counter : SfxLib.Kind.Hit);
                         _hitstop = Mathf.Max(_hitstop, ev.Counter ? 0.13f : 0.075f);
                         CamFx()?.Shake(ev.Counter ? 0.1f : 0.05f);
-                        if (ev.Counter && !yomiTheater) _hud.ShowBigMessage("¡COUNTER!", new Color(1f, 0.55f, 0.15f));
+                        if (ev.Damage >= 2f || ev.Counter) CamFx()?.Punch(0.22f);
+                        if (ev.Counter && !yomiTheater)
+                        {
+                            _hud.ShowBigMessage("¡COUNTER!", new Color(1f, 0.55f, 0.15f));
+                            _hud.ScreenFlash(0.4f); // impact frame de anime
+                        }
                         // la tabla ya decidió: al golpeado no le queda nada por hacer
                         if (yomiTheater) { Sim.Fighters[def].Queue.Clear(); Sim.Fighters[def].QueueIndex = 0; }
                         break;
@@ -1520,6 +1545,8 @@ namespace LagFighter
                         SfxLib.Play(SfxLib.Kind.Counter);
                         _hitstop = Mathf.Max(_hitstop, 0.14f);
                         CamFx()?.Shake(0.11f);
+                        CamFx()?.Punch(0.3f);
+                        _hud.ScreenFlash(0.45f);
                         _hud.ShowBigMessage("¡GUARDIA ROTA!", new Color(1f, 0.85f, 0.2f));
                         Announcer.Play(0.7f);
                         break;
@@ -1555,6 +1582,8 @@ namespace LagFighter
             {
                 SfxLib.Play(SfxLib.Kind.Ko);
                 CamFx()?.Shake(0.14f);
+                CamFx()?.Punch(0.45f);
+                _hud.ScreenFlash(0.65f); // el KO es EL evento: que la pantalla lo grite
             }
         }
 

@@ -93,6 +93,12 @@ namespace LagFighter
         // tip contextual del modo práctica (lo maneja MatchController)
         Text _tip;
 
+        // tooltip de ficha: framedata del move al pasar el mouse por tu
+        // timeline en planificación (cierra el loop con el panel de cartas)
+        Image _chipTip;
+        Text _chipTipText;
+        int _chipTipShown = -1; // move index mostrado (no rearmar el string por frame)
+
         // botones con hover: tinte + tick al entrar
         readonly List<Image> _hoverBtns = new List<Image>();
         readonly List<Color> _hoverBase = new List<Color>();
@@ -109,6 +115,11 @@ namespace LagFighter
 
         // botones de fin de partida
         Image _btnRematch, _btnReplay, _btnMenu;
+
+        // impact frame: flash blanco de pantalla completa (counter/KO), 2-3
+        // frames de anime. Overlay UI: WebGL-safe, cero post-processing.
+        Image _screenFlash;
+        float _screenFlashA;
 
         // cartel de replay + botón SKIP (el replay corre siempre, saltearlo es opcional)
         Image _replayPanel, _skipBtn;
@@ -324,7 +335,24 @@ namespace LagFighter
                     new Vector2(2200f, 8f), new Color(0.6f, 0.9f, 1f, 0.25f));
                 _glitchBars[g].gameObject.SetActive(false);
             }
+
+            // tooltip de ficha de timeline (planificación)
+            _chipTip = MakePanel(_canvasRt, "ChipTip", new Vector2(0.5f, 0f), Vector2.zero, new Vector2(340f, 32f), Palette.Neutral);
+            _chipTipText = MakeTextP(_chipTip.rectTransform, "T", "", new Vector2(0.5f, 0.5f), Vector2.zero,
+                new Vector2(336f, 20f), 8, new Color(1f, 1f, 1f, 0.92f), TextAnchor.MiddleCenter);
+            _chipTip.gameObject.SetActive(false);
+
+            // flash de impacto: ÚLTIMO hijo del canvas — tapa todo un instante
+            _screenFlash = MakeImage(_canvasRt, "ScreenFlash", new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, Color.clear);
+            var sfr = _screenFlash.rectTransform;
+            sfr.anchorMin = Vector2.zero;
+            sfr.anchorMax = Vector2.one;
+            sfr.offsetMin = sfr.offsetMax = Vector2.zero;
+            _screenFlash.gameObject.SetActive(false);
         }
+
+        // impact frame blanco: strength ~0.4 counter, ~0.7 KO
+        public void ScreenFlash(float strength) => _screenFlashA = Mathf.Max(_screenFlashA, strength);
 
         Image MakeButton(string label, Vector2 pos, Color accent)
         {
@@ -461,6 +489,15 @@ namespace LagFighter
                 new Vector2(sign * 14f, -80f), new Vector2(GuardBarW, 9f), Palette.Guard);
             _guardFill[i].rectTransform.pivot = new Vector2(left ? 0f : 1f, 1f);
 
+            // escudito al lado de la barra: la barrita amarilla sola no se
+            // auto-explica (feedback: usuarios descubren el guard crush
+            // recién cuando les pasa)
+            var shieldIc = MakeImage(pr, "GuardIcon", new Vector2(left ? 0f : 1f, 1f),
+                new Vector2(sign * 13f, -73f), new Vector2(14f, 15f), Palette.Guard);
+            shieldIc.rectTransform.pivot = new Vector2(left ? 1f : 0f, 1f);
+            shieldIc.sprite = MoveIcons.ShieldSprite();
+            shieldIc.preserveAspect = true;
+
             // barra de SUPER: dorada y finita bajo la guardia; carga con overflow
             _superBg[i] = MakeImage(pr, "SuperBg", new Vector2(left ? 0f : 1f, 1f),
                 new Vector2(sign * 14f, -92f), new Vector2(GuardBarW, 6f), new Color(0f, 0f, 0f, 0.55f));
@@ -584,7 +621,7 @@ namespace LagFighter
             if (ev.Kind == EvKind.Parry)
             {
                 WorldFX.Popup(atkX, "¡PARRY!", new Color(0.35f, 0.9f, 1f), 1.25f);
-                if (ev.FrameAdv != 0) WorldFX.Popup(atkX, $"+{ev.FrameAdv}F", new Color(1f, 1f, 1f, 0.8f), 0.8f);
+                if (ev.FrameAdv != 0) WorldFX.Popup(atkX, $"+{ev.FrameAdv}F", new Color(1f, 1f, 1f, 0.8f), 0.8f, WorldFX.LaneAdv);
                 return;
             }
             if (ev.Kind == EvKind.LimbLost)
@@ -598,11 +635,11 @@ namespace LagFighter
             {
                 case EvKind.Hit:
                     WorldFX.Popup(defX, $"-{ev.Damage:0}", ev.Counter ? new Color(1f, 0.55f, 0.15f) : Palette.Damage, ev.Counter ? 1.45f : 1.15f);
-                    WorldFX.Popup(atkX, adv, new Color(1f, 1f, 1f, 0.75f), 0.8f);
+                    WorldFX.Popup(atkX, adv, new Color(1f, 1f, 1f, 0.75f), 0.8f, WorldFX.LaneAdv);
                     break;
                 case EvKind.Blocked:
                     WorldFX.Popup(defX, "BLOQUEADO", Palette.Block, 0.9f);
-                    WorldFX.Popup(atkX, adv, new Color(1f, 1f, 1f, 0.75f), 0.8f);
+                    WorldFX.Popup(atkX, adv, new Color(1f, 1f, 1f, 0.75f), 0.8f, WorldFX.LaneAdv);
                     break;
                 case EvKind.Whiff:
                     WorldFX.Popup(atkX, "AL AIRE", new Color(1f, 1f, 1f, 0.5f), 0.85f);
@@ -665,6 +702,18 @@ namespace LagFighter
             }
 
             AnimateYomiCards();
+
+            // ciclo del mini-reveal clásico: centro → dock al costado → fuera
+            if (_openerTimer >= 0f)
+            {
+                _openerTimer += Time.deltaTime;
+                if (_openerTimer > 0.75f && !_yomiDocked) DockYomiCards();
+                if (flow != MatchController.Flow.Executing)
+                {
+                    _openerTimer = -1f;
+                    HideYomiCards();
+                }
+            }
 
             bool executing = flow == MatchController.Flow.Executing || flow == MatchController.Flow.Replay;
 
@@ -901,6 +950,21 @@ namespace LagFighter
             UpdateOptions();
             UpdateBanner(sim, flow);
             UpdateHover();
+            UpdateScreenFlash();
+        }
+
+        // decae rápido: 2-3 frames de blanco y listo (unscaled: el hitstop
+        // congela el juego pero el flash tiene que apagarse igual)
+        void UpdateScreenFlash()
+        {
+            if (_screenFlashA <= 0.003f)
+            {
+                if (_screenFlash.gameObject.activeSelf) _screenFlash.gameObject.SetActive(false);
+                return;
+            }
+            if (!_screenFlash.gameObject.activeSelf) _screenFlash.gameObject.SetActive(true);
+            _screenFlash.color = new Color(1f, 1f, 1f, Mathf.Min(_screenFlashA, 0.85f));
+            _screenFlashA -= Time.unscaledDeltaTime * 4.5f;
         }
 
         // esquina: la pared pulsa con el color del jugador acorralado
@@ -929,10 +993,11 @@ namespace LagFighter
             }
         }
 
-        // scrub (arrastrar) y borrar orden (click derecho) sobre la fila del picker
+        // scrub (arrastrar), borrar orden (click derecho) y tooltip de
+        // framedata (hover) sobre la fila del picker
         void UpdateTimelineInteraction(MatchController.Flow flow)
         {
-            bool scrubbed = false;
+            bool scrubbed = false, tipOn = false;
             if (flow == MatchController.Flow.Planning)
             {
                 var row = _mc.Picker == 0 ? _row0 : _row1;
@@ -950,22 +1015,54 @@ namespace LagFighter
                     }
                     if (GameInput.RightClickPressed())
                     {
-                        int idx = ChipIndexAt(frame);
+                        int idx = ChipIndexAt(frame, out _);
                         if (idx >= 0) _mc.PlanRemoveAt(_mc.Picker, idx);
+                    }
+
+                    // hover: la framedata de la ficha, arriba de la fila
+                    int hov = ChipIndexAt(frame, out float midFrame);
+                    if (hov >= 0)
+                    {
+                        tipOn = true;
+                        int mi = _mc.GetPlan(_mc.Picker)[hov];
+                        if (_chipTipShown != mi)
+                        {
+                            _chipTipShown = mi;
+                            var m = MoveCatalog.All[mi];
+                            string ap = SimConfig.ApActive ? $"{m.ApCost} AP · " : "";
+                            _chipTipText.text = $"{m.Name.ToUpperInvariant()} · {ap}{m.Startup}/{m.Active}/{m.Recovery} · {m.Total}F";
+                        }
+                        float rowY = _mc.Picker == 0 ? 312f : 246f;
+                        float tipX = Mathf.Clamp(midFrame * PxPerFrame - RowW * 0.5f, -RowW * 0.5f + 170f, RowW * 0.5f - 170f);
+                        _chipTip.rectTransform.anchoredPosition = new Vector2(tipX, rowY + 52f + 10f);
                     }
                 }
             }
             if (!scrubbed) _mc.GhostScrub(-1f);
+            if (_chipTip.gameObject.activeSelf != tipOn)
+            {
+                _chipTip.gameObject.SetActive(tipOn);
+                if (!tipOn) _chipTipShown = -1;
+            }
         }
 
-        int ChipIndexAt(float frame)
+        // Hit-test de fichas: avanza por PaddedTotal (el layout real de los
+        // chips en modo AP — con Total, después de un move con padding tipo
+        // DP 41f/48f el click derecho borraba la ficha equivocada).
+        int ChipIndexAt(float frame, out float midFrame)
         {
             var plan = _mc.GetPlan(_mc.Picker);
             float start = _mc.TimelineOffset(_mc.Picker);
+            midFrame = 0f;
             for (int i = 0; i < plan.Count; i++)
             {
-                float end = start + MoveCatalog.All[plan[i]].Total;
-                if (frame >= start && frame < end) return i;
+                var m = MoveCatalog.All[plan[i]];
+                float end = start + m.PaddedTotal;
+                if (frame >= start && frame < end)
+                {
+                    midFrame = start + m.Total * 0.5f;
+                    return i;
+                }
                 start = end;
             }
             return -1;
@@ -1192,6 +1289,7 @@ namespace LagFighter
             readonly bool _dim;
             readonly List<Image> _chips = new List<Image>();
             readonly List<Text> _labels = new List<Text>();
+            readonly List<Image> _icons = new List<Image>(); // pictograma del move
             // sub-franjas S/A/R al pie de cada ficha: se lee en qué frame pega
             readonly List<Image> _phS = new List<Image>();
             readonly List<Image> _phA = new List<Image>();
@@ -1343,6 +1441,17 @@ namespace LagFighter
                         chip.color = c;
                         _labels[used - 1].text = ovfChip ? ChipLabel(mi) + "»" : ChipLabel(mi);
 
+                        // pictograma a la izquierda de la ficha (si entra)
+                        var icon = _icons[used - 1];
+                        var iSpr = MoveIcons.Get(mi);
+                        bool iconOn = iSpr != null && w > 64f;
+                        if (icon.gameObject.activeSelf != iconOn) icon.gameObject.SetActive(iconOn);
+                        if (iconOn)
+                        {
+                            icon.sprite = iSpr;
+                            icon.rectTransform.anchoredPosition = new Vector2(10f, 0f);
+                        }
+
                         // fases dentro de la ficha (solo moves con ventana activa):
                         // el mismo amarillo/rojo/azul del panel de info
                         int ci = used - 1;
@@ -1421,8 +1530,16 @@ namespace LagFighter
                     img.rectTransform.pivot = new Vector2(0f, 0.5f);
                     var t = _hud.MakeText(img.rectTransform, "L", "", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(64f, 30f), 21, Color.white, TextAnchor.MiddleCenter);
                     t.fontStyle = FontStyle.Bold;
+                    // pictograma pegado al borde izquierdo (blanco translúcido:
+                    // se lee sobre cualquier color de categoría)
+                    var ic = _hud.MakeImage(img.rectTransform, "Icon", new Vector2(0f, 0.5f),
+                        new Vector2(10f, 0f), new Vector2(26f, 24f), new Color(1f, 1f, 1f, 0.9f));
+                    ic.rectTransform.pivot = new Vector2(0f, 0.5f);
+                    ic.preserveAspect = true;
+                    ic.gameObject.SetActive(false);
                     _chips.Add(img);
                     _labels.Add(t);
+                    _icons.Add(ic);
                     _phS.Add(PhaseBar(img, new Color(0.95f, 0.85f, 0.25f, 0.9f)));
                     _phA.Add(PhaseBar(img, new Color(0.95f, 0.3f, 0.22f, 0.95f)));
                     _phR.Add(PhaseBar(img, new Color(0.3f, 0.55f, 0.95f, 0.9f)));
@@ -1480,6 +1597,34 @@ namespace LagFighter
             if (a == YomiAction.Dash) s += close ? "  ·  SE VA" : "  ·  ENTRA";
             if (a == YomiAction.Jump) s += close ? "  ·  ESCAPA" : "  ·  ENTRA PEGANDO";
             return s;
+        }
+
+        // ---- mini-reveal del CLÁSICO: al arrancar la ejecución, medio
+        // segundo de "con qué abre cada uno" con las mismas cartas del modo
+        // YOMI; después se van chicas al costado y quedan de referencia.
+        float _openerTimer = -1f;
+
+        public void ShowOpeners(int mi0, int mi1)
+        {
+            for (int i = 0; i < 2; i++)
+            {
+                int mi = i == 0 ? mi0 : mi1;
+                var c = mi >= 0 ? ChipColor(mi) : Palette.Neutral;
+                _yomiCard[i].gameObject.SetActive(true);
+                _yomiCardEdge[i].color = new Color(c.r, c.g, c.b, 0.95f);
+                _yomiCardName[i].text = mi >= 0 ? MoveCatalog.All[mi].Name.ToUpperInvariant() : "PASA";
+                _yomiCardName[i].color = new Color(c.r * 0.45f + 0.55f, c.g * 0.45f + 0.55f, c.b * 0.45f + 0.55f);
+                _yomiCardInfo[i].text = mi >= 0
+                    ? (SimConfig.ApActive ? $"{MoveCatalog.All[mi].ApCost} AP  ·  {MoveCatalog.All[mi].Total}F" : $"{MoveCatalog.All[mi].Total}F")
+                    : "QUIETO, BLOQUEA";
+            }
+            _yomiVs.gameObject.SetActive(true);
+            _yomiExplain.gameObject.SetActive(false);
+            _yomiPop = 0f;
+            _yomiDock = 0f;
+            _yomiDocked = false;
+            _openerTimer = 0f;
+            LayoutYomiCards();
         }
 
         public void ShowYomiReveal(YomiAction a0, YomiAction a1, bool close, string ruling)

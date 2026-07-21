@@ -255,6 +255,18 @@ namespace LagFighter
                 _cardEdge[pos] = MakeImage(card.rectTransform, "Edge", new Vector2(0f, 0.5f), new Vector2(3f, 0f),
                     new Vector2(6f, CardH - 6f), new Color(cat.r, cat.g, cat.b, 0.9f));
 
+                // pictograma del move junto al borde (clásico; en YOMI los
+                // valores son acciones de otra tabla, sin icono)
+                var iconSpr = _builtYomi ? null : MoveIcons.Get(Rep(mi));
+                if (iconSpr != null)
+                {
+                    var icon = MakeImage(card.rectTransform, "Icon", new Vector2(0f, 0.5f),
+                        new Vector2(14f, 0f), new Vector2(22f, 20f), new Color(cat.r * 0.5f + 0.5f, cat.g * 0.5f + 0.5f, cat.b * 0.5f + 0.5f, 0.95f));
+                    icon.rectTransform.pivot = new Vector2(0f, 0.5f);
+                    icon.sprite = iconSpr;
+                    icon.preserveAspect = true;
+                }
+
                 _cardName[pos] = MakeText(card.rectTransform, "Name", DisplayName(mi), new Vector2(0.5f, 0.5f), new Vector2(6f, 0f),
                     new Vector2(CardW - 26f, 30f), 8, new Color(1f, 1f, 1f, 0.92f), TextAnchor.MiddleCenter);
                 _cardName[pos].font = UIFonts.Pixel;

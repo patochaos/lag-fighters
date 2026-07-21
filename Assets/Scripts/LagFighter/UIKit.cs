@@ -50,6 +50,223 @@ namespace LagFighter
         }
     }
 
+    // Pictogramas pixel-art por move, generados en runtime (cero assets):
+    // el icono se lee más rápido que la abreviatura ("BL"/"DP") en las
+    // fichas de la timeline y las cartas del menú. Blancos: se tiñen con
+    // el color de la Image que los muestra.
+    public static class MoveIcons
+    {
+        static readonly Dictionary<string, Sprite> _cache = new Dictionary<string, Sprite>();
+
+        // 11x10, 'X' = pixel. Formas geométricas gordas: leen a 20px.
+        static readonly string[] Fist =
+        {
+            "...........",
+            ".XX.XX.XX..",
+            "XXXXXXXXXX.",
+            "XXXXXXXXXXX",
+            "XXXXXXXXXXX",
+            ".XXXXXXXXXX",
+            ".XXXXXXXXX.",
+            "..XXXXXXX..",
+            "...........",
+            "...........",
+        };
+        static readonly string[] Sweep = // barrida: cuña al ras del piso
+        {
+            "...........",
+            "...........",
+            "...........",
+            "...........",
+            "XX.........",
+            "XXXX.......",
+            "XXXXXXX....",
+            "XXXXXXXXXX.",
+            "XXXXXXXXXXX",
+            "...........",
+        };
+        static readonly string[] Ball = // hadouken: bola con estela
+        {
+            "...........",
+            "....XXXX...",
+            "...XXXXXX..",
+            "X.XXXXXXXX.",
+            ".XXXXXXXXX.",
+            "X.XXXXXXXX.",
+            ".XXXXXXXXX.",
+            "X..XXXXXX..",
+            "....XXXX...",
+            "...........",
+        };
+        static readonly string[] Rising = // shoryu: flecha bien arriba
+        {
+            ".....X.....",
+            "....XXX....",
+            "...XXXXX...",
+            "..XXXXXXX..",
+            ".XXXXXXXXX.",
+            "....XXX....",
+            "....XXX....",
+            "....XXX....",
+            "....XXX....",
+            "...........",
+        };
+        static readonly string[] Spiral = // tatsu: tornado
+        {
+            "...........",
+            ".XXXXXXXXX.",
+            "...........",
+            "..XXXXXXX..",
+            "...........",
+            "...XXXXX...",
+            "...........",
+            "....XXX....",
+            ".....X.....",
+            "...........",
+        };
+        static readonly string[] Claw = // agarre: pinza abierta
+        {
+            "...........",
+            "XX......XX.",
+            "XXX....XXX.",
+            ".XXX..XXX..",
+            "..XX..XX...",
+            "..XX..XX...",
+            ".XXX..XXX..",
+            "XXX....XXX.",
+            "XX......XX.",
+            "...........",
+        };
+        static readonly string[] Shield =
+        {
+            "XXXXXXXXXXX",
+            "XXXXXXXXXXX",
+            "XXXXXXXXXXX",
+            "XXXXXXXXXXX",
+            ".XXXXXXXXX.",
+            ".XXXXXXXXX.",
+            "..XXXXXXX..",
+            "...XXXXX...",
+            "....XXX....",
+            ".....X.....",
+        };
+        static readonly string[] ChevR = // dash adelante
+        {
+            "...........",
+            "X....X.....",
+            "XX....XX...",
+            ".XX....XX..",
+            "..XX....XX.",
+            "..XX....XX.",
+            ".XX....XX..",
+            "XX....XX...",
+            "X....X.....",
+            "...........",
+        };
+        static readonly string[] JumpArc = // salto: arco con flecha
+        {
+            "....XXX....",
+            "...XXXXX...",
+            "..XX.X.XX..",
+            ".XX..X..XX.",
+            ".X..XXX..X.",
+            "....XXX....",
+            "...........",
+            "XXX.....XXX",
+            "...........",
+            "...........",
+        };
+        static readonly string[] Down = // agacharse
+        {
+            "...........",
+            "...........",
+            ".XXXXXXXXX.",
+            ".XXXXXXXXX.",
+            "..XXXXXXX..",
+            "...XXXXX...",
+            "....XXX....",
+            ".....X.....",
+            "...........",
+            "...........",
+        };
+        static readonly string[] Star = // super
+        {
+            ".....X.....",
+            ".....X.....",
+            "....XXX....",
+            "X..XXXXX..X",
+            ".XXXXXXXXX.",
+            "..XXXXXXX..",
+            "...XXXXX...",
+            "..XXX.XXX..",
+            ".XX.....XX.",
+            "...........",
+        };
+        static readonly string[] Walk = // caminar: chevron simple
+        {
+            "...........",
+            "...X.......",
+            "...XX......",
+            "....XX.....",
+            ".....XX....",
+            ".....XX....",
+            "....XX.....",
+            "...XX......",
+            "...X.......",
+            "...........",
+        };
+
+        public static Sprite Get(int moveIndex)
+        {
+            switch (moveIndex)
+            {
+                case MoveCatalog.AttackA:
+                case MoveCatalog.Strong: return Make("fist", Fist, flip: false);
+                case MoveCatalog.AttackB:
+                case MoveCatalog.LowKick: return Make("sweep", Sweep, flip: false);
+                case MoveCatalog.Hadouken:
+                case MoveCatalog.Super: return Make("ball", Ball, flip: false);
+                case MoveCatalog.Shoryuken: return Make("rising", Rising, flip: false);
+                case MoveCatalog.Tatsu: return Make("spiral", Spiral, flip: false);
+                case MoveCatalog.Grab:
+                case MoveCatalog.YomiGrab: return Make("claw", Claw, flip: false);
+                case MoveCatalog.WalkB:
+                case MoveCatalog.Parry: return Make("shield", Shield, flip: false);
+                case MoveCatalog.DashF: return Make("chevR", ChevR, flip: false);
+                case MoveCatalog.DashB: return Make("chevL", ChevR, flip: true);
+                case MoveCatalog.JumpF:
+                case MoveCatalog.JumpN:
+                case MoveCatalog.JumpB: return Make("jump", JumpArc, flip: false);
+                case MoveCatalog.Crouch: return Make("down", Down, flip: false);
+                case MoveCatalog.WalkF: return Make("walk", Walk, flip: false);
+                default: return null;
+            }
+        }
+
+        public static Sprite ShieldSprite() => Make("shield", Shield, flip: false);
+        public static Sprite StarSprite() => Make("star", Star, flip: false);
+
+        static Sprite Make(string key, string[] rows, bool flip)
+        {
+            string k = flip ? key + "~" : key;
+            if (_cache.TryGetValue(k, out var s)) return s;
+            int w = rows[0].Length, h = rows.Length;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Point;
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    int sx = flip ? w - 1 - x : x;
+                    bool on = rows[h - 1 - y][sx] == 'X';
+                    tex.SetPixel(x, y, on ? Color.white : Color.clear);
+                }
+            tex.Apply();
+            s = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
+            _cache[k] = s;
+            return s;
+        }
+    }
+
     // Feedback EN el mundo: daño/eventos flotando sobre el peleador golpeado
     // y badges de estado (HITSTUN 12f) sobre las cabezas. Into the Breach:
     // la información vive donde pasa la acción.
@@ -57,11 +274,23 @@ namespace LagFighter
     {
         static WorldFX _i;
 
+        // Carriles verticales: cada TIPO de popup nace a su altura y no se
+        // pisa con los demás (antes daño, ventaja y carteles compartían
+        // y=2.15 y en cuanto pasaban dos cosas juntas era una sopa).
+        public const int LaneResult = 0;   // daño, BLOQUEADO, PARRY, TECH
+        public const int LaneAdv = 1;      // frame advantage (+2F), chiquito
+        public const int LaneCallout = 2;  // nombre del move, arriba del badge
+        static readonly float[] LaneY = { 2.15f, 1.78f, 2.62f };
+        static readonly float[] LaneVel = { 1.15f, 0.7f, 0.85f };
+        static readonly float[] LaneLife = { 1.15f, 0.9f, 1.05f };
+
         class Pop
         {
             public TextMesh Tm;
             public float Life, MaxLife;
             public Vector3 Vel;
+            public int Lane;
+            public float X;
         }
 
         readonly List<Pop> _pops = new List<Pop>();
@@ -94,7 +323,7 @@ namespace LagFighter
         }
 
         // texto flotante sobre una posición del mundo (x del peleador golpeado)
-        public static void Popup(float worldX, string msg, Color c, float scale = 1f)
+        public static void Popup(float worldX, string msg, Color c, float scale = 1f, int lane = LaneResult)
         {
             var i = Ensure();
             Pop pop = null;
@@ -105,13 +334,23 @@ namespace LagFighter
                 pop = new Pop { Tm = i.MakeTm(34, 0.05f) };
                 i._pops.Add(pop);
             }
+            // apilado: si ya hay popups vivos del mismo carril cerca de esta x,
+            // el nuevo nace más arriba en vez de nacer encima
+            float y = LaneY[lane];
+            int stacked = 0;
+            foreach (var p in i._pops)
+                if (p.Tm.gameObject.activeSelf && p.Lane == lane && Mathf.Abs(p.X - worldX) < 0.9f)
+                    stacked++;
+            y += Mathf.Min(stacked, 3) * 0.32f;
+            pop.Lane = lane;
+            pop.X = worldX;
             pop.Tm.text = msg;
             pop.Tm.color = c;
             pop.Tm.characterSize = 0.05f * scale;
-            pop.Tm.transform.position = new Vector3(worldX, 2.15f, -0.6f);
+            pop.Tm.transform.position = new Vector3(worldX, y, -0.6f);
             pop.Tm.gameObject.SetActive(true);
-            pop.MaxLife = pop.Life = 1.15f;
-            pop.Vel = new Vector3(0f, 1.15f, 0f);
+            pop.MaxLife = pop.Life = LaneLife[lane];
+            pop.Vel = new Vector3(0f, LaneVel[lane], 0f);
         }
 
         // badges de estado sobre las cabezas, actualizados por frame desde el HUD
