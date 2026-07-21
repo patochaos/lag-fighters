@@ -1077,12 +1077,18 @@ namespace LagFighter
             StartPlanning();
         }
 
-        // Ganador efectivo del round: KO manda; sin KO decide la vida (TIME OVER).
+        // Ganador efectivo del round: KO manda; sin KO decide la vida (TIME
+        // OVER) y, con vida igual, la GUARDIA restante — premia al que atacó
+        // (la guardia solo regenera ejecutando moves que no bloquean): la
+        // tortuga que empata a vida pierde el juicio. En YOMI las guardias
+        // quedan intactas e iguales → sigue siendo empate, no cambia nada.
         public int EffectiveWinner()
         {
             if (Sim.Over) return Sim.Winner;
             float h0 = Sim.Fighters[0].Hp, h1 = Sim.Fighters[1].Hp;
-            return h0 > h1 ? 0 : h1 > h0 ? 1 : -1;
+            if (h0 != h1) return h0 > h1 ? 0 : 1;
+            float g0 = Sim.Fighters[0].Guard, g1 = Sim.Fighters[1].Guard;
+            return g0 > g1 + 0.01f ? 0 : g1 > g0 + 0.01f ? 1 : -1;
         }
 
         void AddTurnLogLine()

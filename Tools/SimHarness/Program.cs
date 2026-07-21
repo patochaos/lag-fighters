@@ -255,12 +255,16 @@ class Program
         }
     }
 
-    // Mismo criterio que el juego: KO manda, TIME OVER lo decide la vida.
+    // Mismo criterio que el juego: KO manda, TIME OVER lo decide la vida y,
+    // con vida igual, la GUARDIA restante (premia al que atacó: la guardia
+    // solo regenera ejecutando moves que no bloquean).
     static int Judge(MatchSim sim)
     {
         if (sim.Over) return sim.Winner;
         float h0 = sim.Fighters[0].Hp, h1 = sim.Fighters[1].Hp;
-        return h0 > h1 ? 0 : h1 > h0 ? 1 : -1;
+        if (h0 != h1) return h0 > h1 ? 0 : 1;
+        float g0 = sim.Fighters[0].Guard, g1 = sim.Fighters[1].Guard;
+        return g0 > g1 + 0.01f ? 0 : g1 > g0 + 0.01f ? 1 : -1;
     }
 
     // Round-robin de perfiles de IA: cada perfil contra cada perfil (espejo

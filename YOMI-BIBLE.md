@@ -216,18 +216,45 @@ Aplicado en el modo clásico tras la auditoría de esta biblia (2026-07-20):
 - **Ley 13**: REVERSAL (1 por round, 2 AP, derribado): escape, no ventaja.
 - **Ley 14**: grilla 3×3 con Dash/Salto agrupados por dirección.
 
+Aplicado en la sesión de balance 2026-07-20 (noche) — 9 experimentos A/B
+con el lab (2000 peleas + matriz de perfiles por corrida):
+- **Anti-patrón 3 (tortuga)**: atacado con CUATRO diales que quedaron:
+  guardia 70→55 (crush 0.14→0.20-0.27/pelea: el counter estructural existe),
+  Agarre 1→1.5 dmg (el depredador del default con dientes, Ley 3: Aggressive
+  vs Defensive 58→62%), Defensive re-agresivizado (agarra en corta — los
+  reemplazos del parry habían ido TODOS a WalkB), y **juez por guardia** en
+  TIME OVER a vida igual (la tortuga que empata pierde; empates 15→10%).
+- **Zoneo sin check** (secuela de retirar el parry): el arreglo que funcionó
+  fue **alcance finito del hadouken (3.0)** — zonear de fullscreen whiffea,
+  la casa del zoner pasa a la media distancia donde viven sus counters
+  (salto, tatsu). Zoner 54.9→51.6 en su mejor corrida; con el juez por
+  guardia vuelve a ~55 (chipear guardia gana juicios): tensión anotada.
+- **Descartados CON datos** (hipótesis → medición, para no reintentarlos):
+  Bloquear 2→3 AP (timeout igual: el bloqueo gratis es el AUTOMÁTICO de
+  neutral, no la carta); ingreso +4→+3 (timeout 42→54%: pobreza = planes
+  cortos = más neutral bloqueando — la escasez clásica alimenta la tortuga,
+  al revés que en YOMI); chip de vida en proyectiles bloqueados (0.25 y
+  hasta 0.1: el chip solo fluye hacia el zoner y regala el matchup vs
+  Defensive 46→65% — era la sugerencia vieja de esta biblia y ESTÁ MAL acá);
+  ProjGuardDamage 25→18 (Zoner apenas baja y el crush pierde lo ganado).
+- **Ley 7 (economías validadas por A/B)**: clásico income +4 / tope 5 y
+  YOMI income +1 / cap 6 quedan confirmados — en YOMI, income +2 mata la
+  carga (AP 2.5→4.8/6, Cargar −50%, Shoryu +45%, sesgo P0 se agranda) y
+  ChargeGain 3 no degenera pero tampoco aporta (queda 2, más seguro contra
+  humanos).
+
 Dónde seguir mirando:
 - **Ley 4**: el bloqueo sigue siendo botón único siempre disponible. La
   versión alto/bajo escasa de Yomi 2 es la evolución natural si el juego
   pide más profundidad defensiva (el agachado retirado coqueteaba con esto).
-- **Ley 7 (yomi)**: ~~AP promedio 5.5/6~~ **viejo**: la economía del modo
-  YOMI ya se re-tuneó — el lab de hoy da 2.5/6, la escasez muerde. Cumplida.
 - **Ley 12**: no hay decisión de "daño vs estado" al ganar — el premio es
   fijo (elegir Barrida vs Jab en el plan cubre parte; vigilar).
-- **Anti-patrón 3 (tortuga)**: tras sacar el parry y premiar el bloqueo, el
-  lab IA-IA subió a ~48% de TIME OVER. Si el juego humano se siente pasivo:
-  encarecer Bloquear (2→3 AP), bajar el tope de ahorro, o darle al chip de
-  proyectiles el rol anti-tortuga que tenía el parry.
+- **TIME OVER residual ~40%** (era 42): lo que queda es de espejos pasivos
+  IA-IA (Def-Def ~20 turnos). No es el juego humano; si molesta en VS IA,
+  el dial es seguir re-agresivizando perfiles, no tocar la sim.
+- **Adaptive 38.7%**: el perfil por defecto de VS IA es el más flojo de la
+  matriz (sus counter-picks llegan con un turno de lag y saltan a rango de
+  whiff). Es problema de la IA, no del balance del juego.
 
 ---
 

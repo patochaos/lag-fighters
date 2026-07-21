@@ -37,11 +37,11 @@ Balanceado contra la framedata real de ST Ryu (supercombo.gg, 2026-07-17):
 | 7 | Salto − (OFF) | 6/28/6 | −1.9. **Retirado 2026-07-19**: Salto N ya esquiva proyectiles y Dash − retrocede |
 | 8 | Jab (ex Golpe A) | 6/4/14 | 1 dmg, hs20/bs13 → **+2 on hit / −5 on block** (jab de ST: +4/+2) |
 | 9 | Barrida (ex Patada B) | 12/6/30 | 2 dmg, soft KD 42f, bs26 → **−10 on block** (2026-07-20: startup 16→12, baja a 4 AP — costaba lo mismo que un hadouken de turno entero) |
-| 10 | Hadouken | 14/2/44 = **60f** | ocupa el turno ENTERO; el salto lo castiga (ST: 52-54f, acá nerf extra a pedido) |
+| 10 | Hadouken | 14/2/44 = **60f** | ocupa el turno ENTERO; el salto lo castiga (ST: 52-54f, acá nerf extra a pedido); **alcance 3.0** (2026-07-20: se disipa — zonear de fullscreen whiffea; la Shinku sigue fullscreen) |
 | 11 | Shoryuken | 4/5/32 = 41f | **invuln 1..10**, hard KD 60f, −15 block; **anti-aéreo especializado** (Y 1.0–2.5, alcance 0.75): ya no pega OTG ni domina el suelo (nerf 2026-07-18: 76%→61% en el lab) |
 | 12 | Parry (OFF clásico) | 2/5/5 = 12f | rechaza golpes/proyectiles en f3–7; **retirado del clásico 2026-07-20** (Bloquear es LA defensa y banca AP) — sigue vivo en YOMI y replays |
 | 13 | Tatsumaki | 12/18/16 = 46f | viaja +1.6, 2 hits, el 2° derriba; **atraviesa hadoukens** (girando 8..34: el final es castigable con proyectil); hitbox baja: los saltos la pasan |
-| 14 | Agarre | 6/4/14 = 24f | **rompe guardia**, tira 1.2 + KD 45f; los saltos y caídos lo ignoran; **agarre vs agarre = TECH** (2026-07-20: recovery 20→14, baja a 2 AP — el mixup anti-tortuga tiene que ser barato) |
+| 14 | Agarre | 6/4/14 = 24f | **rompe guardia**, **1.5 dmg** (2026-07-20 bis: 1→1.5 — el depredador del default tiene que pagar, Ley 3), tira 1.2 + KD 45f; los saltos y caídos lo ignoran; **agarre vs agarre = TECH** (recovery 20→14, 2 AP — el mixup anti-tortuga tiene que ser barato) |
 | 15 | Agacharse (OFF) | 14f | **bloquea** con hurtbox 0.9: jab y hadouken **pasan por arriba**; sweep/baja/agarre pegan. Desactivado: `SimConfig.CrouchEnabled` |
 | 16 | Patada baja (OFF) | 8/4/16 | 1 dmg, pega BAJO, **+2 hit / −3 block**, agachado todo el move. Desactivado con el agachado |
 
@@ -146,11 +146,19 @@ Pedido de Patricio: que el turno diga CLARITO qué entra y qué no, y después
   cada 12f y hueco de padding visible tras cada ficha.
 - Lab post-rebalance (2000 peleas): P0/P1 clavados (832/831), stock
   promedio 4.6/5, 1.16 bloqueos bancados/pelea, dashes bien arriba (1 AP).
-  **A VIGILAR: TIME OVER ~45%** (antes del cambio de economía era ~19) —
-  sin parry y con IAs más bloqueadoras el meta IA-IA quedó defensivo; si el
-  juego humano se siente pasivo, los diales son encarecer Bloquear (2→3 AP)
-  y re-agresivizar los picks de la IA (los reemplazos de parry fueron a
-  WalkB).
+- **Sesión de balance 2026-07-20 (noche), 9 experimentos A/B en el lab**
+  contra la biblia (detalle en `YOMI-BIBLE.md` §4): quedaron **guardia 55 +
+  agarre 1.5 + hadouken con alcance 3.0 + juez por guardia + Defensive
+  re-agresivizado** (agarra en corta). Descartados con datos: Bloquear 3 AP
+  (no toca el bloqueo gratis en neutral: timeout igual), ingreso +3 (MÁS
+  tortuga: planes cortos = más neutral, timeout 42→54%), chip de vida en
+  proyectiles (aun a 0.1 regala el matchup Zoner-Defensive: 46→65%). El
+  TIME OVER quedó en ~40% (era 42) pero con empates a la mitad (15→10%),
+  crushes +45% y la matriz de perfiles pareja: Zoner 54.9 · Aggressive
+  51.5 · Defensive 46.3 · Trickster 46.2 · Adaptive 38.7 (baseline:
+  Defensive 40 y Aggressive 47 con Zoner igual arriba). El residuo de
+  timeout es de espejos pasivos IA-IA (Def-Def sigue en ~20 turnos), no
+  del juego humano.
 
 ### Turno fluido (toggle experimental, 2026-07-19)
 
@@ -236,8 +244,12 @@ partir del turno siguiente.
   o limpio a ×2; conmutables en vivo y recordados dentro de la sesión.
 - Rounds al mejor de 3 (marcadores dorados junto a los pips; V repite el
   último round, R es revancha). **20 turnos por round** (2026-07-18): al
-  agotarse → TIME OVER y gana el que tiene más vida (empate posible). El
-  prompt muestra TURNO X/20 y avisa en los últimos. Práctica no tiene límite.
+  agotarse → TIME OVER y gana el que tiene más vida; **con vida igual
+  desempata la GUARDIA restante** (2026-07-20: premia al que atacó — la
+  guardia solo regenera atacando — y la tortuga-a-empate pierde el juicio;
+  en el lab bajó los empates de 15% a 10%). Empate real solo si vida Y
+  guardia empatan. El prompt muestra TURNO X/20 y avisa en los últimos.
+  Práctica no tiene límite.
 - **Parry recarga guardia** (+15 por parry exitoso): la respuesta activa al
   chip de proyectiles — en el lab le bajó la opresividad al zoneo.
 - Juice: hitstop cosmético (pausa el avance de ticks, NO toca la sim),
@@ -266,15 +278,16 @@ partir del turno siguiente.
 - **Guardia automática (sin botón)**: bloqueás en neutral, esperando o caminando
   atrás, en el piso. Bloquear = BLOCKSTUN (te come turno). En el aire y en
   dash/walk-forward NO se bloquea.
-- **Guard gauge** (2026-07-17, barra achicada 2026-07-18): barra de **70** por
-  jugador (con 100 crushear casi no pasaba: 0 crushes en 2000 peleas del lab;
-  con 70 hay 46). Cada bloqueo la come según el golpe: A −15 · B −30 ·
-  patadas aéreas −15 · hadouken −25 · shoryu −35 · tatsu −15/hit. Regenera
-  ~6/seg SOLO cuando no estás bloqueando ni en blockstun. En 0 →
-  **GUARD CRUSH**: stun de 50f sin daño (+~32f: golpe garantizado), la barra
-  renace al 50% (35). 5 jabs o 3 sweeps bloqueados seguidos = crush. El
-  bloqueo queda con dos counters: agarre (puntual) y crush (estructural).
-  UI: barrita amarilla bajo los pips (parpadea en rojo <25%).
+- **Guard gauge** (2026-07-17; barra achicada 2026-07-18 y de nuevo
+  2026-07-20 tras la auditoría anti-tortuga): barra de **55** por jugador
+  (70→55: con 70 el crush era anécdota — 0.14/pelea; con 55 son 0.20-0.27 y
+  el 16-21% de las peleas ve al menos uno). Cada bloqueo la come según el
+  golpe: A −15 · B −30 · patadas aéreas −15 · hadouken −25 · shoryu −35 ·
+  tatsu −15/hit. Regenera ~8/seg SOLO mientras ejecutás moves que no
+  bloquean. En 0 → **GUARD CRUSH**: stun de 50f sin daño (+~32f: golpe
+  garantizado), la barra renace al ~50% (27). 4 jabs o 2 sweeps bloqueados
+  seguidos = crush. El bloqueo queda con dos counters: agarre (puntual) y
+  crush (estructural). UI: barrita amarilla bajo los pips (rojo <25%).
 - **Estados**: HITSTUN / BLOCKSTUN / KNOCKDOWN con frames visibles en el HUD.
   Cancelan el comando actual, comen turno, y apenas terminan la cola sigue con
   lo que quedaba. Golpe aéreo = knockdown. Counter (pegar en startup) = +1 dmg.

@@ -83,14 +83,15 @@ namespace LagFighter
         public const int ProjHitstun = 22, ProjBlockstun = 16;
         public const float ProjPush = 0.3f;
         public const float ProjGuardDamage = 25f; // sube de 20: que zonear lastime la guardia
+        public const float ProjRange = 3.0f;      // el hadouken se disipa tras viajar esto: zonear de fullscreen whiffea
 
         // guard gauge: bloquear no cuesta vida pero sí guardia; en 0 → GUARD CRUSH.
         // Barra de 70 (era 100: crushear casi no pasaba): 5 jabs o 3 sweeps
         // bloqueados seguidos y la guardia vuela.
-        public const float GuardMax = 70f;
+        public const float GuardMax = 55f;
         public const float GuardRegen = 0.14f;      // ~8/seg, SOLO mientras ejecutás moves que no bloquean (guardia = stamina)
         public const int GuardCrushStun = 50;
-        public const float GuardCrushRespawn = 35f; // la barra renace al 50%
+        public const float GuardCrushRespawn = 27f; // la barra renace al ~50%
 
         // ---- Super (Shinku Hadouken): la barra se carga con frames de
         // overflow (turno fluido) — el riesgo de comprometerse es el combustible.
@@ -265,7 +266,7 @@ namespace LagFighter
             new MoveDef { Id = "grab", Name = "Agarre", Anim = AnimKind.Grab, Startup = 6, Active = 4, Recovery = 14,
                 Desc = "Rompe la guardia y tira corto (KD). Los saltos lo ignoran; agarre vs agarre = TECH.",
                 Hits = new[] { new HitWindow { Start = 6, Duration = 4, Fwd0 = 0.15f, Fwd1 = 0.9f, Y0 = 0.5f, Y1 = 1.6f,
-                    Damage = 1f, Hitstun = 45, Blockstun = 0, CounterStun = 45, Push = 1.2f, Knockdown = true, IsGrab = true } } },
+                    Damage = 1.5f, Hitstun = 45, Blockstun = 0, CounterStun = 45, Push = 1.2f, Knockdown = true, IsGrab = true } } },
 
             new MoveDef { Id = "crouch", Name = "Agacharse", Anim = AnimKind.Crouch, Startup = 0, Active = 14, Recovery = 0,
                 Desc = "Bloquea agachado: los golpes ALTOS y los hadoukens pasan por arriba. El sweep, la patada baja y el agarre no.",
@@ -325,6 +326,7 @@ namespace LagFighter
     {
         public int Owner;
         public float X;
+        public float SpawnX; // de dónde salió: el hadouken común se disipa a ProjRange de acá
         public int Dir;
         public bool Alive;
         public bool Super; // Shinku: más ancho y rápido, arrasa hadoukens, imparryable
@@ -697,7 +699,7 @@ namespace LagFighter
                 if (m == null || m.SpawnFrame < 0 || Phase(i) != m.SpawnFrame) continue;
                 if (HasProjectile(i)) continue; // uno por vez
                 var f = Fighters[i];
-                Projectiles.Add(new Projectile { Owner = i, X = f.X + f.Face * 0.7f, Dir = f.Face, Alive = true,
+                Projectiles.Add(new Projectile { Owner = i, X = f.X + f.Face * 0.7f, SpawnX = f.X + f.Face * 0.7f, Dir = f.Face, Alive = true,
                     Super = f.MoveIndex == MoveCatalog.Super });
             }
 
@@ -708,6 +710,10 @@ namespace LagFighter
                 if (!p.Alive) continue;
                 p.X += p.Dir * (p.Super ? SimConfig.SuperSpeed : SimConfig.ProjSpeed);
                 if (Math.Abs(p.X) > SimConfig.StageHalfWidth + 1.2f) p.Alive = false;
+                // el hadouken común tiene alcance finito: zonear de fullscreen
+                // whiffea y la casa del zoneo pasa a ser la media distancia.
+                // La super sigue siendo fullscreen (para eso pagás la barra).
+                if (!p.Super && Math.Abs(p.X - p.SpawnX) > SimConfig.ProjRange) p.Alive = false;
                 Projectiles[pi] = p;
             }
             for (int a = 0; a < Projectiles.Count; a++)

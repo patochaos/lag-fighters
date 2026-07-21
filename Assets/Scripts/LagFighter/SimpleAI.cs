@@ -138,9 +138,12 @@ namespace LagFighter
                     return r < 0.35 ? MoveCatalog.AttackA : r < 0.60 ? MoveCatalog.Grab : r < 0.82 ? MoveCatalog.AttackB : MoveCatalog.Shoryuken;
 
                 case AIProfile.Defensive:
+                    // re-agresivizado 2026-07-20 bis: los reemplazos del parry
+                    // habían ido TODOS a WalkB y el espejo defensivo era 100%
+                    // TIME OVER; ahora poke-a más en media y agarra en corta.
                     if (dist > 2.3f) return r < 0.38 ? MoveCatalog.Hadouken : r < 0.72 ? MoveCatalog.WalkB : MoveCatalog.DashB;
-                    if (dist > 1.35f) return r < 0.32 ? MoveCatalog.WalkB : r < 0.58 ? MoveCatalog.AttackB : r < 0.80 ? MoveCatalog.WalkB : MoveCatalog.DashB;
-                    return r < 0.34 ? MoveCatalog.WalkB : r < 0.58 ? MoveCatalog.AttackA : r < 0.78 ? MoveCatalog.DashB : MoveCatalog.Shoryuken;
+                    if (dist > 1.35f) return r < 0.32 ? MoveCatalog.WalkB : r < 0.62 ? MoveCatalog.AttackB : r < 0.80 ? MoveCatalog.WalkB : MoveCatalog.DashB;
+                    return r < 0.30 ? MoveCatalog.WalkB : r < 0.52 ? MoveCatalog.AttackA : r < 0.66 ? MoveCatalog.Grab : r < 0.82 ? MoveCatalog.DashB : MoveCatalog.Shoryuken;
 
                 case AIProfile.Trickster:
                     if (dist > 2.2f) return r < 0.25 ? MoveCatalog.Hadouken : r < 0.50 ? MoveCatalog.DashF : r < 0.75 ? MoveCatalog.JumpF : MoveCatalog.WalkB;
