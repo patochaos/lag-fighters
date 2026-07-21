@@ -43,7 +43,7 @@ namespace LagFighter
         float _yomiPop;   // entrada de las cartas (0..1, con overshoot)
         float _yomiDock;  // 0 = grandes al centro · 1 = chicas al costado
         bool _yomiDocked;
-        static Sprite _circleSprite;
+        static Sprite _circleSprite, _ringSprite;
         const float PipW = 42f, PipGap = 46f;
         const float GuardBarW = SimConfig.MaxHp * PipGap - (PipGap - PipW);
         Text _banner, _prompt, _turnSummary, _planTimerText;
@@ -480,23 +480,38 @@ namespace LagFighter
             _apLabel[i].gameObject.SetActive(false);
         }
 
-        // circulito procedural (el proyecto no usa assets: todo se genera)
-        static Sprite CircleSprite()
+        // circulitos procedurales (el proyecto no usa assets: todo se genera).
+        // 64px con borde antialiaseado — los de 24px se veían pixelados al
+        // escalarlos. Disco = AP lleno; aro = casillero vacío (se lee "hueco",
+        // no "punto apagado"). Públicos: PlanMenuUI los usa para su barra.
+        public static Sprite CircleSprite()
         {
-            if (_circleSprite != null) return _circleSprite;
-            const int S = 24;
+            if (_circleSprite == null) _circleSprite = MakeRoundSprite(filled: true);
+            return _circleSprite;
+        }
+
+        public static Sprite RingSprite()
+        {
+            if (_ringSprite == null) _ringSprite = MakeRoundSprite(filled: false);
+            return _ringSprite;
+        }
+
+        static Sprite MakeRoundSprite(bool filled)
+        {
+            const int S = 64;
             var tex = new Texture2D(S, S, TextureFormat.RGBA32, false);
-            float c = (S - 1) * 0.5f, r = S * 0.42f;
+            tex.filterMode = FilterMode.Bilinear;
+            float c = (S - 1) * 0.5f, r = S * 0.45f, band = S * 0.10f;
             for (int y = 0; y < S; y++)
                 for (int x = 0; x < S; x++)
                 {
                     float d = Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c));
-                    float a = Mathf.Clamp01(r - d + 0.5f); // borde suave de 1px
+                    float edge = Mathf.Clamp01((r - d) / 1.6f); // borde exterior suave
+                    float a = filled ? edge : edge * Mathf.Clamp01((d - (r - band)) / 1.6f);
                     tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
                 }
             tex.Apply();
-            _circleSprite = Sprite.Create(tex, new Rect(0, 0, S, S), new Vector2(0.5f, 0.5f));
-            return _circleSprite;
+            return Sprite.Create(tex, new Rect(0, 0, S, S), new Vector2(0.5f, 0.5f));
         }
 
         public void SetPrompt(string s) => _prompt.text = s;
@@ -710,7 +725,7 @@ namespace LagFighter
                 // super: solo tiene sentido en turno fluido (carga con overflow).
                 // En YOMI en su lugar van los circulitos de AP.
                 bool yomiOn = SimConfig.YomiEnabled;
-                bool superOn = SimConfig.CarryoverEnabled && !yomiOn;
+                bool superOn = SimConfig.FluidTurn && !yomiOn;
                 if (_superBg[i].gameObject.activeSelf != superOn)
                 {
                     _superBg[i].gameObject.SetActive(superOn);
@@ -725,9 +740,9 @@ namespace LagFighter
                         : new Color(1f, 0.75f, 0.2f, 0.9f);
                 }
 
-                // circulitos de AP: lleno = disponible, vacío = no hay.
-                // Muestran el AP del ARRANQUE del turno durante la acción
-                // (YomiDisplayAp): el cobro se ve recién al cerrar el turno.
+                // circulitos de AP: disco lleno = disponible, aro = casillero
+                // vacío. Muestran el AP del ARRANQUE del turno durante la
+                // acción (YomiDisplayAp): el cobro se ve recién al cerrar.
                 bool pipsOn = yomiOn && _mc.Yomi != null;
                 int apNow = pipsOn ? _mc.YomiDisplayAp(i) : 0;
                 if (_apLabel[i].gameObject.activeSelf != pipsOn) _apLabel[i].gameObject.SetActive(pipsOn);
@@ -735,10 +750,15 @@ namespace LagFighter
                 {
                     if (_apPips[i][p].gameObject.activeSelf != pipsOn)
                         _apPips[i][p].gameObject.SetActive(pipsOn);
-                    if (pipsOn)
-                        _apPips[i][p].color = p < apNow
-                            ? new Color(0.35f, 0.85f, 1f, 1f)
-                            : new Color(0.22f, 0.28f, 0.36f, 0.5f);
+                    if (!pipsOn) continue;
+                    bool lleno = p < apNow;
+                    _apPips[i][p].sprite = lleno ? CircleSprite() : RingSprite();
+                    _apPips[i][p].color = lleno
+                        ? new Color(0.35f, 0.85f, 1f, 1f)
+                        : new Color(0.45f, 0.58f, 0.72f, 0.55f);
+                    // el punto recién ganado aterriza con un mini-pop
+                    _apPips[i][p].rectTransform.localScale = Vector3.one * (lleno && p == apNow - 1
+                        ? 1f + 0.08f * Mathf.PingPong(Time.time * 2.2f, 1f) : 1f);
                 }
 
                 for (int w = 0; w < MatchController.RoundsToWin; w++)
@@ -1084,6 +1104,8 @@ namespace LagFighter
             readonly List<Image> _phS = new List<Image>();
             readonly List<Image> _phA = new List<Image>();
             readonly List<Image> _phR = new List<Image>();
+            // grilla de slots de AP: rayitas verticales cada 12f (modo AP)
+            readonly List<Image> _slotTicks = new List<Image>();
 
             public RectTransform AreaRt => _area;
 
@@ -1154,6 +1176,7 @@ namespace LagFighter
 
             public void UpdateRow(List<int> queue, bool revealed, float playX, int stunFrames, StunKind stunKind)
             {
+                UpdateSlotGrid();
                 _hidden.gameObject.SetActive(!revealed);
                 _playhead.gameObject.SetActive(playX >= 0f);
                 if (playX >= 0f) _playhead.rectTransform.anchoredPosition = new Vector2(playX, 0f);
@@ -1234,7 +1257,9 @@ namespace LagFighter
                             _phR[ci].rectTransform.anchoredPosition = new Vector2(wS + wA, 2f);
                             _phR[ci].rectTransform.sizeDelta = new Vector2(wR, 5f);
                         }
-                        x += m.Total * px;
+                        // modo AP: el move ocupa su slot entero — la próxima
+                        // ficha arranca al final del slot (el hueco se VE)
+                        x += m.PaddedTotal * px;
                     }
                 }
                 for (int i = used; i < _chips.Count; i++)
@@ -1252,6 +1277,30 @@ namespace LagFighter
                     _ovfLabel.text = $"»{overflowF}f";
                 }
                 else _ovfSeg.gameObject.SetActive(false);
+            }
+
+            // el turno dividido en casilleros de AP: una rayita cada 12f.
+            // Van dentro de _chipParent como primeros hermanos: quedan DEBAJO
+            // de las fichas y arriba del fondo.
+            void UpdateSlotGrid()
+            {
+                float slotW = SimConfig.FramesPerAp * _hud.PxPerFrame;
+                int wanted = SimConfig.ApActive && slotW > 8f ? Mathf.CeilToInt(RowW / slotW) - 1 : 0;
+                while (_slotTicks.Count < wanted)
+                {
+                    var tick = _hud.MakeImage(_chipParent, "SlotTick", new Vector2(0f, 0.5f), Vector2.zero,
+                        new Vector2(2f, _height - 6f), new Color(1f, 1f, 1f, 0.10f));
+                    tick.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+                    tick.rectTransform.SetAsFirstSibling();
+                    _slotTicks.Add(tick);
+                }
+                for (int k = 0; k < _slotTicks.Count; k++)
+                {
+                    float tx = (k + 1) * slotW;
+                    bool on = k < wanted && tx < RowW - 2f;
+                    if (_slotTicks[k].gameObject.activeSelf != on) _slotTicks[k].gameObject.SetActive(on);
+                    if (on) _slotTicks[k].rectTransform.anchoredPosition = new Vector2(tx, 0f);
+                }
             }
 
             Image GetChip(int i)

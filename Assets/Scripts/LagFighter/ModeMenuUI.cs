@@ -165,6 +165,15 @@ namespace LagFighter
 
         void RefreshCarryLine()
         {
+            // Modo AP (2026-07-20): el turno se presupuesta en ACTION POINTS y
+            // el préstamo (overflow) ya es parte del juego — el toggle C del
+            // turno fluido quedó absorbido y se oculta.
+            if (SimConfig.ApEnabled)
+            {
+                _carryLine.text = "el turno se juega en ACTION POINTS: cada move cuesta AP — llenás la barra o pedís prestado al próximo turno";
+                _carryLine.color = new Color(0.45f, 0.9f, 1f, 0.7f);
+                return;
+            }
             bool on = SimConfig.CarryoverEnabled;
             _carryLine.text = on
                 ? "‹C› TURNO FLUIDO: ON — el último move puede cruzar el turno (quedás comprometido y el rival te ve)"
@@ -372,7 +381,8 @@ namespace LagFighter
             }
 
             // C conmuta el turno fluido mientras elegís lag/modo
-            if (_step <= 1 && GameInput.LetterPressed() == 'C')
+            // (en modo AP no hay toggle: el préstamo ya es parte del juego)
+            if (!SimConfig.ApEnabled && _step <= 1 && GameInput.LetterPressed() == 'C')
             {
                 SimConfig.CarryoverEnabled = !SimConfig.CarryoverEnabled;
                 PlayerPrefs.SetInt("lf_carryover", SimConfig.CarryoverEnabled ? 1 : 0);

@@ -58,6 +58,12 @@ namespace LagFighter
         static readonly Color SuperDimC = new Color(0.22f, 0.18f, 0.05f, 0.92f); // cargando: dorado apagado
         // panel de info a la derecha de la grilla: se llena con el hover
         Text _detailTitle, _detailFrames, _detailAdv, _detailTag, _detail, _status;
+        // barra de ACTION POINTS del turno (modo AP clásico): bolitas grandes
+        // arriba de la grilla — llena = te queda, aro = gastado, rojo = te lo
+        // comió el stun, naranja = prestado del próximo turno.
+        Image[] _apDots;
+        Text _apBarLabel;
+        const int MaxApDots = 30; // Lag Mode tope: 303f/12 = 25 AP + prestados
         Image _segBg, _segS, _segA, _segR;
         float _segW;
         int _sel;
@@ -87,6 +93,7 @@ namespace LagFighter
         void Rebuild()
         {
             if (_root != null) Destroy(_root);
+            _apDots = null; // vivían dentro de _root: refs muertas tras el destroy
             _builtYomi = SimConfig.YomiEnabled;
             _order = _builtYomi ? YomiOrder : ClassicOrder;
             _cols = _builtYomi ? YomiOrder.Length : 6;
@@ -241,10 +248,11 @@ namespace LagFighter
                     new Vector2(20f, 16f), 8, new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleLeft);
                 keyT.font = UIFonts.Pixel;
 
-                // YOMI: el costo en AP abajo a la derecha (0 = gratis: cargar)
-                if (_builtYomi)
+                // costo en AP abajo a la derecha (YOMI: su tabla · clásico:
+                // ceil(frames/12) — el presupuesto del turno ES en AP)
+                if (_builtYomi || SimConfig.ApActive)
                 {
-                    int cost = YomiConfig.Cost((YomiAction)mi);
+                    int cost = _builtYomi ? YomiConfig.Cost((YomiAction)mi) : MoveCatalog.All[mi].ApCost;
                     var costT = MakeText(card.rectTransform, "Cost", cost == 0 ? "GRATIS" : $"{cost} AP",
                         new Vector2(1f, 0f), new Vector2(-8f, 10f), new Vector2(60f, 14f), 8,
                         new Color(0.5f, 0.95f, 1f, 0.85f), TextAnchor.MiddleRight);
@@ -337,9 +345,28 @@ namespace LagFighter
             _status = MakeText(rootRt, "Status", "", new Vector2(0.5f, 0f), new Vector2(totalW / 2f + 14f, 26f + totalH + 44f),
                 new Vector2(900f, 22f), 14, new Color(0.5f, 1f, 0.6f), TextAnchor.MiddleRight);
             _status.rectTransform.pivot = new Vector2(1f, 0.5f);
+
+            // barra de AP: bolitas arriba de la grilla, a la izquierda (misma
+            // línea que el estado). Se llenan/vacían con RefreshApDots.
+            if (!_builtYomi && SimConfig.ApActive)
+            {
+                _apBarLabel = MakeText(rootRt, "ApBarLabel", "AP", new Vector2(0.5f, 0f),
+                    new Vector2(-totalW / 2f - 8f, 26f + totalH + 44f), new Vector2(46f, 20f), 8,
+                    new Color(0.45f, 0.9f, 1f, 0.85f), TextAnchor.MiddleLeft);
+                _apBarLabel.font = UIFonts.Pixel;
+                _apBarLabel.rectTransform.pivot = new Vector2(0f, 0.5f);
+                _apDots = new Image[MaxApDots];
+                for (int d = 0; d < MaxApDots; d++)
+                {
+                    _apDots[d] = MakeImage(rootRt, "ApDot" + d, new Vector2(0.5f, 0f), Vector2.zero,
+                        new Vector2(26f, 26f), Color.white);
+                    _apDots[d].sprite = HudUI.CircleSprite();
+                    _apDots[d].gameObject.SetActive(false);
+                }
+            }
             MakeText(rootRt, "Help", _builtYomi
                     ? "UNA acción por turno: click (o 1-8) la juega YA · de cerca: JAB › AGARRE › PARRY › JAB · el SHORYU gana pero whiffear = recovery\nlos AP no gastados se acumulan (tope 6) · CARGAR junta +2 pero todo golpe es counter"
-                    : "click o 1-9 agrega  ·  Backspace borra  ·  ESPACIO cierra el turno\narrastrá tu timeline para mover el ghost cuadro a cuadro  ·  click derecho en una ficha la borra",
+                    : "click o 1-9 agrega  ·  Backspace borra  ·  ESPACIO cierra el turno  ·  cada carta cuesta AP: llená la barra o pasate\npasarte = el último move PIDE PRESTADO al próximo turno  ·  arrastrá tu timeline para mover el ghost  ·  click derecho en una ficha la borra",
                 new Vector2(0.5f, 0f), new Vector2(0f, 14f), new Vector2(1300f, 36f), 13, new Color(1f, 1f, 1f, 0.45f), TextAnchor.MiddleCenter);
 
             // en YOMI no hay cola: sin LISTO ni BORRAR (la carta se juega al click)
@@ -407,21 +434,45 @@ namespace LagFighter
 
         public void SetPrediction(PlanPreview g, int framesUsed, int available)
         {
-            int over = Mathf.Max(0, framesUsed - available);   // frames que cruzan al próximo turno
-            int left = Mathf.Max(0, available - framesUsed);
-            int turnFrames = _mc.CurrentTurnFrames; // en Lag Mode el turno crece
-            int committed = _mc.TurnStartCommitted[_mc.Picker];
-            string stunNote = committed > 0
-                ? $" ({committed}f ya comprometidos en {MoveCatalog.All[_mc.Sim.Fighters[_mc.Picker].MoveIndex].Name})"
-                : available < turnFrames ? $" (perdés {turnFrames - available}f por el stun)" : "";
             string extra = "";
             if (g.DamageIfStill > 0f) extra += $"  ·  pegaría {g.DamageIfStill:0} si no reacciona";
             if (g.BlockedCount > 0) extra += $"  ·  {g.BlockedCount} bloqueado(s) si se queda en neutral";
-            if (over > 0) extra += $"  ·  » el último move CRUZA {over}f al próximo turno (quedás comprometido)";
-            _status.text = $"{framesUsed}/{available} frames planificados{stunNote} — quedan {left}{extra}";
-            _status.color = over > 0 ? new Color(1f, 0.6f, 0.15f)
-                : left == 0 ? new Color(1f, 0.85f, 0.3f)
-                : available < SimConfig.TurnFrames ? new Color(1f, 0.65f, 0.4f) : new Color(0.5f, 1f, 0.6f);
+
+            if (SimConfig.ApActive && !_builtYomi)
+            {
+                // presupuesto en ACTION POINTS: la moneda del turno son las
+                // bolitas — el texto acompaña, los frames viven en la timeline
+                int apUsed = _mc.PlanApUsed(_mc.Picker);
+                int apAvail = _mc.PlanApAvailable(_mc.Picker);
+                int apCap = _mc.ApPerTurn;
+                int borrowed = Mathf.Max(0, apUsed - apAvail);
+                int apLeft = Mathf.Max(0, apAvail - apUsed);
+                int committedAp = _mc.TurnStartCommitted[_mc.Picker];
+                string stunNote = committedAp > 0
+                    ? $" (seguís comprometido en {MoveCatalog.All[_mc.Sim.Fighters[_mc.Picker].MoveIndex].Name})"
+                    : apAvail < apCap ? $" (el stun te comió {apCap - apAvail} AP)" : "";
+                if (borrowed > 0) extra += $"  ·  » pedís {borrowed} AP prestados: el próximo turno arranca con menos";
+                _status.text = $"{apUsed}/{apAvail} AP{stunNote} — quedan {apLeft}{extra}";
+                _status.color = borrowed > 0 ? new Color(1f, 0.6f, 0.15f)
+                    : apLeft == 0 ? new Color(1f, 0.85f, 0.3f)
+                    : apAvail < apCap ? new Color(1f, 0.65f, 0.4f) : new Color(0.5f, 1f, 0.6f);
+                RefreshApDots(apUsed, apAvail, apCap, borrowed);
+            }
+            else
+            {
+                int over = Mathf.Max(0, framesUsed - available);   // frames que cruzan al próximo turno
+                int left = Mathf.Max(0, available - framesUsed);
+                int turnFrames = _mc.CurrentTurnFrames; // en Lag Mode el turno crece
+                int committed = _mc.TurnStartCommitted[_mc.Picker];
+                string stunNote = committed > 0
+                    ? $" ({committed}f ya comprometidos en {MoveCatalog.All[_mc.Sim.Fighters[_mc.Picker].MoveIndex].Name})"
+                    : available < turnFrames ? $" (perdés {turnFrames - available}f por el stun)" : "";
+                if (over > 0) extra += $"  ·  » el último move CRUZA {over}f al próximo turno (quedás comprometido)";
+                _status.text = $"{framesUsed}/{available} frames planificados{stunNote} — quedan {left}{extra}";
+                _status.color = over > 0 ? new Color(1f, 0.6f, 0.15f)
+                    : left == 0 ? new Color(1f, 0.85f, 0.3f)
+                    : available < SimConfig.TurnFrames ? new Color(1f, 0.65f, 0.4f) : new Color(0.5f, 1f, 0.6f);
+            }
 
             // sin órdenes, confirmar es jugada válida (quieto bloqueando):
             // que el botón lo diga, no que parezca un LISTO en falso
@@ -430,6 +481,43 @@ namespace LagFighter
             _doneLabel.fontSize = empty ? 14 : 16;
 
             RefreshCardStates(); // el plan cambió: gris/overflow de cada carta
+        }
+
+        // Las bolitas de AP del turno, de izquierda a derecha:
+        //   aro celeste apagado = AP ya gastado en el plan
+        //   disco celeste      = AP que te queda
+        //   aro rojizo         = casillero que te comió el stun / lo comprometido
+        //   disco naranja      = AP prestado del próximo turno (overflow)
+        void RefreshApDots(int used, int avail, int cap, int borrowed)
+        {
+            if (_apDots == null) return;
+            int shown = Mathf.Min(MaxApDots, cap + borrowed);
+            float size = shown <= 12 ? 26f : 14f;   // Lag Mode: hasta 25 AP, achicar
+            float gap = shown <= 12 ? 8f : 4f;
+            int rows = Mathf.CeilToInt(_order.Length / (float)_cols);
+            float totalW = _cols * (CardW + Gap) - Gap;
+            float totalH = rows * (CardH + Gap) - Gap;
+            float y = 26f + totalH + 44f;
+            float x = -totalW / 2f + 34f;
+            for (int d = 0; d < MaxApDots; d++)
+            {
+                bool on = d < shown;
+                if (_apDots[d].gameObject.activeSelf != on) _apDots[d].gameObject.SetActive(on);
+                if (!on) continue;
+                bool prestado = d >= cap;
+                bool comido = !prestado && d >= avail;
+                bool gastado = !prestado && !comido && d < Mathf.Min(used, avail);
+                _apDots[d].sprite = prestado || (!comido && !gastado)
+                    ? HudUI.CircleSprite() : HudUI.RingSprite();
+                _apDots[d].color = prestado ? new Color(1f, 0.6f, 0.15f, 1f)
+                    : comido ? new Color(0.9f, 0.35f, 0.3f, 0.5f)
+                    : gastado ? new Color(0.35f, 0.85f, 1f, 0.4f)
+                    : new Color(0.35f, 0.85f, 1f, 1f);
+                // los prestados van separados: se leen como "de más"
+                _apDots[d].rectTransform.anchoredPosition = new Vector2(x + (prestado ? 10f : 0f), y);
+                _apDots[d].rectTransform.sizeDelta = new Vector2(size, size);
+                x += size + gap;
+            }
         }
 
         // Estado visual de cada carta según lo que queda del turno:
@@ -455,12 +543,15 @@ namespace LagFighter
             }
             int used = _mc.PlanFramesUsed(_mc.Picker);
             int avail = _mc.PlanFramesAvailable(_mc.Picker);
+            int usedAp = _mc.PlanApUsed(_mc.Picker);
+            int availAp = _mc.PlanApAvailable(_mc.Picker);
             for (int i = 0; i < _order.Length; i++)
             {
                 int mi = _order[i];
                 bool startable = _mc.PlanFits(mi);
-                bool crosses = SimConfig.CarryoverEnabled && startable &&
-                               used + MoveCatalog.All[mi].Total > avail;
+                bool crosses = startable && (SimConfig.ApActive
+                    ? usedAp + MoveCatalog.All[mi].ApCost > availAp
+                    : SimConfig.CarryoverEnabled && used + MoveCatalog.All[mi].Total > avail);
                 _cardOverlay[i].gameObject.SetActive(!startable);
                 _cardOvfMark[i].gameObject.SetActive(crosses);
                 var cat = CategoryColor(mi);
@@ -509,10 +600,11 @@ namespace LagFighter
                 return;
             }
 
-            // panel de info clásico: framedata con mini-barra S/A/R
+            // panel de info clásico: costo en AP + framedata con mini-barra S/A/R
             var m = MoveCatalog.All[mi];
             string dmg = m.TotalDamage > 0f ? $"   ·   {m.TotalDamage:0} DMG" + (m.Hits.Length > 1 ? $" ({m.Hits.Length} hits)" : "") : "";
-            _detailFrames.text = $"{m.Startup} / {m.Active} / {m.Recovery}  ·  {m.Total}f{dmg}";
+            string ap = SimConfig.ApActive ? $"{m.ApCost} AP   ·   " : "";
+            _detailFrames.text = $"{ap}{m.Startup} / {m.Active} / {m.Recovery}  ·  {m.Total}f{dmg}";
 
             float px = _segW / m.Total;
             _segS.rectTransform.sizeDelta = new Vector2(m.Startup * px, 8f);
@@ -633,7 +725,7 @@ namespace LagFighter
         // (en YOMI no hay super: el overflow es parte del flujo normal)
         void RefreshSuper()
         {
-            bool show = SimConfig.CarryoverEnabled && !SimConfig.YomiEnabled;
+            bool show = SimConfig.FluidTurn && !SimConfig.YomiEnabled;
             if (_superBtn.gameObject.activeSelf != show) _superBtn.gameObject.SetActive(show);
             if (!show) return;
             var fs = _mc.Sim.Fighters[_mc.Picker];

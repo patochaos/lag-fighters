@@ -62,6 +62,9 @@ class Tests
         PerfilesDeIAMantienenPresupuesto();
         WakeupAjustaElKnockdown();
         TurnoFluidoCruzaElLimite();
+        LosCostosDeApSonLosEsperados();
+        ElSlotDeApEspaciaLaCola();
+        ElGolpeDevuelveElRestoDelSlot();
         LaSuperArrasaYPegaCuatro();
         YomiElJabLeGanaAlAgarre();
         YomiElGolpeFuerteEsAntiaereo();
@@ -287,9 +290,15 @@ class Tests
         {
             var ai = new SimpleAI(77, profile, difficulty);
             var plan = ai.Plan(sim, 1, SimConfig.TurnFrames);
-            int frames = 0;
-            foreach (int move in plan) frames += MoveCatalog.All[move].Total;
-            ok &= frames <= SimConfig.TurnFrames && ai.ResolvedProfile != AIProfile.Random;
+            // regla fluida: cada move tiene que ARRANCAR dentro del turno
+            // (el último puede cruzar el límite pidiendo AP prestados)
+            int start = 0;
+            foreach (int move in plan)
+            {
+                ok &= start < SimConfig.TurnFrames;
+                start += MoveCatalog.All[move].PaddedTotal;
+            }
+            ok &= ai.ResolvedProfile != AIProfile.Random;
         }
         Check(ok, "todos los perfiles y dificultades respetan el presupuesto");
     }
@@ -302,7 +311,7 @@ class Tests
         Run(s, 30); // neutral: nada
         Check(s.Fighters[0].Guard == 40f, "la guardia NO regenera quieto", $"guard {s.Fighters[0].Guard}");
         s.SetQueue(0, new List<int> { MoveCatalog.DashF, MoveCatalog.DashF });
-        Run(s, 32); // dos dashes = 32f ejecutando
+        Run(s, 48); // dos dashes en slots de AP (24f c/u): 32f ejecutando + padding
         Check(s.Fighters[0].Guard > 40f, "la guardia regenera ejecutando moves", $"guard {s.Fighters[0].Guard}");
         float afterDash = s.Fighters[0].Guard;
         s.SetQueue(0, new List<int> { MoveCatalog.WalkB });
@@ -310,36 +319,88 @@ class Tests
         Check(s.Fighters[0].Guard == afterDash, "bloquear no regenera guardia", $"guard {s.Fighters[0].Guard}");
     }
 
-    // Turno fluido (SimConfig.CarryoverEnabled): el move en curso cruza el
-    // límite del turno en vez de cortarse; apagado, se corta y se pierde.
+    // Turno fluido (SimConfig.FluidTurn — en modo AP está SIEMPRE on): el
+    // move en curso cruza el límite del turno en vez de cortarse. El modo
+    // estricto legacy (AP y carryover apagados) se corta y se pierde.
     static void TurnoFluidoCruzaElLimite()
     {
-        SimConfig.CarryoverEnabled = true;
+        var s = NewSim(-2.5f, 2.5f, p1Blocks: false);
+        // dash = 2 AP (slot de 24f) + hadouken 60f: arranca en f24 y cruza
+        s.SetQueue(0, new List<int> { MoveCatalog.DashF, MoveCatalog.Hadouken });
+        Run(s, SimConfig.TurnFrames);
+        int lost = s.OnTurnEnd(0);
+        bool sigue = s.Fighters[0].MoveIndex == MoveCatalog.Hadouken;
+        int resto = s.CommittedRemaining(0);
+        Check(lost == 0 && sigue && resto == 24,
+            "turno fluido: el hadouken cruza el límite comprometido (2 AP prestados)",
+            $"lost {lost}, move {s.Fighters[0].MoveIndex}, resto {resto}");
+        Check(s.Fighters[0].Super == resto, "los frames de overflow cargan la barra de super",
+            $"super {s.Fighters[0].Super}, resto {resto}");
+        Run(s, resto + 2);
+        Check(s.Fighters[0].MoveIndex == -1, "turno fluido: el move comprometido termina en el turno siguiente",
+            $"move {s.Fighters[0].MoveIndex}");
+
+        // legacy: sin AP ni carryover el turno es estricto y el move se corta
+        SimConfig.ApEnabled = false;
         try
         {
-            var s = NewSim(-2.5f, 2.5f, p1Blocks: false);
-            s.SetQueue(0, new List<int> { MoveCatalog.DashF, MoveCatalog.Hadouken }); // 16f + 60f: cruza el límite de 60
-            Run(s, SimConfig.TurnFrames);
-            int lost = s.OnTurnEnd(0);
-            bool sigue = s.Fighters[0].MoveIndex == MoveCatalog.Hadouken;
-            int resto = s.CommittedRemaining(0);
-            Check(lost == 0 && sigue && resto > 0 && resto <= 16,
-                "turno fluido: el hadouken cruza el límite comprometido",
-                $"lost {lost}, move {s.Fighters[0].MoveIndex}, resto {resto}");
-            Check(s.Fighters[0].Super == resto, "los frames de overflow cargan la barra de super",
-                $"super {s.Fighters[0].Super}, resto {resto}");
-            Run(s, resto + 2);
-            Check(s.Fighters[0].MoveIndex == -1, "turno fluido: el move comprometido termina en el turno siguiente",
-                $"move {s.Fighters[0].MoveIndex}");
+            var s2 = NewSim(-2.5f, 2.5f, p1Blocks: false);
+            s2.SetQueue(0, new List<int> { MoveCatalog.DashF, MoveCatalog.Hadouken });
+            Run(s2, SimConfig.TurnFrames);
+            int lost2 = s2.OnTurnEnd(0);
+            Check(lost2 == 1 && s2.Fighters[0].MoveIndex == -1 && s2.CommittedRemaining(0) == 0,
+                "turno estricto legacy: el mismo move se corta y cuenta como orden perdida", $"lost {lost2}");
         }
-        finally { SimConfig.CarryoverEnabled = false; }
+        finally { SimConfig.ApEnabled = true; }
+    }
 
-        var s2 = NewSim(-2.5f, 2.5f, p1Blocks: false);
-        s2.SetQueue(0, new List<int> { MoveCatalog.DashF, MoveCatalog.Hadouken });
-        Run(s2, SimConfig.TurnFrames);
-        int lost2 = s2.OnTurnEnd(0);
-        Check(lost2 == 1 && s2.Fighters[0].MoveIndex == -1 && s2.CommittedRemaining(0) == 0,
-            "turno estricto: el mismo move se corta y cuenta como orden perdida", $"lost {lost2}");
+    // ---- Modo AP (2026-07-20): el turno clásico dividido en action points ----
+
+    // Los costos que ven las cartas: ceil(frames/12), 5 AP por turno de 60f.
+    static void LosCostosDeApSonLosEsperados()
+    {
+        Check(SimConfig.TurnFrames / SimConfig.FramesPerAp == 5, "turno de 60f = 5 AP");
+        (int move, int ap)[] esperados =
+        {
+            (MoveCatalog.Parry, 1), (MoveCatalog.WalkB, 2), (MoveCatalog.DashF, 2),
+            (MoveCatalog.DashB, 2), (MoveCatalog.AttackA, 2), (MoveCatalog.Grab, 3),
+            (MoveCatalog.Shoryuken, 4), (MoveCatalog.JumpF, 4), (MoveCatalog.JumpN, 4),
+            (MoveCatalog.Tatsu, 4), (MoveCatalog.AttackB, 5), (MoveCatalog.Hadouken, 5),
+            (MoveCatalog.Super, 5),
+        };
+        foreach (var (move, ap) in esperados)
+        {
+            var m = MoveCatalog.All[move];
+            Check(m.ApCost == ap, $"{m.Name} cuesta {ap} AP", $"da {m.ApCost}");
+        }
+    }
+
+    // El move ocupa su slot ENTERO: tras un dash (16f, slot de 24f) la
+    // próxima orden espera el fin del slot en neutral (bloqueando).
+    static void ElSlotDeApEspaciaLaCola()
+    {
+        var s = NewSim(-3f, 3f, p1Blocks: false);
+        s.SetQueue(0, new List<int> { MoveCatalog.DashF, MoveCatalog.AttackA });
+        Run(s, 20); // dash terminó en f16; su slot va hasta f24
+        Check(s.Fighters[0].MoveIndex == -1, "en el resto del slot se espera en neutral",
+            $"move {s.Fighters[0].MoveIndex}");
+        Check(s.IsBlockingState(0), "y en neutral se bloquea (el padding no es un hueco indefenso)");
+        Run(s, 5); // f25: el jab ya tuvo que arrancar en f24
+        Check(s.Fighters[0].MoveIndex == MoveCatalog.AttackA, "la orden siguiente arranca al abrirse el slot",
+            $"move {s.Fighters[0].MoveIndex}");
+    }
+
+    // Un golpe cancela el move Y devuelve el resto del slot: el stun lo
+    // reemplaza (sin esto el turno siguiente cobraría stun + slot a la vez).
+    static void ElGolpeDevuelveElRestoDelSlot()
+    {
+        var s = NewSim(-0.5f, 0.5f, p1Blocks: false);
+        s.SetQueue(0, new List<int> { MoveCatalog.AttackA });
+        s.SetQueue(1, new List<int> { MoveCatalog.AttackB }); // barrida: startup 16 — el jab (6) la pesca antes
+        Run(s, 10); // el jab conecta en f6: P1 en hitstun con la barrida cancelada
+        Check(s.IsStunned(1) && s.Fighters[1].MoveIndex == -1, "el golpe cancela el move del rival");
+        Check(s.CommittedRemaining(1) == 0, "y devuelve el resto del slot (solo queda el stun)",
+            $"committed {s.CommittedRemaining(1)}");
     }
 
     // La super exige barra llena, se consume al arrancar, arrasa el hadouken

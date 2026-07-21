@@ -89,15 +89,16 @@ namespace LagFighter
                 if (!sim.MoveAllowed(me, pick)) pick = dist > 1.5f ? MoveCatalog.DashF : MoveCatalog.WalkB;
 
                 var move = MoveCatalog.All[pick];
-                if (frames + move.Total > budget)
+                // en modo AP cada move ocupa su slot entero: se presupuesta padded
+                if (frames + move.PaddedTotal > budget)
                 {
                     // turno fluido: a veces compromete un move que cruza el
                     // límite (arranca dentro del turno, termina en el próximo)
-                    if (SimConfig.CarryoverEnabled && _rng.NextDouble() < 0.45) plan.Add(pick);
+                    if (SimConfig.FluidTurn && _rng.NextDouble() < 0.45) plan.Add(pick);
                     break;
                 }
                 plan.Add(pick);
-                frames += move.Total;
+                frames += move.PaddedTotal;
                 myX += face * move.MoveDx;
                 myX = System.Math.Max(-SimConfig.StageHalfWidth, System.Math.Min(SimConfig.StageHalfWidth, myX));
                 if (oppDown && plan.Count >= 3) oppDown = false;

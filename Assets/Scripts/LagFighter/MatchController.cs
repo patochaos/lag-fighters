@@ -433,9 +433,11 @@ namespace LagFighter
             _wakeQuick[Picker] = !_wakeQuick[Picker];
             // si el plan ya no entra con menos frames, se recorta desde el final
             // (en turno fluido un move es válido mientras ARRANQUE dentro del turno)
-            while (_plans[Picker].Count > 0 && (SimConfig.CarryoverEnabled
-                ? PlanFramesUsed(Picker) - MoveCatalog.All[_plans[Picker][_plans[Picker].Count - 1]].Total >= PlanFramesAvailable(Picker)
-                : PlanFramesUsed(Picker) > PlanFramesAvailable(Picker)))
+            while (_plans[Picker].Count > 0 && (SimConfig.ApActive
+                ? PlanApUsed(Picker) - MoveCatalog.All[_plans[Picker][_plans[Picker].Count - 1]].ApCost >= PlanApAvailable(Picker)
+                : SimConfig.CarryoverEnabled
+                    ? PlanFramesUsed(Picker) - MoveCatalog.All[_plans[Picker][_plans[Picker].Count - 1]].Total >= PlanFramesAvailable(Picker)
+                    : PlanFramesUsed(Picker) > PlanFramesAvailable(Picker)))
                 _plans[Picker].RemoveAt(_plans[Picker].Count - 1);
             UpdateGhost();
         }
@@ -478,15 +480,34 @@ namespace LagFighter
         // el stun arrastrado te come frames del turno: solo se planifica lo que entra
         public int PlanFramesAvailable(int i) =>
             Mathf.Max(0, CurrentTurnFrames - EffectiveStartStun(i) - TurnStartCommitted[i]);
+
+        // ---- modo AP: el mismo presupuesto, contado en action points ----
+        // Capacidad del turno (60f → 5 AP; en Lag Mode crece con los frames).
+        public int ApPerTurn => CurrentTurnFrames / SimConfig.FramesPerAp;
+        public int PlanApUsed(int i)
+        {
+            int ap = 0;
+            foreach (var m in _plans[i]) ap += MoveCatalog.All[m].ApCost;
+            return ap;
+        }
+        // AP disponibles = slots ENTEROS que quedan del turno: el stun
+        // arrastrado y los slots prestados el turno pasado te comen AP.
+        public int PlanApAvailable(int i) => PlanFramesAvailable(i) / SimConfig.FramesPerAp;
+        // AP que este plan le pide prestados al turno que viene (overflow)
+        public int PlanApBorrowed(int i) => Mathf.Max(0, PlanApUsed(i) - PlanApAvailable(i));
         // Turno fluido: alcanza con que el move ARRANQUE dentro del turno
         // (el último puede cruzar el límite). Estricto: tiene que entrar entero.
         public bool PlanFits(int moveIndex) =>
             Sim.MoveAllowed(Picker, moveIndex) &&
             // la barra se gasta al ejecutar: una sola super por plan
             !(moveIndex == MoveCatalog.Super && _plans[Picker].Contains(MoveCatalog.Super)) &&
-            (SimConfig.CarryoverEnabled
-                ? PlanFramesUsed(Picker) < PlanFramesAvailable(Picker)
-                : PlanFramesUsed(Picker) + MoveCatalog.All[moveIndex].Total <= PlanFramesAvailable(Picker));
+            (SimConfig.ApActive
+                // modo AP: mientras quede al menos 1 AP se puede agregar — el
+                // último move puede pasarse del presupuesto (pide prestado)
+                ? PlanApUsed(Picker) < PlanApAvailable(Picker)
+                : SimConfig.CarryoverEnabled
+                    ? PlanFramesUsed(Picker) < PlanFramesAvailable(Picker)
+                    : PlanFramesUsed(Picker) + MoveCatalog.All[moveIndex].Total <= PlanFramesAvailable(Picker));
 
         public void PlanAdd(int moveIndex)
         {

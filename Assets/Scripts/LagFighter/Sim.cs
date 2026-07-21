@@ -25,6 +25,22 @@ namespace LagFighter
         // okizeme estilo Akuma) y el rival TE VE al planificar: info honesta.
         public static bool CarryoverEnabled = false;
 
+        // ---- ACTION POINTS (2026-07-20): el turno clásico se divide en
+        // slots de AP (1 AP = 12f → 5 AP por turno de 60f). Cada move cuesta
+        // ceil(frames/12) AP y OCUPA su slot entero: el resto del slot se
+        // espera en neutral (bloqueando). Así el presupuesto en AP nunca
+        // miente sobre los frames — la lección de la v1 del yomi. El combate
+        // (hits, stun, ventaja) sigue siendo frame-exacto. El último move
+        // puede pasarse del presupuesto: cruza el turno (semántica fluida,
+        // siempre ON en modo AP) y esos AP se PIDEN PRESTADOS al turno
+        // siguiente, que arranca con menos.
+        public static bool ApEnabled = true;
+        public const int FramesPerAp = 12;
+        public static bool ApActive => ApEnabled && !YomiEnabled; // en YOMI los AP son otra cosa (YomiSim)
+        // "el move en curso cruza el límite del turno": propio del modo AP
+        // (el préstamo ES un cruce) o del toggle clásico de turno fluido.
+        public static bool FluidTurn => CarryoverEnabled || ApActive;
+
         // ---- Modo YOMI (v2 discreto, 2026-07-20): la lógica vive en
         // YomiSim.cs (dos distancias, una acción por turno, matriz de
         // counters). Este flag solo marca el MODO: la sim de frames pasa a
@@ -130,6 +146,11 @@ namespace LagFighter
         public int ProjImmuneStart = -1, ProjImmuneEnd = -1; // inmune SOLO a proyectiles (Tatsumaki)
         public int SpawnFrame = -1;                  // frame en que larga el proyectil
         public int Total => Startup + Active + Recovery;
+        // Modo AP: costo en action points (redondeo hacia arriba: un move que
+        // pisa un slot lo paga entero) y duración padded — el move ocupa sus
+        // slots completos, el sobrante se espera en neutral.
+        public int ApCost => (Total + SimConfig.FramesPerAp - 1) / SimConfig.FramesPerAp;
+        public int PaddedTotal => SimConfig.ApActive ? ApCost * SimConfig.FramesPerAp : Total;
         public bool IsAttack => Hits.Length > 0 || SpawnFrame >= 0;
         public bool HasAir => AirEnd > AirStart;
         public float TotalDamage { get { float s = 0f; foreach (var h in Hits) s += h.Damage; return SpawnFrame >= 0 ? s + SimConfig.ProjDamage : s; } }
@@ -461,10 +482,11 @@ namespace LagFighter
         {
             var f = Fighters[i];
             int lost = f.Queue.Count - f.QueueIndex;
-            // Turno fluido: el move en curso NO se corta — sigue ejecutando y
-            // el turno siguiente arranca con esos frames ya comprometidos.
-            // Cada frame que cruza CARGA la barra de super: el riesgo paga.
-            if (f.MoveIndex >= 0 && !SimConfig.CarryoverEnabled) { lost++; f.MoveIndex = -1; }
+            // Turno fluido (y modo AP: el préstamo ES un cruce): el move en
+            // curso NO se corta — sigue ejecutando y el turno siguiente
+            // arranca con esos frames ya comprometidos. Cada frame que cruza
+            // CARGA la barra de super: el riesgo paga.
+            if (f.MoveIndex >= 0 && !SimConfig.FluidTurn) { lost++; f.MoveIndex = -1; }
             else if (f.MoveIndex >= 0)
                 f.Super = Math.Min(SimConfig.SuperMax, f.Super + CommittedRemaining(i));
             f.Queue.Clear();
@@ -474,11 +496,16 @@ namespace LagFighter
 
         // Frames del move en curso que quedan por ejecutar (turno fluido):
         // al planificar, esto es lo que ya está comprometido del turno nuevo.
+        // En modo AP cuenta el slot COMPLETO (QueueDelayTick): los AP
+        // prestados son slots, no solo los frames crudos del move.
         public int CommittedRemaining(int i)
         {
             var f = Fighters[i];
-            if (f.MoveIndex < 0) return 0;
-            return Math.Max(0, MoveCatalog.All[f.MoveIndex].Total - (Tick - f.MoveStartTick));
+            int frames = f.MoveIndex < 0 ? 0
+                : Math.Max(0, MoveCatalog.All[f.MoveIndex].Total - (Tick - f.MoveStartTick));
+            if (SimConfig.ApActive)
+                frames = Math.Max(frames, f.QueueDelayTick - Tick);
+            return Math.Max(0, frames);
         }
 
         public WorldRect HurtRect(int i)
@@ -546,6 +573,10 @@ namespace LagFighter
             f.WindowHit = 0;
             f.Face = Fighters[1 - i].X >= f.X ? 1 : -1;
             if (mi == MoveCatalog.Super) f.Super = 0; // la barra se gasta al arrancar
+            // Modo AP: el move ocupa su slot ENTERO — la próxima orden no
+            // arranca hasta que el slot termine (el resto se espera en neutral).
+            if (SimConfig.ApActive)
+                f.QueueDelayTick = Tick + MoveCatalog.All[mi].PaddedTotal;
         }
 
         public void Step()
@@ -705,6 +736,7 @@ namespace LagFighter
                 for (int i = 0; i < 2; i++)
                 {
                     Fighters[i].MoveIndex = -1;
+                    ClearSlotPad(i);
                     Fighters[i].X -= Fighters[i].Face * 0.55f;
                 }
                 LastEvents.Add(new SimEvent { Attacker = 0, Kind = EvKind.Tech, MoveIndex = MoveCatalog.Grab });
@@ -723,6 +755,16 @@ namespace LagFighter
             }
 
             Tick++;
+        }
+
+        // Modo AP: un contacto que cancela el move devuelve el resto del slot
+        // (el stun/tech lo reemplaza — sin esto el turno siguiente cobraría
+        // stun Y slot comprometido a la vez). En YOMI no toca el retardo de
+        // coreografía (ApActive es false ahí).
+        void ClearSlotPad(int i)
+        {
+            if (SimConfig.ApActive && Fighters[i].QueueDelayTick > Tick)
+                Fighters[i].QueueDelayTick = Tick;
         }
 
         int AttackerFreeTick(int i)
@@ -800,6 +842,7 @@ namespace LagFighter
                     attacker.MoveIndex = -1;
                     attacker.Stun = StunKind.Hitstun;
                     attacker.StunEndTick = Tick + punishStun;
+                    ClearSlotPad(p.Attacker); // el stun reemplaza el slot: no se cobra doble
                 }
                 int parryFree = def.MoveStartTick + MoveCatalog.All[MoveCatalog.Parry].Total;
                 LastEvents.Add(new SimEvent
@@ -820,6 +863,7 @@ namespace LagFighter
                     // GUARD CRUSH: stun largo sin daño; la barra renace a la mitad
                     def.Guard = SimConfig.GuardCrushRespawn;
                     def.MoveIndex = -1;
+                    ClearSlotPad(d);
                     def.Stun = StunKind.Hitstun;
                     def.Crushed = true;
                     def.StunEndTick = Tick + SimConfig.GuardCrushStun;
@@ -829,6 +873,7 @@ namespace LagFighter
                     return;
                 }
                 def.MoveIndex = -1; // el paso atrás / espera se corta en blockstun
+                ClearSlotPad(d);
                 def.Stun = StunKind.Blockstun;
                 def.StunEndTick = Tick + p.Blockstun;
                 PushDefender(p.Attacker, face, p.Push * 0.6f);
@@ -847,6 +892,7 @@ namespace LagFighter
             def.Hp = Math.Max(0f, def.Hp - dmg);
             PushDefender(p.Attacker, face, p.Push);
             def.MoveIndex = -1;
+            ClearSlotPad(d);
             def.Stun = kd ? StunKind.Knockdown : StunKind.Hitstun;
             def.StunEndTick = Tick + stun;
 

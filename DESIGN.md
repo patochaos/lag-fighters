@@ -72,6 +72,45 @@ vulnerable por off-by-one; lo pescó el test de framedata).
   frames activos, intro "ROUND N — ¡PELEA!", stage con skyline + público de
   bloques, announcer SOLO en KO/guard crush con toggle VOZ.
 
+### ACTION POINTS en el modo clásico (2026-07-20)
+
+Pedido de Patricio: que el turno diga CLARITO qué entra y qué no. El
+presupuesto del turno clásico deja de contarse en frames crudos y pasa a
+**action points**: `SimConfig.ApEnabled` (ON por defecto), `FramesPerAp`=12.
+
+- **1 AP = 12 frames → 5 AP por turno de 60f** (Lag Mode: 90f→7, 135f→11,
+  202f→16, 303f→25 AP). Costo por move = `ceil(frames/12)` (`MoveDef.ApCost`):
+  Parry 1 · Bloquear/Dash/Jab 2 · Agarre 3 · Shoryu/Saltos/Tatsu 4 ·
+  Barrida/Hadouken/Super 5.
+- **Cada move OCUPA su slot entero** (`PaddedTotal`): un dash de 16f reserva
+  24f; el sobrante se espera en neutral (bloqueando — el padding no es un
+  hueco indefenso). Así los AP nunca mienten sobre los frames: esta es la
+  diferencia con la v1 del yomi (aquella quería que una TABLA decidiera
+  resultados sobre la sim; acá el combate — hits, stun, ventaja frame a
+  frame — sigue 100% frame-exacto, los AP solo cuantizan el presupuesto y
+  la secuenciación de la cola propia).
+- **Overflow = pedir prestado**: mientras te quede ≥1 AP podés agregar el
+  move que sea; si se pasa, cruza el límite (semántica de turno fluido,
+  SIEMPRE on en modo AP — `SimConfig.FluidTurn`) y el turno siguiente
+  arranca con esos slots comprometidos = menos AP. El stun arrastrado
+  también se cobra en slots. Un golpe cancela el move Y devuelve el resto
+  del slot (el stun lo reemplaza; sin eso se cobraba doble).
+- **La super quedó habilitada siempre** en clásico (cargaba con overflow y
+  el overflow ahora es parte del juego). El toggle C de turno fluido se
+  ocultó del menú: quedó absorbido. Online sigue determinista: `ApEnabled`
+  es constante en el build, no viaja en el protocolo.
+- UI: bolitas de AP arriba de la grilla de planificación (disco = te queda,
+  aro apagado = gastado, aro rojizo = te lo comió el stun, naranja = AP
+  prestado), costo "N AP" en cada carta y en el panel de info, timeline con
+  rayitas cada 12f (se VE el turno dividido en casilleros y el hueco de
+  padding tras cada ficha). Sprites circulares procedurales nuevos de 64px
+  antialiaseados (`HudUI.CircleSprite/RingSprite`) — también los usan los
+  circulitos del modo YOMI.
+- Lab post-cambio (2000 peleas, turno fluido): winrates parejos
+  (936/972), ningún move dominante (dmg/uso: Tatsu 0.94 · Shoryu 0.88 ·
+  Barrida 0.53), 533 supers tiradas — la economía de préstamo alimenta la
+  barra como se esperaba.
+
 ### Turno fluido (toggle experimental, 2026-07-19)
 
 `SimConfig.CarryoverEnabled` — tecla **C** en el menú principal (pasos lag/modo),
