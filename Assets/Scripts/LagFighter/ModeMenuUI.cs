@@ -3,30 +3,20 @@ using UnityEngine.UI;
 
 namespace LagFighter
 {
-    // Menú inicial por pasos:
-    //  1) NORMAL o LAG MODE (cada 3 turnos el lag sube 50%)
-    //  2) Práctica / VS IA / 1v1 local / POR CÓDIGO
-    // VS IA agrega perfil y dificultad. Teclas 1-6, flechas+Enter, o click.
+    // Menú inicial: Práctica / VS IA / Online. Teclas 1-3, flechas+Enter, o click.
     public class ModeMenuUI : MonoBehaviour
     {
-        static readonly (string label, string desc)[] LagOptions =
-        {
-            ("NORMAL", "Turnos de 60 frames, parejos toda la pelea."),
-            ("LAG MODE", "Cada 3 turnos el lag sube 50%: 60 → 90 → 135 → 202 → 303 frames. It gets laggier."),
-        };
-
-        // VS IA entra directo (Adaptive/Normal); IA CUSTOM abre el submenú
-        // de perfil + dificultad para quien quiera tunear.
-        // 1v1 LOCAL y POR CÓDIGO retirados del menú (2026-07-18, injugables);
-        // la maquinaria sigue en MatchController y TurnCode la usa ONLINE.
-        const int QuickAIIdx = 1, CustomAIIdx = 2, YomiIdx = 4;
+        // Purga de modos (2026-07-20): LAG MODE, IA CUSTOM y YOMI retirados del
+        // menú — queda solo NORMAL con 3 opciones. La maquinaria sigue viva:
+        // StartMatch acepta lagMode/yomi, y los pasos 3-4 (perfil/dificultad)
+        // quedan acá por si IA CUSTOM vuelve. 1v1 LOCAL y POR CÓDIGO ya habían
+        // salido el 2026-07-18; TurnCode la usa ONLINE.
+        const int QuickAIIdx = 1;
         static readonly (string label, string desc, GameMode mode)[] Modes =
         {
             ("PRÁCTICA", "Solo vos y un dummy quieto. Probá comandos, distancias y framedata.", GameMode.Practice),
             ("VS IA", "Directo a pelear: la IA adaptativa en dificultad normal planifica en secreto, igual que vos.", GameMode.VsAI),
-            ("IA CUSTOM", "Elegí perfil de IA (Zoner, Aggressive, Trickster…) y dificultad.", GameMode.VsAI),
             ("ONLINE", "Sala con código de invitación: uno crea, el otro se une. Turnos con timer de 30s.", GameMode.Online),
-            ("YOMI (NUEVO)", "El experimento: UNA acción por turno, dos distancias (cerca/lejos) y ACTION POINTS. Piedra-papel-tijera con plata. VS IA.", GameMode.VsAI),
         };
 
         static readonly (string label, string desc)[] OnlineOptions =
@@ -59,10 +49,10 @@ namespace LagFighter
         Text[] _cardLabels;
         Text _desc, _stepTitle;
         int _sel;
-        int _step; // 0 lag, 1 modo, 3 perfil IA, 4 dificultad IA,
+        int _step; // 1 modo, 3 perfil IA, 4 dificultad IA (3-4 hoy inalcanzables),
                    // 5 online (crear/unirse), 6 escribir código, 7 esperando rival
-                   // (el 2 era "lado async"; quedó libre al retirar POR CÓDIGO)
-        bool _lagChoice;
+                   // (el 0 era "lag" y el 2 "lado async"; quedaron libres)
+        bool _lagChoice; // siempre false desde la purga; queda por si LAG MODE vuelve
         AIProfile _aiProfileChoice = AIProfile.Random;
         bool _active;
         Vector2 _lastMouse;
@@ -163,7 +153,7 @@ namespace LagFighter
             _bigCode.gameObject.SetActive(false);
 
             _desc = Txt(rootRt, "Desc", "", new Vector2(0f, -86f), 20, new Color(1f, 1f, 1f, 0.85f), FontStyle.Normal);
-            Txt(rootRt, "Help", "1-6 o flechas + Enter · click también funciona · ESC vuelve atrás · en partida: R reinicia, M vuelve acá",
+            Txt(rootRt, "Help", "1-3 o flechas + Enter · click también funciona · ESC vuelve atrás · en partida: R reinicia, M vuelve acá",
                 new Vector2(0f, -210f), 16, new Color(1f, 1f, 1f, 0.5f), FontStyle.Normal);
 
             // toggle experimental (tecla C): turno fluido = el último move
@@ -203,7 +193,7 @@ namespace LagFighter
             return t;
         }
 
-        int OptionCount => _step == 0 ? LagOptions.Length : _step == 1 ? Modes.Length :
+        int OptionCount => _step == 1 ? Modes.Length :
             _step == 3 ? AIProfiles.Length :
             _step == 4 ? AIDifficulties.Length : _step == 5 ? OnlineOptions.Length : 0;
 
@@ -211,8 +201,9 @@ namespace LagFighter
         {
             _root.SetActive(true);
             _active = true;
-            _step = 0;
-            _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_lag", 0), 0, LagOptions.Length - 1); // arranca donde quedaste
+            _step = 1;
+            _lagChoice = false; // NORMAL siempre: LAG MODE quedó fuera del menú
+            _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_mode", 1), 0, Modes.Length - 1); // arranca donde quedaste
             SimConfig.YomiEnabled = false; // el modo YOMI lo prende StartMatch; acá se apaga al volver
             SimConfig.CarryoverEnabled = PlayerPrefs.GetInt("lf_carryover", 0) == 1;
             RefreshCarryLine();
@@ -228,8 +219,7 @@ namespace LagFighter
         void Layout()
         {
             int count = OptionCount;
-            _stepTitle.text = _step == 0 ? "¿CUÁNTO LAG QUERÉS?" :
-                              _step == 1 ? (_lagChoice ? "LAG MODE — elegí rival" : "NORMAL — elegí rival") :
+            _stepTitle.text = _step == 1 ? "ELEGÍ RIVAL" :
                               _step == 3 ? "IA CUSTOM — ELEGÍ UN PERFIL" :
                               _step == 4 ? "IA CUSTOM — ELEGÍ DIFICULTAD" :
                               _step == 5 ? "ONLINE — SALA CON CÓDIGO" :
@@ -261,7 +251,7 @@ namespace LagFighter
                 float y = grid ? 55f - row * 115f : 10f;
                 _cards[i].rectTransform.sizeDelta = grid ? new Vector2(280f, 100f) : new Vector2(300f, 110f);
                 _cards[i].rectTransform.anchoredPosition = new Vector2(x, y);
-                _cardLabels[i].text = _step == 0 ? LagOptions[i].label : _step == 1 ? Modes[i].label :
+                _cardLabels[i].text = _step == 1 ? Modes[i].label :
                     _step == 3 ? AIProfiles[i].label :
                     _step == 5 ? OnlineOptions[i].label : AIDifficulties[i].label;
                 _cardLabels[i].fontSize = count >= 4 ? 16 : 24;
@@ -275,12 +265,11 @@ namespace LagFighter
             _sel = Mathf.Clamp(idx, 0, OptionCount - 1);
             for (int i = 0; i < OptionCount; i++)
             {
-                bool lagCard = _step == 0 && i == 1;
                 _cards[i].color = i == _sel
-                    ? (lagCard ? new Color(0.6f, 0.25f, 0.15f, 0.98f) : new Color(0.25f, 0.42f, 0.62f, 0.98f))
+                    ? new Color(0.25f, 0.42f, 0.62f, 0.98f)
                     : new Color(0.12f, 0.13f, 0.17f, 0.9f);
             }
-            _desc.text = _step == 0 ? LagOptions[_sel].desc : _step == 1 ? Modes[_sel].desc :
+            _desc.text = _step == 1 ? Modes[_sel].desc :
                 _step == 3 ? AIProfiles[_sel].desc :
                 _step == 5 ? OnlineOptions[_sel].desc : AIDifficulties[_sel].desc;
         }
@@ -288,34 +277,12 @@ namespace LagFighter
         void Confirm(int idx)
         {
             SfxLib.Play(SfxLib.Kind.UiClick, 0.8f);
-            if (_step == 0)
-            {
-                _lagChoice = idx == 1;
-                PlayerPrefs.SetInt("lf_menu_lag", idx);
-                _step = 1;
-                // el menú recuerda tu último modo (VS IA la primera vez)
-                _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_mode", 1), 0, Modes.Length - 1);
-                Layout();
-                return;
-            }
             if (_step == 1)
             {
                 PlayerPrefs.SetInt("lf_menu_mode", idx);
-                if (idx == YomiIdx) // modo YOMI: VS IA con las 7 cartas y AP
-                {
-                    _mc.StartMatch(GameMode.VsAI, _lagChoice, 0, AIProfile.Adaptive, AIDifficulty.Normal, yomi: true);
-                    return;
-                }
                 if (idx == QuickAIIdx) // VS IA directo: adaptativa en normal, a pelear
                 {
                     _mc.StartMatch(GameMode.VsAI, _lagChoice, 0, AIProfile.Adaptive, AIDifficulty.Normal);
-                    return;
-                }
-                if (idx == CustomAIIdx)
-                {
-                    _step = 3;
-                    _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_profile", 0), 0, AIProfiles.Length - 1);
-                    Layout();
                     return;
                 }
                 if (Modes[idx].mode == GameMode.Online)
@@ -413,8 +380,8 @@ namespace LagFighter
                 SfxLib.Play(SfxLib.Kind.UiClick, 0.6f);
             }
 
-            // ESC siempre vuelve un paso atrás (en el paso 0 no hay adónde)
-            if (GameInput.CancelPressed() && _step > 0)
+            // ESC vuelve un paso atrás (en el paso 1 no hay adónde)
+            if (GameInput.CancelPressed() && _step > 1)
             {
                 SfxLib.Play(SfxLib.Kind.UiCancel, 0.6f);
                 if (_step == 4) // dificultad → perfil
@@ -422,15 +389,10 @@ namespace LagFighter
                     _step = 3;
                     _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_profile", 0), 0, AIProfiles.Length - 1);
                 }
-                else if (_step >= 2) // perfil / online → elegir rival
+                else // perfil / online → elegir rival
                 {
                     _step = 1;
                     _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_mode", 1), 0, Modes.Length - 1);
-                }
-                else // modo → lag
-                {
-                    _step = 0;
-                    _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_lag", 0), 0, LagOptions.Length - 1);
                 }
                 Layout();
                 return;
