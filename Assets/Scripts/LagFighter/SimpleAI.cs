@@ -34,6 +34,10 @@ namespace LagFighter
             return _rng.NextDouble() < chance;
         }
 
+        // Reversal (1 por round): la IA lo guarda para cuando de verdad está
+        // presionada — el controller ya verificó disponibilidad y AP.
+        public bool UseReversal() => _rng.NextDouble() < (Difficulty == AIDifficulty.Hard ? 0.45 : 0.28);
+
         // Se llama una vez revelado el turno. Adaptive usa esto recién en el
         // turno siguiente, así que nunca lee el plan secreto que está armando.
         public void ObserveOpponentPlan(IEnumerable<int> plan)
@@ -48,7 +52,9 @@ namespace LagFighter
             }
         }
 
-        public List<int> Plan(MatchSim sim, int me, int turnFrames)
+        // apBudget: stock de AP disponible (economía del modo clásico). El
+        // default infinito conserva el comportamiento legacy de tests viejos.
+        public List<int> Plan(MatchSim sim, int me, int turnFrames, int apBudget = int.MaxValue)
         {
             int opp = 1 - me;
             var plan = new List<int>();
@@ -59,6 +65,9 @@ namespace LagFighter
             bool oppDown = sim.StunRemaining(opp) > 20;
             bool threwFireball = false;
             int budget = System.Math.Max(0, turnFrames - sim.StunRemaining(me) - sim.CommittedRemaining(me));
+            // el stock de AP también limita: pobre = turno corto (y se nota)
+            if (SimConfig.ApActive && apBudget != int.MaxValue)
+                budget = System.Math.Min(budget, System.Math.Max(0, apBudget) * SimConfig.FramesPerAp);
 
             // Easy deja huecos y toma más decisiones subóptimas. Hard aprovecha
             // todo el tiempo disponible y casi no se desvía de su perfil.
@@ -115,10 +124,13 @@ namespace LagFighter
             double r = _rng.NextDouble();
             switch (ResolvedProfile)
             {
+                // (2026-07-20) el Parry salió del modo clásico: Bloquear es la
+                // única defensa (y banca AP). Los picks de parry pasan a
+                // WalkB/DashB según el rol.
                 case AIProfile.Zoner:
-                    if (dist > 2.3f) return !threwFireball && r < 0.58 ? MoveCatalog.Hadouken : r < 0.78 ? MoveCatalog.WalkB : MoveCatalog.Parry;
+                    if (dist > 2.3f) return !threwFireball && r < 0.58 ? MoveCatalog.Hadouken : r < 0.78 ? MoveCatalog.WalkB : MoveCatalog.DashB;
                     if (dist > 1.35f) return r < 0.34 ? MoveCatalog.AttackB : r < 0.56 ? MoveCatalog.WalkB : r < 0.75 ? MoveCatalog.Hadouken : MoveCatalog.DashB;
-                    return r < 0.34 ? MoveCatalog.AttackA : r < 0.57 ? MoveCatalog.Parry : r < 0.76 ? MoveCatalog.DashB : MoveCatalog.Shoryuken;
+                    return r < 0.34 ? MoveCatalog.AttackA : r < 0.57 ? MoveCatalog.WalkB : r < 0.76 ? MoveCatalog.DashB : MoveCatalog.Shoryuken;
 
                 case AIProfile.Aggressive:
                     if (dist > 2.2f) return r < 0.48 ? MoveCatalog.DashF : r < 0.78 ? MoveCatalog.JumpF : MoveCatalog.Tatsu;
@@ -126,14 +138,14 @@ namespace LagFighter
                     return r < 0.35 ? MoveCatalog.AttackA : r < 0.60 ? MoveCatalog.Grab : r < 0.82 ? MoveCatalog.AttackB : MoveCatalog.Shoryuken;
 
                 case AIProfile.Defensive:
-                    if (dist > 2.3f) return r < 0.38 ? MoveCatalog.Hadouken : r < 0.72 ? MoveCatalog.WalkB : MoveCatalog.Parry;
-                    if (dist > 1.35f) return r < 0.32 ? MoveCatalog.WalkB : r < 0.58 ? MoveCatalog.AttackB : r < 0.80 ? MoveCatalog.Parry : MoveCatalog.DashB;
-                    return r < 0.34 ? MoveCatalog.Parry : r < 0.58 ? MoveCatalog.AttackA : r < 0.78 ? MoveCatalog.DashB : MoveCatalog.Shoryuken;
+                    if (dist > 2.3f) return r < 0.38 ? MoveCatalog.Hadouken : r < 0.72 ? MoveCatalog.WalkB : MoveCatalog.DashB;
+                    if (dist > 1.35f) return r < 0.32 ? MoveCatalog.WalkB : r < 0.58 ? MoveCatalog.AttackB : r < 0.80 ? MoveCatalog.WalkB : MoveCatalog.DashB;
+                    return r < 0.34 ? MoveCatalog.WalkB : r < 0.58 ? MoveCatalog.AttackA : r < 0.78 ? MoveCatalog.DashB : MoveCatalog.Shoryuken;
 
                 case AIProfile.Trickster:
                     if (dist > 2.2f) return r < 0.25 ? MoveCatalog.Hadouken : r < 0.50 ? MoveCatalog.DashF : r < 0.75 ? MoveCatalog.JumpF : MoveCatalog.WalkB;
-                    if (dist > 1.3f) return r < 0.22 ? MoveCatalog.DashB : r < 0.44 ? MoveCatalog.DashF : r < 0.65 ? MoveCatalog.Parry : r < 0.83 ? MoveCatalog.Tatsu : MoveCatalog.JumpN;
-                    return r < 0.25 ? MoveCatalog.Grab : r < 0.46 ? MoveCatalog.Parry : r < 0.66 ? MoveCatalog.JumpN : r < 0.84 ? MoveCatalog.AttackA : MoveCatalog.Shoryuken;
+                    if (dist > 1.3f) return r < 0.22 ? MoveCatalog.DashB : r < 0.44 ? MoveCatalog.DashF : r < 0.65 ? MoveCatalog.WalkB : r < 0.83 ? MoveCatalog.Tatsu : MoveCatalog.JumpN;
+                    return r < 0.25 ? MoveCatalog.Grab : r < 0.46 ? MoveCatalog.WalkB : r < 0.66 ? MoveCatalog.JumpN : r < 0.84 ? MoveCatalog.AttackA : MoveCatalog.Shoryuken;
 
                 case AIProfile.Adaptive:
                     return PickAdaptive(dist, r);
@@ -153,13 +165,13 @@ namespace LagFighter
             if (_observed[best] == 0) return PickUnfocused(dist);
             switch (best)
             {
-                case 0: // proyectiles: saltarlos DE LEJOS, parriarlos, castigarlo de cerca
-                    if (dist > 2.3f) return r < 0.50 ? MoveCatalog.JumpF : r < 0.78 ? MoveCatalog.Parry : MoveCatalog.DashF;
+                case 0: // proyectiles: saltarlos DE LEJOS, bloquearlos, castigarlo de cerca
+                    if (dist > 2.3f) return r < 0.50 ? MoveCatalog.JumpF : r < 0.78 ? MoveCatalog.WalkB : MoveCatalog.DashF;
                     if (dist > 1.4f) return r < 0.42 ? MoveCatalog.Tatsu : r < 0.72 ? MoveCatalog.DashF : MoveCatalog.JumpF;
                     return r < 0.45 ? MoveCatalog.AttackA : r < 0.75 ? MoveCatalog.Grab : MoveCatalog.AttackB;
-                case 1: // ataques: guardia/parry en rango, poke fuera de rango
+                case 1: // ataques: guardia en rango (banca AP), poke fuera de rango
                     if (dist > 2.0f) return r < 0.55 ? MoveCatalog.WalkB : MoveCatalog.Hadouken;
-                    return r < 0.40 ? MoveCatalog.Parry : r < 0.72 ? MoveCatalog.WalkB : MoveCatalog.Shoryuken;
+                    return r < 0.40 ? MoveCatalog.WalkB : r < 0.72 ? MoveCatalog.WalkB : MoveCatalog.Shoryuken;
                 case 2: // agarres: los saltos y el jab (más rápido) ganan
                     if (dist > 1.6f) return r < 0.55 ? MoveCatalog.AttackB : MoveCatalog.WalkB;
                     return r < 0.45 ? MoveCatalog.AttackA : r < 0.75 ? MoveCatalog.JumpN : MoveCatalog.DashB;
@@ -281,9 +293,9 @@ namespace LagFighter
         int PickUnfocused(float dist)
         {
             double r = _rng.NextDouble();
-            if (dist > 2.4f) return r < 0.30 ? MoveCatalog.Hadouken : r < 0.56 ? MoveCatalog.DashF : r < 0.75 ? MoveCatalog.JumpF : r < 0.9 ? MoveCatalog.WalkB : MoveCatalog.Parry;
-            if (dist > 1.4f) return r < 0.22 ? MoveCatalog.DashF : r < 0.43 ? MoveCatalog.AttackB : r < 0.60 ? MoveCatalog.WalkB : r < 0.75 ? MoveCatalog.Tatsu : r < 0.88 ? MoveCatalog.Parry : MoveCatalog.DashB;
-            return r < 0.25 ? MoveCatalog.AttackA : r < 0.45 ? MoveCatalog.AttackB : r < 0.62 ? MoveCatalog.Grab : r < 0.76 ? MoveCatalog.Parry : r < 0.88 ? MoveCatalog.DashB : MoveCatalog.Shoryuken;
+            if (dist > 2.4f) return r < 0.30 ? MoveCatalog.Hadouken : r < 0.56 ? MoveCatalog.DashF : r < 0.75 ? MoveCatalog.JumpF : MoveCatalog.WalkB;
+            if (dist > 1.4f) return r < 0.22 ? MoveCatalog.DashF : r < 0.43 ? MoveCatalog.AttackB : r < 0.60 ? MoveCatalog.WalkB : r < 0.75 ? MoveCatalog.Tatsu : r < 0.88 ? MoveCatalog.WalkB : MoveCatalog.DashB;
+            return r < 0.25 ? MoveCatalog.AttackA : r < 0.45 ? MoveCatalog.AttackB : r < 0.62 ? MoveCatalog.Grab : r < 0.76 ? MoveCatalog.WalkB : r < 0.88 ? MoveCatalog.DashB : MoveCatalog.Shoryuken;
         }
 
         static bool HasProjectile(MatchSim sim, int owner)

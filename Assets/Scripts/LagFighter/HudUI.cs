@@ -34,6 +34,15 @@ namespace LagFighter
         // ---- modo YOMI: circulitos de AP + cartas de revelación ----
         readonly Image[][] _apPips = new Image[2][];
         readonly Text[] _apLabel = new Text[2];
+
+        // ---- modo clásico: STOCK de AP de AMBOS jugadores, bien visible
+        // bajo el panel de vida/guardia de cada lado (disco = AP disponible,
+        // aro = casillero vacío). Tu lado descuenta EN VIVO al planificar.
+        // Debajo, el log de aperturas del rival (info ya revelada).
+        const int MaxStockPips = 27; // Lag Mode: cap 25 + 2 de ahorro
+        readonly Image[][] _stockPips = new Image[2][];
+        readonly Text[] _stockLabel = new Text[2];
+        readonly Text[] _openingsLabel = new Text[2];
         readonly Image[] _yomiCard = new Image[2];
         readonly Image[] _yomiCardEdge = new Image[2];
         readonly Text[] _yomiCardName = new Text[2];
@@ -461,6 +470,33 @@ namespace LagFighter
                 8, new Color(1f, 0.45f, 0.35f), left ? TextAnchor.UpperLeft : TextAnchor.UpperRight);
             _limbLabel[i].rectTransform.pivot = new Vector2(left ? 0f : 1f, 1f);
 
+            // STOCK de AP (modo clásico): fila de bolitas grandes justo bajo
+            // el panel del jugador — zona libre auditada: el panel termina en
+            // y≈−146 y las timelines viven abajo (anchor bottom), así que
+            // −152 en adelante no pisa nada
+            _stockLabel[i] = MakeTextP(_canvasRt, "ApStockLabel" + i, "AP", new Vector2(left ? 0f : 1f, 1f),
+                new Vector2(sign * 28f, -140f), new Vector2(60f, 14f), 8,
+                new Color(0.45f, 0.9f, 1f, 0.8f), left ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight);
+            _stockLabel[i].rectTransform.pivot = new Vector2(left ? 0f : 1f, 0.5f);
+            _stockLabel[i].gameObject.SetActive(false);
+            _stockPips[i] = new Image[MaxStockPips];
+            for (int p = 0; p < MaxStockPips; p++)
+            {
+                var sp = MakeImage(_canvasRt, $"ApStock{i}_{p}", new Vector2(left ? 0f : 1f, 1f),
+                    Vector2.zero, new Vector2(28f, 28f), Color.white);
+                sp.sprite = CircleSprite();
+                sp.rectTransform.pivot = new Vector2(left ? 0f : 1f, 1f);
+                sp.gameObject.SetActive(false);
+                _stockPips[i][p] = sp;
+            }
+            // aperturas reveladas del rival ("ABRIÓ: DASH · JAB · —"):
+            // se llena solo del lado rival mientras planificás
+            _openingsLabel[i] = MakeTextP(_canvasRt, "Openings" + i, "", new Vector2(left ? 0f : 1f, 1f),
+                new Vector2(sign * 28f, -196f), new Vector2(460f, 16f), 8,
+                new Color(1f, 1f, 1f, 0.65f), left ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight);
+            _openingsLabel[i].rectTransform.pivot = new Vector2(left ? 0f : 1f, 0.5f);
+            _openingsLabel[i].gameObject.SetActive(false);
+
             // circulitos de AP (modo YOMI): GRANDES, abajo del lado de cada
             // peleador — lleno = punto disponible, vacío = no hay
             _apPips[i] = new Image[YomiConfig.ApCap];
@@ -759,6 +795,47 @@ namespace LagFighter
                     // el punto recién ganado aterriza con un mini-pop
                     _apPips[i][p].rectTransform.localScale = Vector3.one * (lleno && p == apNow - 1
                         ? 1f + 0.08f * Mathf.PingPong(Time.time * 2.2f, 1f) : 1f);
+                }
+
+                // ---- STOCK de AP del modo clásico: siempre visible para
+                // AMBOS lados (la economía ES la información). Tu lado
+                // descuenta en vivo al planificar; el del rival muestra su
+                // stock público. En replay se oculta (no se re-simula).
+                bool stockOn = SimConfig.ApActive && !yomiOn && flow != MatchController.Flow.Replay;
+                int stockCap = stockOn ? _mc.ApStockCap : 0;
+                int stockVal = stockOn ? _mc.ApStockShown(i) : 0;
+                if (_stockLabel[i].gameObject.activeSelf != stockOn) _stockLabel[i].gameObject.SetActive(stockOn);
+                float sSign = i == 0 ? 1f : -1f;
+                float dotS = stockCap <= 9 ? 30f : 16f;      // Lag Mode: más AP, bolitas chicas
+                float dotGap = stockCap <= 9 ? 36f : 20f;
+                int perRow = stockCap <= 9 ? 9 : 14;
+                int rowsUsed = stockCap > 0 ? (stockCap + perRow - 1) / perRow : 0;
+                for (int p = 0; p < MaxStockPips; p++)
+                {
+                    bool on = stockOn && p < stockCap;
+                    if (_stockPips[i][p].gameObject.activeSelf != on) _stockPips[i][p].gameObject.SetActive(on);
+                    if (!on) continue;
+                    bool lleno = p < stockVal;
+                    _stockPips[i][p].sprite = lleno ? CircleSprite() : RingSprite();
+                    _stockPips[i][p].color = lleno
+                        ? new Color(0.35f, 0.85f, 1f, 1f)
+                        : new Color(0.45f, 0.58f, 0.72f, 0.5f);
+                    _stockPips[i][p].rectTransform.anchoredPosition =
+                        new Vector2(sSign * (28f + (p % perRow) * dotGap), -152f - (p / perRow) * (dotS + 6f));
+                    _stockPips[i][p].rectTransform.sizeDelta = new Vector2(dotS, dotS);
+                }
+
+                // aperturas reveladas del rival, debajo de sus bolitas:
+                // el material de lectura (hábitos) mientras planificás
+                bool openOn = stockOn && flow == MatchController.Flow.Planning && i == 1 - _mc.Picker;
+                string opens = openOn ? _mc.RecentOpenings(i) : "";
+                openOn &= opens.Length > 0;
+                if (_openingsLabel[i].gameObject.activeSelf != openOn) _openingsLabel[i].gameObject.SetActive(openOn);
+                if (openOn)
+                {
+                    _openingsLabel[i].text = "ABRIÓ: " + opens;
+                    _openingsLabel[i].rectTransform.anchoredPosition =
+                        new Vector2(sSign * 28f, -152f - rowsUsed * (dotS + 6f) - 10f);
                 }
 
                 for (int w = 0; w < MatchController.RoundsToWin; w++)

@@ -37,9 +37,22 @@ namespace LagFighter
         public static bool ApEnabled = true;
         public const int FramesPerAp = 12;
         public static bool ApActive => ApEnabled && !YomiEnabled; // en YOMI los AP son otra cosa (YomiSim)
-        // "el move en curso cruza el límite del turno": propio del modo AP
-        // (el préstamo ES un cruce) o del toggle clásico de turno fluido.
-        public static bool FluidTurn => CarryoverEnabled || ApActive;
+
+        // OVERFLOW/PRÉSTAMO — DESACTIVADO a pedido (2026-07-20, mismo día que
+        // nació): pasarse del presupuesto complejizaba entender si lo BÁSICO
+        // es disfrutable. El código queda entero detrás de este flag y VA A
+        // VOLVER; con true, el último move puede pasarse de AP y cruzar el
+        // turno pidiendo prestado al siguiente.
+        public static bool ApOverflowEnabled = false;
+
+        // "el move en curso cruza el límite del turno": overflow del modo AP
+        // (si está habilitado) o el toggle clásico de turno fluido.
+        public static bool FluidTurn => CarryoverEnabled || (ApActive && ApOverflowEnabled);
+
+        // Reversal (2026-07-20, la válvula anti-vortex de la biblia, Ley 13):
+        // derribado al planificar, 1 vez por round y pagando AP, te levantás
+        // YA y el empujón separa a esta distancia. Escape, no ventaja.
+        public const float ReversalGap = 2.4f;
 
         // ---- Modo YOMI (v2 discreto, 2026-07-20): la lógica vive en
         // YomiSim.cs (dos distancias, una acción por turno, matriz de
@@ -329,6 +342,11 @@ namespace LagFighter
         public StunKind Stun = StunKind.None;
         public int StunEndTick;
         public bool BlockEnabled = true; // el dummy de práctica no bloquea
+        // Bloqueo bancado (economía AP): la carta Bloquear que bloquea al
+        // menos un golpe este turno paga +1 AP. Solo la CARTA — el bloqueo
+        // automático en neutral defiende igual pero no banca (Ley 2/9 de la
+        // biblia: defender con intención alimenta la economía).
+        public bool BankedBlock;
         // Retardo de coreografía (teatro YOMI): la cola no arranca antes de
         // este tick, SIN stun falso — el peleador espera en neutral, sin
         // badge ni pose de golpeado. 0 = sin efecto (modos clásicos).
@@ -489,9 +507,32 @@ namespace LagFighter
             if (f.MoveIndex >= 0 && !SimConfig.FluidTurn) { lost++; f.MoveIndex = -1; }
             else if (f.MoveIndex >= 0)
                 f.Super = Math.Min(SimConfig.SuperMax, f.Super + CommittedRemaining(i));
+            // turno estricto: el slot cortado no deja deuda de pad colgando
+            if (!SimConfig.FluidTurn && f.QueueDelayTick > Tick) f.QueueDelayTick = Tick;
             f.Queue.Clear();
             f.QueueIndex = 0;
+            f.BankedBlock = false; // el bancado se cobra por turno (lo lee el controller ANTES)
             return lost;
+        }
+
+        // Reversal: derribado, te levantás YA y el empujón manda al rival a
+        // ReversalGap (lo que la pared no deje, lo retrocede el propio). El
+        // costo en AP y el "1 por round" los administra el controller — acá
+        // solo la física, determinista.
+        public void Reversal(int i)
+        {
+            var f = Fighters[i];
+            if (f.Stun != StunKind.Knockdown || !IsStunned(i)) return;
+            f.StunEndTick = Tick;
+            f.Stun = StunKind.None;
+            var o = Fighters[1 - i];
+            float dir = o.X >= f.X ? 1f : -1f;
+            float target = f.X + dir * SimConfig.ReversalGap;
+            float clamped = Math.Max(-SimConfig.StageHalfWidth, Math.Min(SimConfig.StageHalfWidth, target));
+            o.X = clamped;
+            float shortfall = Math.Abs(target - clamped);
+            if (shortfall > 0f) // rival contra la pared: el que se levanta retrocede
+                f.X = Math.Max(-SimConfig.StageHalfWidth, Math.Min(SimConfig.StageHalfWidth, f.X - dir * shortfall));
         }
 
         // Frames del move en curso que quedan por ejecutar (turno fluido):
@@ -872,6 +913,7 @@ namespace LagFighter
                         FrameAdv = def.StunEndTick - p.AttackerFree });
                     return;
                 }
+                if (def.MoveIndex == MoveCatalog.WalkB) def.BankedBlock = true; // bloqueo bancado: +1 AP al cerrar el turno
                 def.MoveIndex = -1; // el paso atrás / espera se corta en blockstun
                 ClearSlotPad(d);
                 def.Stun = StunKind.Blockstun;
@@ -934,28 +976,61 @@ namespace LagFighter
         }
     }
 
+    // Economía de ACTION POINTS del modo clásico (2026-07-20): pura y
+    // compartida por MatchController y el harness del lab — la regla vive en
+    // UN solo lugar. Ingreso por turno menor que la capacidad física del
+    // turno (Ley 7 de la biblia: la escasez crea posiciones fuertes/débiles
+    // medibles); lo no gastado SE GUARDA hasta el tope; el bloqueo bancado
+    // suma +1. El stock solo limita la planificación: nunca toca la sim.
+    public class ApEconomy
+    {
+        public readonly int[] Stock = new int[2];
+        public readonly bool[] ReversalUsed = new bool[2];
+        public const int ReversalCost = 2;
+
+        public static int Cap(int apPerTurn) => apPerTurn + 2;    // 60f: guarda hasta 7
+        public static int Income(int apPerTurn) => apPerTurn - 1; // 60f: +4 por turno
+
+        public void ResetRound(int apPerTurn)
+        {
+            Stock[0] = Stock[1] = apPerTurn; // primer turno a full
+            ReversalUsed[0] = ReversalUsed[1] = false;
+        }
+
+        // cierre de turno: cobra lo gastado (plan + reversal), paga el
+        // ingreso y el bloqueo bancado, y aplica el tope de ahorro
+        public void EndTurn(int i, int apPerTurn, int spentAp, bool banked)
+        {
+            int s = Stock[i] - spentAp + Income(apPerTurn) + (banked ? 1 : 0);
+            Stock[i] = Math.Max(0, Math.Min(Cap(apPerTurn), s));
+        }
+    }
+
     // Código de turno para el online asincrónico: serializa (lado, turno,
     // wakeup, cola) en base64 corto. La sim determinista hace el resto:
     // ambos jugadores aplican los dos códigos y ven exactamente la misma pelea.
+    // v2 (2026-07-20): el byte de wakeup pasa de bool a trit (0 = quedarse,
+    // 1 = rápido, 2 = REVERSAL) — los códigos v1 se rechazan (sala nueva).
     public static class TurnCode
     {
-        const byte Version = 1;
+        const byte Version = 2;
+        public const int WakeStay = 0, WakeQuick = 1, WakeReversal = 2;
 
-        public static string Encode(int side, int turn, bool wakeQuick, List<int> moves)
+        public static string Encode(int side, int turn, int wake, List<int> moves)
         {
             var bytes = new byte[4 + moves.Count];
             bytes[0] = Version;
             bytes[1] = (byte)side;
             bytes[2] = (byte)turn;
-            bytes[3] = (byte)(wakeQuick ? 1 : 0);
+            bytes[3] = (byte)wake;
             for (int i = 0; i < moves.Count; i++) bytes[4 + i] = (byte)moves[i];
             return "LF" + Convert.ToBase64String(bytes);
         }
 
-        public static bool TryDecode(string code, out int side, out int turn, out bool wakeQuick, out List<int> moves)
+        public static bool TryDecode(string code, out int side, out int turn, out int wake, out List<int> moves)
         {
             side = turn = 0;
-            wakeQuick = true;
+            wake = WakeQuick;
             moves = null;
             if (string.IsNullOrEmpty(code) || !code.StartsWith("LF")) return false;
             byte[] bytes;
@@ -964,8 +1039,8 @@ namespace LagFighter
             if (bytes.Length < 4 || bytes[0] != Version) return false;
             side = bytes[1];
             turn = bytes[2];
-            wakeQuick = bytes[3] != 0;
-            if (side < 0 || side > 1) return false;
+            wake = bytes[3];
+            if (side < 0 || side > 1 || wake > WakeReversal) return false;
             moves = new List<int>(bytes.Length - 4);
             for (int i = 4; i < bytes.Length; i++)
             {

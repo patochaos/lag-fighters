@@ -65,6 +65,10 @@ class Tests
         LosCostosDeApSonLosEsperados();
         ElSlotDeApEspaciaLaCola();
         ElGolpeDevuelveElRestoDelSlot();
+        LaEconomiaDeApRespira();
+        ElBloqueoBancadoEsSoloConLaCarta();
+        LaIaRespetaSuStock();
+        ElReversalLevantaYSepara();
         LaSuperArrasaYPegaCuatro();
         YomiElJabLeGanaAlAgarre();
         YomiElGolpeFuerteEsAntiaereo();
@@ -319,39 +323,107 @@ class Tests
         Check(s.Fighters[0].Guard == afterDash, "bloquear no regenera guardia", $"guard {s.Fighters[0].Guard}");
     }
 
-    // Turno fluido (SimConfig.FluidTurn — en modo AP está SIEMPRE on): el
-    // move en curso cruza el límite del turno en vez de cortarse. El modo
-    // estricto legacy (AP y carryover apagados) se corta y se pierde.
+    // Turno fluido (SimConfig.FluidTurn): hoy SOLO existe con el overflow de
+    // AP habilitado (dormido, ApOverflowEnabled=false) o el toggle legacy de
+    // carryover. Por defecto el turno es ESTRICTO: el move que cruza se corta.
     static void TurnoFluidoCruzaElLimite()
     {
-        var s = NewSim(-2.5f, 2.5f, p1Blocks: false);
-        // dash = 2 AP (slot de 24f) + hadouken 60f: arranca en f24 y cruza
-        s.SetQueue(0, new List<int> { MoveCatalog.DashF, MoveCatalog.Hadouken });
-        Run(s, SimConfig.TurnFrames);
-        int lost = s.OnTurnEnd(0);
-        bool sigue = s.Fighters[0].MoveIndex == MoveCatalog.Hadouken;
-        int resto = s.CommittedRemaining(0);
-        Check(lost == 0 && sigue && resto == 24,
-            "turno fluido: el hadouken cruza el límite comprometido (2 AP prestados)",
-            $"lost {lost}, move {s.Fighters[0].MoveIndex}, resto {resto}");
-        Check(s.Fighters[0].Super == resto, "los frames de overflow cargan la barra de super",
-            $"super {s.Fighters[0].Super}, resto {resto}");
-        Run(s, resto + 2);
-        Check(s.Fighters[0].MoveIndex == -1, "turno fluido: el move comprometido termina en el turno siguiente",
-            $"move {s.Fighters[0].MoveIndex}");
-
-        // legacy: sin AP ni carryover el turno es estricto y el move se corta
-        SimConfig.ApEnabled = false;
+        // overflow dormido: se prende acá para que el código no se pudra
+        SimConfig.ApOverflowEnabled = true;
         try
         {
-            var s2 = NewSim(-2.5f, 2.5f, p1Blocks: false);
-            s2.SetQueue(0, new List<int> { MoveCatalog.DashF, MoveCatalog.Hadouken });
-            Run(s2, SimConfig.TurnFrames);
-            int lost2 = s2.OnTurnEnd(0);
-            Check(lost2 == 1 && s2.Fighters[0].MoveIndex == -1 && s2.CommittedRemaining(0) == 0,
-                "turno estricto legacy: el mismo move se corta y cuenta como orden perdida", $"lost {lost2}");
+            var s = NewSim(-2.5f, 2.5f, p1Blocks: false);
+            // dash = 2 AP (slot de 24f) + hadouken 60f: arranca en f24 y cruza
+            s.SetQueue(0, new List<int> { MoveCatalog.DashF, MoveCatalog.Hadouken });
+            Run(s, SimConfig.TurnFrames);
+            int lost = s.OnTurnEnd(0);
+            bool sigue = s.Fighters[0].MoveIndex == MoveCatalog.Hadouken;
+            int resto = s.CommittedRemaining(0);
+            Check(lost == 0 && sigue && resto == 24,
+                "overflow (dormido): el hadouken cruza el límite comprometido (2 AP prestados)",
+                $"lost {lost}, move {s.Fighters[0].MoveIndex}, resto {resto}");
+            Check(s.Fighters[0].Super == resto, "los frames de overflow cargan la barra de super",
+                $"super {s.Fighters[0].Super}, resto {resto}");
+            Run(s, resto + 2);
+            Check(s.Fighters[0].MoveIndex == -1, "overflow: el move comprometido termina en el turno siguiente",
+                $"move {s.Fighters[0].MoveIndex}");
         }
-        finally { SimConfig.ApEnabled = true; }
+        finally { SimConfig.ApOverflowEnabled = false; }
+
+        // default actual: estricto — se corta, se pierde, y el slot no deja deuda
+        var s2 = NewSim(-2.5f, 2.5f, p1Blocks: false);
+        s2.SetQueue(0, new List<int> { MoveCatalog.DashF, MoveCatalog.Hadouken });
+        Run(s2, SimConfig.TurnFrames);
+        int lost2 = s2.OnTurnEnd(0);
+        Check(lost2 == 1 && s2.Fighters[0].MoveIndex == -1 && s2.CommittedRemaining(0) == 0,
+            "turno estricto (default): el mismo move se corta, se pierde y no deja deuda de slot", $"lost {lost2}");
+    }
+
+    // ---- Economía de AP (2026-07-20): stock, ingreso y bloqueo bancado ----
+
+    static void LaEconomiaDeApRespira()
+    {
+        int apPerTurn = SimConfig.TurnFrames / SimConfig.FramesPerAp; // 5
+        var eco = new ApEconomy();
+        eco.ResetRound(apPerTurn);
+        Check(eco.Stock[0] == 5, "arrancás el round con el stock lleno (5)", $"stock {eco.Stock[0]}");
+        eco.EndTurn(0, apPerTurn, spentAp: 5, banked: false);
+        Check(eco.Stock[0] == 4, "gastar todo te deja corto (ingreso +4)", $"stock {eco.Stock[0]}");
+        eco.EndTurn(0, apPerTurn, spentAp: 0, banked: false);
+        Check(eco.Stock[0] == 7, "no gastar GUARDA hasta el tope (4+4 → 7 cap)", $"stock {eco.Stock[0]}");
+        eco.EndTurn(0, apPerTurn, spentAp: 5, banked: true);
+        Check(eco.Stock[0] == 7, "el bloqueo bancado suma +1 (7−5+4+1 → cap 7)", $"stock {eco.Stock[0]}");
+    }
+
+    // La carta Bloquear que bloquea un golpe banca; el bloqueo automático
+    // en neutral defiende igual pero NO banca.
+    static void ElBloqueoBancadoEsSoloConLaCarta()
+    {
+        var s = NewSim(-0.5f, 0.5f, p1Blocks: true);
+        s.SetQueue(0, new List<int> { MoveCatalog.AttackA });
+        s.SetQueue(1, new List<int> { MoveCatalog.WalkB });
+        var evs = Run(s, 30);
+        Check(Find(evs, EvKind.Blocked, 0) != null && s.Fighters[1].BankedBlock,
+            "bloquear con la CARTA banca +1 AP", $"banked {s.Fighters[1].BankedBlock}");
+        s.OnTurnEnd(1);
+        Check(!s.Fighters[1].BankedBlock, "el bancado se limpia al cerrar el turno");
+
+        var s2 = NewSim(-0.5f, 0.5f, p1Blocks: true);
+        s2.SetQueue(0, new List<int> { MoveCatalog.AttackA }); // P1 en neutral: bloquea igual
+        var evs2 = Run(s2, 30);
+        Check(Find(evs2, EvKind.Blocked, 0) != null && !s2.Fighters[1].BankedBlock,
+            "el bloqueo automático en neutral NO banca", $"banked {s2.Fighters[1].BankedBlock}");
+    }
+
+    // La IA respeta su stock de AP: pobre = turno corto.
+    static void LaIaRespetaSuStock()
+    {
+        var sim = new MatchSim();
+        var ai = new SimpleAI(123, AIProfile.Aggressive);
+        var plan = ai.Plan(sim, 0, SimConfig.TurnFrames, apBudget: 2);
+        int ap = 0;
+        foreach (var mv in plan) ap += MoveCatalog.All[mv].ApCost;
+        Check(ap <= 2, "con 2 AP de stock la IA planifica corto", $"gastó {ap} AP");
+    }
+
+    // ---- Reversal: la válvula anti-vortex ----
+
+    static void ElReversalLevantaYSepara()
+    {
+        var s = NewSim(-0.4f, 0.4f, p1Blocks: false);
+        s.Fighters[0].Stun = StunKind.Knockdown;
+        s.Fighters[0].StunEndTick = s.Tick + 40;
+        s.Reversal(0);
+        Check(!s.IsStunned(0), "el reversal te levanta YA");
+        float dist = Math.Abs(s.Fighters[1].X - s.Fighters[0].X);
+        Check(dist >= SimConfig.ReversalGap - 0.01f, "y separa a la distancia de escape",
+            $"dist {dist:0.00}");
+
+        // sin knockdown no hace nada (un código remoto trucho no rompe)
+        var s2 = NewSim(-0.4f, 0.4f, p1Blocks: false);
+        float before = s2.Fighters[1].X;
+        s2.Reversal(0);
+        Check(s2.Fighters[1].X == before, "sin knockdown el reversal es un no-op");
     }
 
     // ---- Modo AP (2026-07-20): el turno clásico dividido en action points ----
@@ -720,15 +792,18 @@ class Tests
     static void CodigoDeTurnoIdaYVuelta()
     {
         var plan = new List<int> { MoveCatalog.WalkF, MoveCatalog.AttackA, MoveCatalog.Shoryuken };
-        string code = TurnCode.Encode(1, 7, wakeQuick: false, plan);
-        bool ok = TurnCode.TryDecode(code, out int side, out int turn, out bool quick, out var moves);
-        bool roundtrip = ok && side == 1 && turn == 7 && !quick &&
+        string code = TurnCode.Encode(1, 7, TurnCode.WakeStay, plan);
+        bool ok = TurnCode.TryDecode(code, out int side, out int turn, out int wake, out var moves);
+        bool roundtrip = ok && side == 1 && turn == 7 && wake == TurnCode.WakeStay &&
                          moves.Count == 3 && moves[0] == MoveCatalog.WalkF &&
                          moves[1] == MoveCatalog.AttackA && moves[2] == MoveCatalog.Shoryuken;
+        // v2: el wake es un trit — el REVERSAL viaja en el protocolo
+        bool rev = TurnCode.TryDecode(TurnCode.Encode(0, 3, TurnCode.WakeReversal, plan),
+                       out _, out _, out int wake2, out _) && wake2 == TurnCode.WakeReversal;
         bool rejects = !TurnCode.TryDecode("hola", out _, out _, out _, out _) &&
                        !TurnCode.TryDecode("LF!!!!", out _, out _, out _, out _) &&
                        !TurnCode.TryDecode("", out _, out _, out _, out _);
-        Check(roundtrip && rejects, "código de turno: ida y vuelta exacta, rechaza basura", code);
+        Check(roundtrip && rev && rejects, "código de turno v2: ida y vuelta exacta (con reversal), rechaza basura", code);
     }
 
     // La base de todo: misma entrada, misma pelea, bit a bit.

@@ -126,6 +126,7 @@ class Program
         int totalTurns = 0, totalCrushes = 0, matchesWithCrush = 0;
         double guardSum = 0; long guardSamples = 0;
         long overflowFrames = 0; int supersFull = 0; // economía del turno fluido
+        long apStockSum = 0, apStockSamples = 0; int bankedBlocks = 0; // economía de AP
 
         for (int m = 0; m < matches; m++)
         {
@@ -134,11 +135,16 @@ class Program
             var ai1 = new SimpleAI(m * 2 + 2);
             int crushesThis = 0;
 
-            // TurnsPerRound, como el juego real (TIME OVER → juez por vida)
+            // TurnsPerRound, como el juego real (TIME OVER → juez por vida).
+            // La economía de AP corre igual que en el juego (ApEconomy):
+            // stock, ingreso y bloqueo bancado — el lab la ejercita entera.
+            var eco = new ApEconomy();
+            int apPerTurn = SimConfig.TurnFrames / SimConfig.FramesPerAp;
+            eco.ResetRound(apPerTurn);
             for (int turn = 0; turn < SimConfig.TurnsPerRound && !sim.Over; turn++)
             {
-                var p0 = ai0.Plan(sim, 0, SimConfig.TurnFrames);
-                var p1 = ai1.Plan(sim, 1, SimConfig.TurnFrames);
+                var p0 = ai0.Plan(sim, 0, SimConfig.TurnFrames, eco.Stock[0]);
+                var p1 = ai1.Plan(sim, 1, SimConfig.TurnFrames, eco.Stock[1]);
                 foreach (var mv in p0) uses[mv]++;
                 foreach (var mv in p1) uses[mv]++;
                 sim.SetQueue(0, p0);
@@ -163,6 +169,16 @@ class Program
                     guardSamples += 2;
                 }
                 overflowFrames += sim.CommittedRemaining(0) + sim.CommittedRemaining(1);
+                // cierre económico ANTES de OnTurnEnd (que limpia el bancado)
+                int spent0 = 0, spent1 = 0;
+                foreach (var mv in p0) spent0 += MoveCatalog.All[mv].ApCost;
+                foreach (var mv in p1) spent1 += MoveCatalog.All[mv].ApCost;
+                eco.EndTurn(0, apPerTurn, spent0, sim.Fighters[0].BankedBlock);
+                eco.EndTurn(1, apPerTurn, spent1, sim.Fighters[1].BankedBlock);
+                if (sim.Fighters[0].BankedBlock) bankedBlocks++;
+                if (sim.Fighters[1].BankedBlock) bankedBlocks++;
+                apStockSum += eco.Stock[0] + eco.Stock[1];
+                apStockSamples += 2;
                 sim.OnTurnEnd(0);
                 sim.OnTurnEnd(1);
                 if (sim.Fighters[0].Super >= SimConfig.SuperMax) supersFull++;
@@ -182,6 +198,8 @@ class Program
         Console.WriteLine($"turnos/pelea: {(double)totalTurns / matches:0.0}");
         Console.WriteLine($"GUARD CRUSH: {totalCrushes} total · {(double)totalCrushes / matches:0.00}/pelea · {100.0 * matchesWithCrush / matches:0.0}% de peleas con >=1");
         Console.WriteLine($"guardia promedio en juego: {guardSum / guardSamples:0.0}/{SimConfig.GuardMax:0}");
+        if (apStockSamples > 0)
+            Console.WriteLine($"ECONOMÍA AP: stock promedio {(double)apStockSum / apStockSamples:0.0}/{ApEconomy.Cap(SimConfig.TurnFrames / SimConfig.FramesPerAp)} · bloqueos bancados: {bankedBlocks} ({(double)bankedBlocks / matches:0.00}/pelea)");
         if (carryover)
             Console.WriteLine($"OVERFLOW: {(double)overflowFrames / matches:0.0} frames/pelea · turnos con barra llena: {supersFull} · supers tiradas: {uses[MoveCatalog.Super]}");
         Console.WriteLine();

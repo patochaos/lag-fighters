@@ -103,9 +103,18 @@ namespace LagFighter
         // Es información secreta hasta que el turno se ejecuta.
         public const int WakeQuickDelta = -16, WakeStayDelta = 16;
         readonly bool[] _wakeQuick = { true, true };
+        // Reversal (válvula anti-vortex): tercera opción de wakeup — 1 por
+        // round, cuesta AP del stock, te levanta YA y separa.
+        readonly bool[] _wakeReversal = new bool[2];
+        // Economía de AP del modo clásico (regla pura en ApEconomy, Sim.cs):
+        // el stock solo limita la planificación, jamás toca la sim → replay y
+        // online quedan deterministas sin viajar en el protocolo.
+        readonly ApEconomy _eco = new ApEconomy();
 
         readonly List<int>[] _plans = { new List<int>(), new List<int>() };
-        readonly List<(List<int> q0, List<int> q1, int w0, int w1)> _turnLog = new List<(List<int>, List<int>, int, int)>();
+        // r0/r1: ese lado abrió el turno con REVERSAL (el replay lo re-aplica)
+        readonly List<(List<int> q0, List<int> q1, int w0, int w1, bool r0, bool r1)> _turnLog =
+            new List<(List<int>, List<int>, int, int, bool, bool)>();
         int _replayTurn;
 
         // Lag TEATRAL del replay (solo presentación): cada tanto la repetición
@@ -288,6 +297,7 @@ namespace LagFighter
             _lastProjCount = 0;
             TurnNumber = 0;
             _prevLagLevel = 0;
+            _eco.ResetRound(ApPerTurn); // stock lleno y reversal disponible por round
             _turnLog.Clear(); // el replay cubre el round en curso
             _hasTurnSummary = false;
             _hud.ClearTurnLog();
@@ -317,14 +327,21 @@ namespace LagFighter
             }
             CaptureTurnStartStun();
             _wakeQuick[0] = _wakeQuick[1] = true;
+            _wakeReversal[0] = _wakeReversal[1] = false;
             _plans[0].Clear();
             _plans[1].Clear();
             _awaitingCode = false;
             _myCode = "";
             if (Mode == GameMode.Practice || Mode == GameMode.VsAI)
             {
-                if (Mode == GameMode.VsAI && WakeupAvailable(1)) _wakeQuick[1] = _ai.QuickRise();
-                _plans[1] = Mode == GameMode.Practice ? new List<int>() : _ai.Plan(Sim, 1, CurrentTurnFrames - WakeDelta(1));
+                if (Mode == GameMode.VsAI && WakeupAvailable(1))
+                {
+                    _wakeQuick[1] = _ai.QuickRise();
+                    _wakeReversal[1] = ReversalSelectable(1) && _ai.UseReversal();
+                }
+                _plans[1] = Mode == GameMode.Practice ? new List<int>()
+                    : _ai.Plan(Sim, 1, CurrentTurnFrames - WakeDelta(1),
+                        _eco.Stock[1] - (_wakeReversal[1] ? ApEconomy.ReversalCost : 0));
             }
             Picker = (Mode == GameMode.Async || Mode == GameMode.Online) ? LocalSide : 0;
             State = Flow.Planning;
@@ -425,16 +442,27 @@ namespace LagFighter
 
         public bool WakeupAvailable(int i) => TurnStartStunKind[i] == StunKind.Knockdown && TurnStartStun[i] > 0;
         public bool WakeQuickChoice(int i) => _wakeQuick[i];
-        public int WakeDelta(int i) => WakeupAvailable(i) ? (_wakeQuick[i] ? WakeQuickDelta : WakeStayDelta) : 0;
-        public int EffectiveStartStun(int i) => Mathf.Max(0, TurnStartStun[i] + WakeDelta(i));
+        // Reversal: derribado + no usado este round + AP en el stock
+        public bool ReversalSelectable(int i) =>
+            SimConfig.ApActive && WakeupAvailable(i) && !_eco.ReversalUsed[i] && _eco.Stock[i] >= ApEconomy.ReversalCost;
+        public bool WakeReversalChoice(int i) => _wakeReversal[i];
+        public int WakeDelta(int i) => _wakeReversal[i] ? 0 : WakeupAvailable(i) ? (_wakeQuick[i] ? WakeQuickDelta : WakeStayDelta) : 0;
+        // con reversal te levantás YA: el stun arrastrado desaparece
+        public int EffectiveStartStun(int i) => _wakeReversal[i] ? 0 : Mathf.Max(0, TurnStartStun[i] + WakeDelta(i));
 
         public void ToggleWakeup()
         {
-            _wakeQuick[Picker] = !_wakeQuick[Picker];
-            // si el plan ya no entra con menos frames, se recorta desde el final
+            // ciclo RÁPIDO → QUEDARSE → REVERSAL (si está disponible) → RÁPIDO
+            if (_wakeReversal[Picker]) { _wakeReversal[Picker] = false; _wakeQuick[Picker] = true; }
+            else if (_wakeQuick[Picker]) _wakeQuick[Picker] = false;
+            else if (ReversalSelectable(Picker)) _wakeReversal[Picker] = true;
+            else _wakeQuick[Picker] = true;
+            // si el plan ya no entra con menos presupuesto, se recorta desde el final
             // (en turno fluido un move es válido mientras ARRANQUE dentro del turno)
             while (_plans[Picker].Count > 0 && (SimConfig.ApActive
-                ? PlanApUsed(Picker) - MoveCatalog.All[_plans[Picker][_plans[Picker].Count - 1]].ApCost >= PlanApAvailable(Picker)
+                ? (SimConfig.ApOverflowEnabled
+                    ? PlanApUsed(Picker) - MoveCatalog.All[_plans[Picker][_plans[Picker].Count - 1]].ApCost >= PlanApAvailable(Picker)
+                    : PlanApUsed(Picker) > PlanApAvailable(Picker))
                 : SimConfig.CarryoverEnabled
                     ? PlanFramesUsed(Picker) - MoveCatalog.All[_plans[Picker][_plans[Picker].Count - 1]].Total >= PlanFramesAvailable(Picker)
                     : PlanFramesUsed(Picker) > PlanFramesAvailable(Picker)))
@@ -469,10 +497,11 @@ namespace LagFighter
             if (moveIndex >= 0 && PlanFits(moveIndex))
                 preview = new List<int>(preview) { moveIndex };
             var basis = Sim;
-            if (WakeDelta(Picker) != 0)
+            if (WakeDelta(Picker) != 0 || _wakeReversal[Picker])
             {
                 basis = Sim.Clone();
-                basis.AdjustKnockdown(Picker, WakeDelta(Picker));
+                if (_wakeReversal[Picker]) basis.Reversal(Picker);
+                else basis.AdjustKnockdown(Picker, WakeDelta(Picker));
             }
             _ghost.Show(basis, Picker, preview, CurrentTurnFrames);
         }
@@ -490,11 +519,26 @@ namespace LagFighter
             foreach (var m in _plans[i]) ap += MoveCatalog.All[m].ApCost;
             return ap;
         }
-        // AP disponibles = slots ENTEROS que quedan del turno: el stun
-        // arrastrado y los slots prestados el turno pasado te comen AP.
-        public int PlanApAvailable(int i) => PlanFramesAvailable(i) / SimConfig.FramesPerAp;
-        // AP que este plan le pide prestados al turno que viene (overflow)
+        // AP disponibles = lo que dé menos entre tu STOCK (economía: ingreso
+        // +4/turno, lo no gastado se guarda hasta 7, bloquear banca +1) y los
+        // slots FÍSICOS que quedan del turno (el stun arrastrado los come).
+        public int PlanApAvailable(int i) =>
+            Mathf.Max(0, Mathf.Min(
+                _eco.Stock[i] - (_wakeReversal[i] ? ApEconomy.ReversalCost : 0),
+                PlanFramesAvailable(i) / SimConfig.FramesPerAp));
+        // AP que este plan le pide prestados al turno que viene (overflow —
+        // desactivado por ahora: con ApOverflowEnabled=false esto siempre da 0)
         public int PlanApBorrowed(int i) => Mathf.Max(0, PlanApUsed(i) - PlanApAvailable(i));
+        // stock crudo (para las bolitas del HUD y la IA)
+        public int ApStock(int i) => _eco.Stock[i];
+        public int ApStockCap => ApEconomy.Cap(ApPerTurn);
+        // Lo que muestran las bolitas: tu lado descuenta EN VIVO lo que vas
+        // planificando; el rival muestra su stock público de arranque (su
+        // plan es secreto — el cobro se ve recién al cerrar el turno).
+        public int ApStockShown(int i) =>
+            State == Flow.Planning && i == Picker
+                ? Mathf.Max(0, _eco.Stock[i] - PlanApUsed(i) - (_wakeReversal[i] ? ApEconomy.ReversalCost : 0))
+                : _eco.Stock[i];
         // Turno fluido: alcanza con que el move ARRANQUE dentro del turno
         // (el último puede cruzar el límite). Estricto: tiene que entrar entero.
         public bool PlanFits(int moveIndex) =>
@@ -502,9 +546,12 @@ namespace LagFighter
             // la barra se gasta al ejecutar: una sola super por plan
             !(moveIndex == MoveCatalog.Super && _plans[Picker].Contains(MoveCatalog.Super)) &&
             (SimConfig.ApActive
-                // modo AP: mientras quede al menos 1 AP se puede agregar — el
-                // último move puede pasarse del presupuesto (pide prestado)
-                ? PlanApUsed(Picker) < PlanApAvailable(Picker)
+                // modo AP estricto: el move entra si te alcanzan los AP.
+                // (Con overflow habilitado — hoy no — alcanza con 1 AP libre
+                // y el último move puede pasarse pidiendo prestado.)
+                ? (SimConfig.ApOverflowEnabled
+                    ? PlanApUsed(Picker) < PlanApAvailable(Picker)
+                    : PlanApUsed(Picker) + MoveCatalog.All[moveIndex].ApCost <= PlanApAvailable(Picker))
                 : SimConfig.CarryoverEnabled
                     ? PlanFramesUsed(Picker) < PlanFramesAvailable(Picker)
                     : PlanFramesUsed(Picker) + MoveCatalog.All[moveIndex].Total <= PlanFramesAvailable(Picker));
@@ -572,7 +619,7 @@ namespace LagFighter
             _menu.Close();
             _ghost.Clear();
             _netSeq++;
-            string myCode = TurnCode.Encode(LocalSide, TurnNumber, _wakeQuick[LocalSide], _plans[LocalSide]);
+            string myCode = TurnCode.Encode(LocalSide, TurnNumber, WakeCode(LocalSide), _plans[LocalSide]);
             NetLobby.I.PushTurn(_netSeq, LocalSide, myCode);
             int seq = _netSeq;
             NetLobby.I.PollTurn(seq, 1 - LocalSide, payload => OnRemoteTurn(seq, payload));
@@ -580,14 +627,22 @@ namespace LagFighter
             _hud.SetPrompt($"TURNO {TurnNumber}/{TurnsPerRound} — online");
         }
 
+        // wake como trit del protocolo: 0 quedarse · 1 rápido · 2 reversal
+        int WakeCode(int i) => _wakeReversal[i] ? TurnCode.WakeReversal : _wakeQuick[i] ? TurnCode.WakeQuick : TurnCode.WakeStay;
+        void ApplyWakeCode(int i, int wake)
+        {
+            _wakeReversal[i] = wake == TurnCode.WakeReversal;
+            _wakeQuick[i] = wake == TurnCode.WakeQuick;
+        }
+
         void OnRemoteTurn(int seq, string payload)
         {
             if (Mode != GameMode.Online || State != Flow.Planning || !_awaitingCode || seq != _netSeq) return;
-            if (!TurnCode.TryDecode(payload, out int side, out int turn, out bool quick, out var moves)) return;
+            if (!TurnCode.TryDecode(payload, out int side, out int turn, out int wake, out var moves)) return;
             if (side != 1 - LocalSide || turn != (TurnNumber & 0xFF)) return;
             int remote = 1 - LocalSide;
             _plans[remote] = moves;
-            _wakeQuick[remote] = quick;
+            ApplyWakeCode(remote, wake);
             _awaitingCode = false;
             _hud.SetBanner("");
             BeginExecution();
@@ -599,7 +654,7 @@ namespace LagFighter
         {
             _awaitingCode = true;
             _guardFrame = Time.frameCount;
-            _myCode = TurnCode.Encode(LocalSide, TurnNumber, _wakeQuick[LocalSide], _plans[LocalSide]);
+            _myCode = TurnCode.Encode(LocalSide, TurnNumber, WakeCode(LocalSide), _plans[LocalSide]);
             GUIUtility.systemCopyBuffer = _myCode;
             _menu.Close();
             _ghost.Clear();
@@ -611,7 +666,7 @@ namespace LagFighter
         {
             string clip = (GUIUtility.systemCopyBuffer ?? "").Trim();
             int remote = 1 - LocalSide;
-            if (!TurnCode.TryDecode(clip, out int side, out int turn, out bool quick, out var moves))
+            if (!TurnCode.TryDecode(clip, out int side, out int turn, out int wake, out var moves))
             {
                 _hud.Feedback(LocalSide, "CÓDIGO INVÁLIDO (¿copiaste el del rival?)", new Color(1f, 0.5f, 0.4f));
                 return;
@@ -619,7 +674,7 @@ namespace LagFighter
             if (side != remote) { _hud.Feedback(LocalSide, "ESE CÓDIGO ES TUYO, falta el del rival", new Color(1f, 0.5f, 0.4f)); return; }
             if (turn != (TurnNumber & 0xFF)) { _hud.Feedback(LocalSide, $"CÓDIGO DEL TURNO {turn}, va el {TurnNumber}", new Color(1f, 0.5f, 0.4f)); return; }
             _plans[remote] = moves;
-            _wakeQuick[remote] = quick;
+            ApplyWakeCode(remote, wake);
             _awaitingCode = false;
             _hud.SetBanner("");
             BeginExecution();
@@ -628,10 +683,11 @@ namespace LagFighter
         void UpdateGhost()
         {
             var basis = Sim;
-            if (WakeDelta(Picker) != 0)
+            if (WakeDelta(Picker) != 0 || _wakeReversal[Picker])
             {
                 basis = Sim.Clone(); // el preview arranca con el wakeup elegido
-                basis.AdjustKnockdown(Picker, WakeDelta(Picker));
+                if (_wakeReversal[Picker]) basis.Reversal(Picker);
+                else basis.AdjustKnockdown(Picker, WakeDelta(Picker));
             }
             _ghost.Show(basis, Picker, _plans[Picker], CurrentTurnFrames);
             var g = PlanPreview.Build(basis, Picker, _plans[Picker], CurrentTurnFrames);
@@ -948,12 +1004,22 @@ namespace LagFighter
         void BeginExecution()
         {
             if (Mode == GameMode.VsAI) _ai.ObserveOpponentPlan(_plans[0]);
-            Sim.AdjustKnockdown(0, WakeDelta(0));
-            Sim.AdjustKnockdown(1, WakeDelta(1));
+            for (int i = 0; i < 2; i++)
+            {
+                if (_wakeReversal[i])
+                {
+                    // REVERSAL: levanta ya + separa; el costo en AP se cobra en EndTurn
+                    Sim.Reversal(i);
+                    _eco.ReversalUsed[i] = true;
+                    _hud.Feedback(i, "¡REVERSAL!", new Color(1f, 0.55f, 0.9f));
+                }
+                else Sim.AdjustKnockdown(i, WakeDelta(i));
+            }
             CaptureTurnStartStun(); // las timelines muestran el wakeup real al ejecutar
             Sim.SetQueue(0, _plans[0]);
             Sim.SetQueue(1, _plans[1]);
-            _turnLog.Add((new List<int>(_plans[0]), new List<int>(_plans[1]), WakeDelta(0), WakeDelta(1)));
+            _turnLog.Add((new List<int>(_plans[0]), new List<int>(_plans[1]), WakeDelta(0), WakeDelta(1),
+                _wakeReversal[0], _wakeReversal[1]));
             TurnStartTick = Sim.Tick;
             _acc = 0f;
             _ghost.Clear();
@@ -974,6 +1040,16 @@ namespace LagFighter
         {
             for (int i = 0; i < 2; i++)
             {
+                // economía: cobrar el plan (+ reversal) y pagar ingreso/bancado,
+                // ANTES de OnTurnEnd (que limpia el flag de bloqueo bancado)
+                if (SimConfig.ApActive)
+                {
+                    bool banked = Sim.Fighters[i].BankedBlock;
+                    int spent = PlanApUsed(i) + (_wakeReversal[i] ? ApEconomy.ReversalCost : 0);
+                    _eco.EndTurn(i, ApPerTurn, spent, banked);
+                    if (banked && Mode != GameMode.Practice)
+                        _hud.Feedback(i, "+1 AP (bloqueo bancado)", new Color(0.35f, 0.85f, 1f));
+                }
                 int lost = Sim.OnTurnEnd(i);
                 _turnLost[i] = lost;
                 if (lost > 0 && Mode != GameMode.Practice)
@@ -1007,6 +1083,23 @@ namespace LagFighter
             var t = _turnLog[_turnLog.Count - 1];
             string q0 = ChipString(t.q0), q1 = ChipString(t.q1);
             _hud.AddTurnLog($"T{TurnNumber}  <color=#8cc8ff>{q0}</color> −{_turnDmg[1]:0}  ·  <color=#ffa080>{q1}</color> −{_turnDmg[0]:0}");
+        }
+
+        // Log de aperturas (Ley 5 de la biblia: info pública para LEER, no
+        // adivinar): las primeras cartas de los últimos planes YA REVELADOS
+        // de ese lado, la más reciente al final. "—" = pasó el turno.
+        public string RecentOpenings(int side, int count = 3)
+        {
+            if (_turnLog.Count == 0) return "";
+            var sb = new System.Text.StringBuilder();
+            int from = Mathf.Max(0, _turnLog.Count - count);
+            for (int t = from; t < _turnLog.Count; t++)
+            {
+                var q = side == 0 ? _turnLog[t].q0 : _turnLog[t].q1;
+                if (sb.Length > 0) sb.Append(" · ");
+                sb.Append(q.Count == 0 ? "—" : HudUI.ChipLabel(q[0]));
+            }
+            return sb.ToString();
         }
 
         static string ChipString(List<int> q)
@@ -1227,8 +1320,8 @@ namespace LagFighter
         void LoadReplayTurn()
         {
             var t = _turnLog[_replayTurn];
-            Sim.AdjustKnockdown(0, t.w0);
-            Sim.AdjustKnockdown(1, t.w1);
+            if (t.r0) Sim.Reversal(0); else Sim.AdjustKnockdown(0, t.w0);
+            if (t.r1) Sim.Reversal(1); else Sim.AdjustKnockdown(1, t.w1);
             Sim.SetQueue(0, t.q0);
             Sim.SetQueue(1, t.q1);
             TurnStartTick = Sim.Tick;

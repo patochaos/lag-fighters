@@ -170,7 +170,7 @@ namespace LagFighter
             // turno fluido quedó absorbido y se oculta.
             if (SimConfig.ApEnabled)
             {
-                _carryLine.text = "el turno se juega en ACTION POINTS: cada move cuesta AP — llenás la barra o pedís prestado al próximo turno";
+                _carryLine.text = "el turno se juega en ACTION POINTS: cada move cuesta AP, lo que no gastás se guarda y bloquear bien banca +1";
                 _carryLine.color = new Color(0.45f, 0.9f, 1f, 0.7f);
                 return;
             }

@@ -195,27 +195,37 @@ reglas. Test: si una carta necesita más de dos líneas de texto, está mal.
 
 ---
 
-## 4. Aplicación al modo YOMI de Lag Fighters (estado 2026-07-20)
+## 4. Aplicación a Lag Fighters (actualizado 2026-07-20, tarde)
 
-Lo que ya cumple:
-- **Ley 5**: AP públicos, distancia, guardia, compromiso de overflow visibles.
-  "Está a 0 AP → solo puede bloquear" es información dura de primera clase.
+Lo que ya cumple (ambos modos):
+- **Ley 5**: AP/stock públicos de los dos lados, distancia, guardia, y el
+  **log de aperturas del rival** al planificar (leer hábitos, no adivinar).
 - **Ley 6**: hitstun/KD arrastrado entre turnos + esquina = okizeme natural.
-- **Ley 3**: bloqueo a costo 0 con el agarre como depredador.
+- **Ley 3**: bloqueo default con el agarre como depredador.
 - **Ley 11**: la idea anotada de "personajes = tocar UNA arista" es
   exactamente la doctrina correcta.
 
-Dónde mirar con esta biblia en la mano:
-- **Ley 2**: hoy casi todas las cartas pagan en daño/posición. ¿Qué opción
-  convierte a ECONOMÍA? (El bloqueo que banquea +1 AP apunta ahí — ¿alcanza?)
-- **Ley 4**: el bloqueo es un botón único siempre disponible. La versión
-  alto/bajo escasa de Yomi 2 es la evolución natural si el modo pide más
-  profundidad defensiva (el agachado retirado ya coqueteaba con esto).
-- **Ley 7**: el lab mostró AP promedio 5.5/6 — la escasez no muerde, así que
-  las posiciones "fuerte/débil" casi no se diferencian. Bajar recarga o
-  encarecer una carta clave crearía el gradiente de fuerza que pide la ley.
-- **Ley 13**: no hay válvula anti-presión explícita (¿wakeup ya cumple?).
-- **Ley 12**: no hay decisión de "daño vs estado" al ganar — el premio es fijo.
+Aplicado en el modo clásico tras la auditoría de esta biblia (2026-07-20):
+- **Ley 7 + 9**: economía de AP persistente (`ApEconomy`): ingreso +4 <
+  capacidad 5, ahorro con tope 7 → posiciones ricas/pobres medibles.
+- **Ley 2 + 9**: bloqueo bancado — la carta Bloquear que bloquea paga +1 AP
+  (defender con intención alimenta la economía). El parry salió: la defensa
+  es UNA y económica.
+- **Ley 13**: REVERSAL (1 por round, 2 AP, derribado): escape, no ventaja.
+- **Ley 14**: grilla 3×3 con Dash/Salto agrupados por dirección.
+
+Dónde seguir mirando:
+- **Ley 4**: el bloqueo sigue siendo botón único siempre disponible. La
+  versión alto/bajo escasa de Yomi 2 es la evolución natural si el juego
+  pide más profundidad defensiva (el agachado retirado coqueteaba con esto).
+- **Ley 7 (yomi)**: ~~AP promedio 5.5/6~~ **viejo**: la economía del modo
+  YOMI ya se re-tuneó — el lab de hoy da 2.5/6, la escasez muerde. Cumplida.
+- **Ley 12**: no hay decisión de "daño vs estado" al ganar — el premio es
+  fijo (elegir Barrida vs Jab en el plan cubre parte; vigilar).
+- **Anti-patrón 3 (tortuga)**: tras sacar el parry y premiar el bloqueo, el
+  lab IA-IA subió a ~48% de TIME OVER. Si el juego humano se siente pasivo:
+  encarecer Bloquear (2→3 AP), bajar el tope de ahorro, o darle al chip de
+  proyectiles el rol anti-tortuga que tenía el parry.
 
 ---
 

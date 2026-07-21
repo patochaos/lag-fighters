@@ -15,18 +15,26 @@ namespace LagFighter
     {
         const float CardW = 168f, CardH = 44f, Gap = 6f;
 
-        // orden de display: movimiento y defensa arriba, ataques abajo.
-        // Caminar + y Salto − retirados (2026-07-19): redundantes con Dash +
-        // y con Salto N / Dash −. Siguen en MoveCatalog por replays viejos.
+        // Grilla 3×3 (2026-07-20, anti-clutter): Dash y Salto son UNA carta
+        // que abre un mini-picker de dirección al apretarla (Salto − vuelve
+        // como dirección). El Parry SALIÓ del clásico: Bloquear es LA defensa
+        // y banca AP. Sentinelas negativos = cartas de grupo.
+        public const int CardDash = -2, CardJump = -3;
         static readonly int[] ClassicOrder =
         {
-            MoveCatalog.WalkB, MoveCatalog.DashF, MoveCatalog.DashB,
-            MoveCatalog.JumpF, MoveCatalog.JumpN, MoveCatalog.Parry,
+            MoveCatalog.WalkB, CardDash, CardJump,
             MoveCatalog.AttackA, MoveCatalog.AttackB, MoveCatalog.Grab,
             MoveCatalog.Tatsu, MoveCatalog.Hadouken, MoveCatalog.Shoryuken,
             // agachado desactivado — reactivar junto con SimConfig.CrouchEnabled:
             // MoveCatalog.LowKick, MoveCatalog.Crouch,
         };
+
+        // el representante de cada grupo (color, costo, framedata del panel)
+        static int Rep(int v) => v == CardDash ? MoveCatalog.DashF : v == CardJump ? MoveCatalog.JumpF : v;
+        static readonly (int move, string label)[] DashOptions =
+            { (MoveCatalog.DashF, "ADELANTE →"), (MoveCatalog.DashB, "← ATRÁS") };
+        static readonly (int move, string label)[] JumpOptions =
+            { (MoveCatalog.JumpF, "ADELANTE →"), (MoveCatalog.JumpN, "NEUTRO ↑"), (MoveCatalog.JumpB, "← ATRÁS") };
 
         // Modo YOMI v2 (discreto): 8 acciones en una fila, UNA por turno —
         // click en la carta = jugarla. La dirección de dash/salto la decide
@@ -58,12 +66,15 @@ namespace LagFighter
         static readonly Color SuperDimC = new Color(0.22f, 0.18f, 0.05f, 0.92f); // cargando: dorado apagado
         // panel de info a la derecha de la grilla: se llena con el hover
         Text _detailTitle, _detailFrames, _detailAdv, _detailTag, _detail, _status;
-        // barra de ACTION POINTS del turno (modo AP clásico): bolitas grandes
-        // arriba de la grilla — llena = te queda, aro = gastado, rojo = te lo
-        // comió el stun, naranja = prestado del próximo turno.
-        Image[] _apDots;
-        Text _apBarLabel;
-        const int MaxApDots = 30; // Lag Mode tope: 303f/12 = 25 AP + prestados
+        // mini-picker de dirección para las cartas de grupo (DASH / SALTO):
+        // se abre encima de la carta, click o 1-3 elige, afuera cierra.
+        // (Las bolitas de AP viven en el HUD, bajo las barras de cada lado.)
+        Image _subPanel;
+        readonly Image[] _subBtn = new Image[3];
+        readonly Text[] _subLabel = new Text[3];
+        readonly int[] _subMoves = new int[3];
+        int _subGroup; // CardDash/CardJump, 0 = cerrado
+        int _subCount;
         Image _segBg, _segS, _segA, _segR;
         float _segW;
         int _sel;
@@ -93,10 +104,10 @@ namespace LagFighter
         void Rebuild()
         {
             if (_root != null) Destroy(_root);
-            _apDots = null; // vivían dentro de _root: refs muertas tras el destroy
+            _subGroup = 0; // el picker vivía dentro de _root
             _builtYomi = SimConfig.YomiEnabled;
             _order = _builtYomi ? YomiOrder : ClassicOrder;
-            _cols = _builtYomi ? YomiOrder.Length : 6;
+            _cols = _builtYomi ? YomiOrder.Length : 3; // clásico: 3×3, teclas 1-9
             _sel = 0;
             Build(_canvasRt);
             _root.SetActive(false);
@@ -162,7 +173,8 @@ namespace LagFighter
 
         static string CardTag(int mi)
         {
-            var m = MoveCatalog.All[mi];
+            if (mi == CardDash) return "ADELANTE o ATRÁS · no bloquea";
+            if (mi == CardJump) return "ADELANTE / NEUTRO / ATRÁS · patada al caer";
             switch (mi)
             {
                 case MoveCatalog.Grab: return "ROMPE GUARDIA · TIRA";
@@ -186,6 +198,8 @@ namespace LagFighter
         // Nombre en la carta: en YOMI el valor de _order es una YomiAction.
         string DisplayName(int mi)
         {
+            if (mi == CardDash) return "DASH";
+            if (mi == CardJump) return "SALTO";
             return _builtYomi
                 ? YomiConfig.Name((YomiAction)mi).ToUpperInvariant()
                 : MoveCatalog.All[mi].Name.ToUpperInvariant();
@@ -193,7 +207,7 @@ namespace LagFighter
 
         // color de categoría según el modo (en YOMI, por acción — mismo
         // color que las cartas de revelación del HUD)
-        Color CardColor(int v) => _builtYomi ? HudUI.YomiActionColor((YomiAction)v) : CategoryColor(v);
+        Color CardColor(int v) => _builtYomi ? HudUI.YomiActionColor((YomiAction)v) : CategoryColor(Rep(v));
 
         void Build(RectTransform canvasRt)
         {
@@ -252,7 +266,7 @@ namespace LagFighter
                 // ceil(frames/12) — el presupuesto del turno ES en AP)
                 if (_builtYomi || SimConfig.ApActive)
                 {
-                    int cost = _builtYomi ? YomiConfig.Cost((YomiAction)mi) : MoveCatalog.All[mi].ApCost;
+                    int cost = _builtYomi ? YomiConfig.Cost((YomiAction)mi) : MoveCatalog.All[Rep(mi)].ApCost;
                     var costT = MakeText(card.rectTransform, "Cost", cost == 0 ? "GRATIS" : $"{cost} AP",
                         new Vector2(1f, 0f), new Vector2(-8f, 10f), new Vector2(60f, 14f), 8,
                         new Color(0.5f, 0.95f, 1f, 0.85f), TextAnchor.MiddleRight);
@@ -346,27 +360,25 @@ namespace LagFighter
                 new Vector2(900f, 22f), 14, new Color(0.5f, 1f, 0.6f), TextAnchor.MiddleRight);
             _status.rectTransform.pivot = new Vector2(1f, 0.5f);
 
-            // barra de AP: bolitas arriba de la grilla, a la izquierda (misma
-            // línea que el estado). Se llenan/vacían con RefreshApDots.
-            if (!_builtYomi && SimConfig.ApActive)
+            // mini-picker de dirección (DASH/SALTO): panel chico que se abre
+            // ENCIMA de la carta de grupo. Creado al final: dibuja sobre todo.
+            if (!_builtYomi)
             {
-                _apBarLabel = MakeText(rootRt, "ApBarLabel", "AP", new Vector2(0.5f, 0f),
-                    new Vector2(-totalW / 2f - 8f, 26f + totalH + 44f), new Vector2(46f, 20f), 8,
-                    new Color(0.45f, 0.9f, 1f, 0.85f), TextAnchor.MiddleLeft);
-                _apBarLabel.font = UIFonts.Pixel;
-                _apBarLabel.rectTransform.pivot = new Vector2(0f, 0.5f);
-                _apDots = new Image[MaxApDots];
-                for (int d = 0; d < MaxApDots; d++)
+                _subPanel = MakeImage(panel.rectTransform, "SubPicker", new Vector2(0.5f, 0.5f), Vector2.zero,
+                    new Vector2(3 * 116f + 16f, CardH + 16f), new Color(0.05f, 0.07f, 0.1f, 0.98f));
+                for (int o = 0; o < 3; o++)
                 {
-                    _apDots[d] = MakeImage(rootRt, "ApDot" + d, new Vector2(0.5f, 0f), Vector2.zero,
-                        new Vector2(26f, 26f), Color.white);
-                    _apDots[d].sprite = HudUI.CircleSprite();
-                    _apDots[d].gameObject.SetActive(false);
+                    _subBtn[o] = MakeImage(_subPanel.rectTransform, "Opt" + o, new Vector2(0.5f, 0.5f),
+                        new Vector2((o - 1) * 116f, 0f), new Vector2(110f, CardH - 4f), new Color(0.16f, 0.2f, 0.28f, 1f));
+                    _subLabel[o] = MakeText(_subBtn[o].rectTransform, "T", "", new Vector2(0.5f, 0.5f), Vector2.zero,
+                        new Vector2(108f, 26f), 8, Color.white, TextAnchor.MiddleCenter);
+                    _subLabel[o].font = UIFonts.Pixel;
                 }
+                _subPanel.gameObject.SetActive(false);
             }
             MakeText(rootRt, "Help", _builtYomi
                     ? "UNA acción por turno: click (o 1-8) la juega YA · de cerca: JAB › AGARRE › PARRY › JAB · el SHORYU gana pero whiffear = recovery\nlos AP no gastados se acumulan (tope 6) · CARGAR junta +2 pero todo golpe es counter"
-                    : "click o 1-9 agrega  ·  Backspace borra  ·  ESPACIO cierra el turno  ·  cada carta cuesta AP: llená la barra o pasate\npasarte = el último move PIDE PRESTADO al próximo turno  ·  arrastrá tu timeline para mover el ghost  ·  click derecho en una ficha la borra",
+                    : "click o 1-9 agrega  ·  Backspace borra  ·  ESPACIO cierra el turno  ·  DASH y SALTO preguntan la dirección\ncada carta cuesta AP y lo que no gastás SE GUARDA  ·  BLOQUEAR que bloquea un golpe banca +1 AP  ·  arrastrá tu timeline para mover el ghost",
                 new Vector2(0.5f, 0f), new Vector2(0f, 14f), new Vector2(1300f, 36f), 13, new Color(1f, 1f, 1f, 0.45f), TextAnchor.MiddleCenter);
 
             // en YOMI no hay cola: sin LISTO ni BORRAR (la carta se juega al click)
@@ -420,14 +432,18 @@ namespace LagFighter
             bool avail = _mc.WakeupAvailable(_mc.Picker);
             _wakeBtn.gameObject.SetActive(avail);
             if (!avail) return;
-            _wakeLabel.text = _mc.WakeQuickChoice(_mc.Picker)
-                ? $"WAKEUP: RÁPIDO\n<size=11>{MatchController.WakeQuickDelta}f de knockdown</size>"
-                : $"WAKEUP: QUEDARSE\n<size=11>+{MatchController.WakeStayDelta}f, baitea el meaty</size>";
+            _wakeLabel.text = _mc.WakeReversalChoice(_mc.Picker)
+                ? $"WAKEUP: ¡REVERSAL!\n<size=11>{ApEconomy.ReversalCost} AP · 1 por round · parás YA y separa</size>"
+                : _mc.WakeQuickChoice(_mc.Picker)
+                    ? $"WAKEUP: RÁPIDO\n<size=11>{MatchController.WakeQuickDelta}f de knockdown</size>"
+                    : $"WAKEUP: QUEDARSE\n<size=11>+{MatchController.WakeStayDelta}f, baitea el meaty</size>"
+                      + (_mc.ReversalSelectable(_mc.Picker) ? "\n<size=10>otro click: REVERSAL</size>" : "");
         }
 
         public void Close()
         {
             _active = false;
+            CloseSubPicker();
             if (_root != null) _root.SetActive(false);
             RangePreview.Clear();
         }
@@ -440,23 +456,20 @@ namespace LagFighter
 
             if (SimConfig.ApActive && !_builtYomi)
             {
-                // presupuesto en ACTION POINTS: la moneda del turno son las
-                // bolitas — el texto acompaña, los frames viven en la timeline
+                // presupuesto en ACTION POINTS: las bolitas viven en el HUD
+                // (bajo las barras de cada lado) — acá el texto acompaña
                 int apUsed = _mc.PlanApUsed(_mc.Picker);
                 int apAvail = _mc.PlanApAvailable(_mc.Picker);
-                int apCap = _mc.ApPerTurn;
-                int borrowed = Mathf.Max(0, apUsed - apAvail);
                 int apLeft = Mathf.Max(0, apAvail - apUsed);
-                int committedAp = _mc.TurnStartCommitted[_mc.Picker];
-                string stunNote = committedAp > 0
-                    ? $" (seguís comprometido en {MoveCatalog.All[_mc.Sim.Fighters[_mc.Picker].MoveIndex].Name})"
-                    : apAvail < apCap ? $" (el stun te comió {apCap - apAvail} AP)" : "";
-                if (borrowed > 0) extra += $"  ·  » pedís {borrowed} AP prestados: el próximo turno arranca con menos";
-                _status.text = $"{apUsed}/{apAvail} AP{stunNote} — quedan {apLeft}{extra}";
-                _status.color = borrowed > 0 ? new Color(1f, 0.6f, 0.15f)
-                    : apLeft == 0 ? new Color(1f, 0.85f, 0.3f)
-                    : apAvail < apCap ? new Color(1f, 0.65f, 0.4f) : new Color(0.5f, 1f, 0.6f);
-                RefreshApDots(apUsed, apAvail, apCap, borrowed);
+                int stock = _mc.ApStock(_mc.Picker);
+                int slots = _mc.PlanFramesAvailable(_mc.Picker) / SimConfig.FramesPerAp;
+                string note = _mc.WakeReversalChoice(_mc.Picker) ? $" (REVERSAL: −{ApEconomy.ReversalCost} AP)"
+                    : slots < stock && slots < _mc.ApPerTurn ? $" (el stun te dejó {slots} slots)"
+                    : stock < _mc.ApPerTurn ? " (stock corto: gastaste de más)" : "";
+                if (apLeft > 0) extra += $"  ·  lo que no gastás SE GUARDA (tope {_mc.ApStockCap})";
+                _status.text = $"{apUsed}/{apAvail} AP{note} — quedan {apLeft}{extra}";
+                _status.color = apLeft == 0 ? new Color(1f, 0.85f, 0.3f)
+                    : apAvail < _mc.ApPerTurn ? new Color(1f, 0.65f, 0.4f) : new Color(0.5f, 1f, 0.6f);
             }
             else
             {
@@ -481,43 +494,6 @@ namespace LagFighter
             _doneLabel.fontSize = empty ? 14 : 16;
 
             RefreshCardStates(); // el plan cambió: gris/overflow de cada carta
-        }
-
-        // Las bolitas de AP del turno, de izquierda a derecha:
-        //   aro celeste apagado = AP ya gastado en el plan
-        //   disco celeste      = AP que te queda
-        //   aro rojizo         = casillero que te comió el stun / lo comprometido
-        //   disco naranja      = AP prestado del próximo turno (overflow)
-        void RefreshApDots(int used, int avail, int cap, int borrowed)
-        {
-            if (_apDots == null) return;
-            int shown = Mathf.Min(MaxApDots, cap + borrowed);
-            float size = shown <= 12 ? 26f : 14f;   // Lag Mode: hasta 25 AP, achicar
-            float gap = shown <= 12 ? 8f : 4f;
-            int rows = Mathf.CeilToInt(_order.Length / (float)_cols);
-            float totalW = _cols * (CardW + Gap) - Gap;
-            float totalH = rows * (CardH + Gap) - Gap;
-            float y = 26f + totalH + 44f;
-            float x = -totalW / 2f + 34f;
-            for (int d = 0; d < MaxApDots; d++)
-            {
-                bool on = d < shown;
-                if (_apDots[d].gameObject.activeSelf != on) _apDots[d].gameObject.SetActive(on);
-                if (!on) continue;
-                bool prestado = d >= cap;
-                bool comido = !prestado && d >= avail;
-                bool gastado = !prestado && !comido && d < Mathf.Min(used, avail);
-                _apDots[d].sprite = prestado || (!comido && !gastado)
-                    ? HudUI.CircleSprite() : HudUI.RingSprite();
-                _apDots[d].color = prestado ? new Color(1f, 0.6f, 0.15f, 1f)
-                    : comido ? new Color(0.9f, 0.35f, 0.3f, 0.5f)
-                    : gastado ? new Color(0.35f, 0.85f, 1f, 0.4f)
-                    : new Color(0.35f, 0.85f, 1f, 1f);
-                // los prestados van separados: se leen como "de más"
-                _apDots[d].rectTransform.anchoredPosition = new Vector2(x + (prestado ? 10f : 0f), y);
-                _apDots[d].rectTransform.sizeDelta = new Vector2(size, size);
-                x += size + gap;
-            }
         }
 
         // Estado visual de cada carta según lo que queda del turno:
@@ -547,14 +523,15 @@ namespace LagFighter
             int availAp = _mc.PlanApAvailable(_mc.Picker);
             for (int i = 0; i < _order.Length; i++)
             {
-                int mi = _order[i];
-                bool startable = _mc.PlanFits(mi);
+                int rep = Rep(_order[i]); // las cartas de grupo validan por su representante
+                bool startable = _mc.PlanFits(rep);
+                // "cruzaría el turno" solo existe con overflow habilitado
                 bool crosses = startable && (SimConfig.ApActive
-                    ? usedAp + MoveCatalog.All[mi].ApCost > availAp
-                    : SimConfig.CarryoverEnabled && used + MoveCatalog.All[mi].Total > avail);
+                    ? SimConfig.ApOverflowEnabled && usedAp + MoveCatalog.All[rep].ApCost > availAp
+                    : SimConfig.CarryoverEnabled && used + MoveCatalog.All[rep].Total > avail);
                 _cardOverlay[i].gameObject.SetActive(!startable);
                 _cardOvfMark[i].gameObject.SetActive(crosses);
-                var cat = CategoryColor(mi);
+                var cat = CategoryColor(rep);
                 _cardEdge[i].color = crosses
                     ? new Color(1f, 0.6f, 0.15f, 0.95f)
                     : new Color(cat.r, cat.g, cat.b, 0.9f);
@@ -600,8 +577,9 @@ namespace LagFighter
                 return;
             }
 
-            // panel de info clásico: costo en AP + framedata con mini-barra S/A/R
-            var m = MoveCatalog.All[mi];
+            // panel de info clásico: costo en AP + framedata con mini-barra
+            // S/A/R (las cartas de grupo muestran su variante representativa)
+            var m = MoveCatalog.All[Rep(mi)];
             string dmg = m.TotalDamage > 0f ? $"   ·   {m.TotalDamage:0} DMG" + (m.Hits.Length > 1 ? $" ({m.Hits.Length} hits)" : "") : "";
             string ap = SimConfig.ApActive ? $"{m.ApCost} AP   ·   " : "";
             _detailFrames.text = $"{ap}{m.Startup} / {m.Active} / {m.Recovery}  ·  {m.Total}f{dmg}";
@@ -616,17 +594,22 @@ namespace LagFighter
             _detailAdv.text = AdvRange(m);
             _detailTag.text = CardTag(mi).ToUpperInvariant();
             _detailTag.color = new Color(cat.r * 0.6f + 0.4f, cat.g * 0.6f + 0.4f, cat.b * 0.6f + 0.4f);
-            _detail.text = m.Desc;
+            _detail.text = mi == CardDash ? "Arremetida sin bloqueo: al apretarla elegís ADELANTE (presión) o ATRÁS (el bait)."
+                : mi == CardJump ? "Salto con patada al caer: al apretarla elegís ADELANTE (jump-in), NEUTRO (wakeup) o ATRÁS (retirada)."
+                : m.Desc;
 
             // el rango del movimiento se dibuja EN el escenario (Into the Breach)
-            RangePreview.Show(_mc.Sim, _mc.Picker, _order[_sel]);
+            RangePreview.Show(_mc.Sim, _mc.Picker, Rep(_order[_sel]));
             // y el ghost lo ACTÚA: plan actual + la carta bajo el cursor
-            _mc.PreviewHover(_order[_sel]);
+            _mc.PreviewHover(Rep(_order[_sel]));
         }
 
         void Update()
         {
             if (!_active) return;
+
+            // el mini-picker de dirección abierto captura todo el input
+            if (_subGroup != 0) { UpdateSubPicker(); return; }
 
             // hover: pasar el mouse por una carta ya muestra qué hace,
             // sin tener que apretarla (apretar = agregarla al plan)
@@ -750,11 +733,74 @@ namespace LagFighter
             => RectTransformUtility.RectangleContainsScreenPoint(btn.rectTransform, mp, null)
                 ? Color.Lerp(baseC, Color.white, 0.22f) : baseC;
 
-        // agrega/borra con su blip solo si la acción realmente pasó
+        // agrega/borra con su blip solo si la acción realmente pasó.
+        // Las cartas de grupo (DASH/SALTO) abren el picker de dirección.
         void TryAdd(int mi)
         {
+            if (mi == CardDash || mi == CardJump) { OpenSubPicker(mi); return; }
             if (_mc.PlanFits(mi)) SfxLib.Play(SfxLib.Kind.UiClick, 0.6f);
             _mc.PlanAdd(mi);
+        }
+
+        void OpenSubPicker(int group)
+        {
+            if (!_mc.PlanFits(Rep(group))) { SfxLib.Play(SfxLib.Kind.UiCancel, 0.5f); return; }
+            var opts = group == CardDash ? DashOptions : JumpOptions;
+            _subGroup = group;
+            _subCount = opts.Length;
+            int pos = System.Array.IndexOf(_order, group);
+            _subPanel.rectTransform.anchoredPosition =
+                _cardRt[pos].anchoredPosition + new Vector2(0f, CardH + 12f);
+            _subPanel.rectTransform.sizeDelta = new Vector2(_subCount * 116f + 16f, CardH + 16f);
+            for (int o = 0; o < 3; o++)
+            {
+                bool on = o < _subCount;
+                _subBtn[o].gameObject.SetActive(on);
+                if (!on) continue;
+                _subMoves[o] = opts[o].move;
+                _subLabel[o].text = $"{o + 1}  {opts[o].label}";
+                _subBtn[o].rectTransform.anchoredPosition = new Vector2((o - (_subCount - 1) * 0.5f) * 116f, 0f);
+            }
+            _subPanel.gameObject.SetActive(true);
+            SfxLib.Play(SfxLib.Kind.UiTick, 0.5f);
+        }
+
+        void CloseSubPicker()
+        {
+            _subGroup = 0;
+            if (_subPanel != null) _subPanel.gameObject.SetActive(false);
+        }
+
+        void UpdateSubPicker()
+        {
+            var mp = GameInput.MousePos();
+            for (int o = 0; o < _subCount; o++)
+            {
+                bool over = RectTransformUtility.RectangleContainsScreenPoint(_subBtn[o].rectTransform, mp, null);
+                _subBtn[o].color = over ? new Color(0.28f, 0.38f, 0.52f, 1f) : new Color(0.16f, 0.2f, 0.28f, 1f);
+                if (over) _mc.PreviewHover(_subMoves[o]); // el ghost actúa la variante
+            }
+            int num = GameInput.NumberPressed();
+            if (num > 0 && num <= _subCount) { PickSub(num - 1); return; }
+            if (GameInput.AddPressed()) { PickSub(0); return; } // Enter = adelante
+            if (GameInput.UndoPressed()) { CloseSubPicker(); return; }
+            if (!GameInput.ClickPressed()) return;
+            for (int o = 0; o < _subCount; o++)
+                if (RectTransformUtility.RectangleContainsScreenPoint(_subBtn[o].rectTransform, mp, null))
+                {
+                    PickSub(o);
+                    return;
+                }
+            CloseSubPicker(); // click afuera = cancelar
+        }
+
+        void PickSub(int o)
+        {
+            int mv = _subMoves[o];
+            CloseSubPicker();
+            if (_mc.PlanFits(mv)) SfxLib.Play(SfxLib.Kind.UiClick, 0.6f);
+            _mc.PlanAdd(mv);
+            Highlight(_sel);
         }
 
         void TryUndo()

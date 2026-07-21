@@ -72,44 +72,64 @@ vulnerable por off-by-one; lo pescó el test de framedata).
   frames activos, intro "ROUND N — ¡PELEA!", stage con skyline + público de
   bloques, announcer SOLO en KO/guard crush con toggle VOZ.
 
-### ACTION POINTS en el modo clásico (2026-07-20)
+### ACTION POINTS en el modo clásico (2026-07-20, v2 el mismo día)
 
-Pedido de Patricio: que el turno diga CLARITO qué entra y qué no. El
-presupuesto del turno clásico deja de contarse en frames crudos y pasa a
-**action points**: `SimConfig.ApEnabled` (ON por defecto), `FramesPerAp`=12.
+Pedido de Patricio: que el turno diga CLARITO qué entra y qué no, y después
+(misma fecha, auditoría contra `YOMI-BIBLE.md`) que la ECONOMÍA sea el juego.
+`SimConfig.ApEnabled` (ON por defecto), `FramesPerAp`=12.
 
-- **1 AP = 12 frames → 5 AP por turno de 60f** (Lag Mode: 90f→7, 135f→11,
-  202f→16, 303f→25 AP). Costo por move = `ceil(frames/12)` (`MoveDef.ApCost`):
-  Parry 1 · Bloquear/Dash/Jab 2 · Agarre 3 · Shoryu/Saltos/Tatsu 4 ·
-  Barrida/Hadouken/Super 5.
+- **1 AP = 12 frames → el turno de 60f banca 5 AP** (Lag Mode: 90f→7,
+  135f→11, 202f→16, 303f→25). Costo por move = `ceil(frames/12)`
+  (`MoveDef.ApCost`): Bloquear/Dash/Jab 2 · Agarre 3 · Shoryu/Saltos/Tatsu 4
+  · Barrida/Hadouken/Super 5.
 - **Cada move OCUPA su slot entero** (`PaddedTotal`): un dash de 16f reserva
   24f; el sobrante se espera en neutral (bloqueando — el padding no es un
-  hueco indefenso). Así los AP nunca mienten sobre los frames: esta es la
-  diferencia con la v1 del yomi (aquella quería que una TABLA decidiera
-  resultados sobre la sim; acá el combate — hits, stun, ventaja frame a
-  frame — sigue 100% frame-exacto, los AP solo cuantizan el presupuesto y
-  la secuenciación de la cola propia).
-- **Overflow = pedir prestado**: mientras te quede ≥1 AP podés agregar el
-  move que sea; si se pasa, cruza el límite (semántica de turno fluido,
-  SIEMPRE on en modo AP — `SimConfig.FluidTurn`) y el turno siguiente
-  arranca con esos slots comprometidos = menos AP. El stun arrastrado
-  también se cobra en slots. Un golpe cancela el move Y devuelve el resto
-  del slot (el stun lo reemplaza; sin eso se cobraba doble).
-- **La super quedó habilitada siempre** en clásico (cargaba con overflow y
-  el overflow ahora es parte del juego). El toggle C de turno fluido se
-  ocultó del menú: quedó absorbido. Online sigue determinista: `ApEnabled`
-  es constante en el build, no viaja en el protocolo.
-- UI: bolitas de AP arriba de la grilla de planificación (disco = te queda,
-  aro apagado = gastado, aro rojizo = te lo comió el stun, naranja = AP
-  prestado), costo "N AP" en cada carta y en el panel de info, timeline con
-  rayitas cada 12f (se VE el turno dividido en casilleros y el hueco de
-  padding tras cada ficha). Sprites circulares procedurales nuevos de 64px
-  antialiaseados (`HudUI.CircleSprite/RingSprite`) — también los usan los
-  circulitos del modo YOMI.
-- Lab post-cambio (2000 peleas, turno fluido): winrates parejos
-  (936/972), ningún move dominante (dmg/uso: Tatsu 0.94 · Shoryu 0.88 ·
-  Barrida 0.53), 533 supers tiradas — la economía de préstamo alimenta la
-  barra como se esperaba.
+  hueco indefenso). Así los AP nunca mienten sobre los frames: el combate
+  (hits, stun, ventaja frame a frame) sigue 100% frame-exacto, los AP solo
+  cuantizan presupuesto y secuenciación de la cola propia. Un golpe cancela
+  el move Y devuelve el resto del slot (el stun lo reemplaza).
+- **Economía persistente** (`ApEconomy` en Sim.cs, pura — la comparten
+  MatchController y el harness; biblia Leyes 2/7/9): **ingreso +4 por turno,
+  lo no gastado SE GUARDA (tope 7)**, arrancás el round a full (5). Gastar
+  los 5 cada turno te deja en turnos de 4; administrar te banca turnos
+  llenos. **Bloqueo bancado**: la CARTA Bloquear que bloquea ≥1 golpe paga
+  +1 AP (el bloqueo automático en neutral defiende pero NO banca). El stock
+  es público: la economía ES la información. Nunca toca la sim → replay y
+  online deterministas sin viajar en el protocolo.
+- **OVERFLOW/PRÉSTAMO: DORMIDO** (`SimConfig.ApOverflowEnabled = false`,
+  nació y se apagó el 2026-07-20): complejizaba probar si lo BÁSICO es
+  disfrutable. El código está entero detrás del flag (y un test lo ejercita
+  para que no se pudra); con overflow apagado el turno es ESTRICTO y la
+  super vuelve a estar ligada al toggle C legacy (hoy oculto → sin super).
+- **REVERSAL** (la válvula anti-vortex, Ley 13): derribado al planificar,
+  tercera opción del botón de wakeup — **1 por round, 2 AP**: te levantás YA
+  y el empujón separa a 2.4 (`Sim.Reversal`; contra la pared retrocede el
+  propio). Viaja en `TurnCode` **v2** (byte wake = trit 0/1/2; los códigos
+  v1 se rechazan) y en el turn log → el replay lo re-aplica. La IA lo usa
+  (28%/45% según dificultad).
+- **El Parry SALIÓ del modo clásico** (sigue en el catálogo para YOMI y
+  replays): Bloquear es LA defensa y paga en economía. Ojo anotado: el
+  parry era el anti-chip (recargaba guardia) — el zoneo quedó más fuerte;
+  vigilar con el lab.
+- **Grilla 3×3** (teclas 1-9, anti-clutter): Bloquear · **DASH** · **SALTO**
+  / Jab · Barrida · Agarre / Tatsu · Hadouken · Shoryuken. Dash y Salto son
+  UNA carta que abre un **mini-picker de dirección** (Dash: adelante/atrás ·
+  Salto: adelante/neutro/atrás — Salto − volvió como dirección). Click, 1-3
+  o Enter (=adelante); afuera cancela; el ghost actúa la variante hovereada.
+- **UI de bolitas** (sprites procedurales de 64px, disco = disponible, aro =
+  vacío; también en YOMI): **el stock de AMBOS jugadores vive bajo el panel
+  de vida/guardia de cada lado**, siempre visible (tu lado descuenta en vivo
+  al planificar; el rival muestra su stock público). Debajo del lado rival,
+  el **log de aperturas** ("ABRIÓ: DASH · JAB · —"): las primeras cartas de
+  sus últimos 3 planes ya revelados (Ley 5: leer hábitos, no adivinar).
+  Costo "N AP" en cada carta y en el panel de info; timeline con rayitas
+  cada 12f y hueco de padding visible tras cada ficha.
+- Lab post-v2 (2000 peleas): P0/P1 parejos (899/767 + 334 empates), stock
+  promedio 6.0/7, ~1 bloqueo bancado/pelea. **A VIGILAR: TIME OVER saltó a
+  ~48%** (antes ~19) — sin parry y con IAs más bloqueadoras el meta IA-IA se
+  puso defensivo; si el juego humano se siente pasivo, los primeros diales
+  son el ingreso (+4→+5 no: mata la economía; mejor encarecer Bloquear a 3
+  AP o bajar el tope de ahorro) y re-agresivizar los picks de la IA.
 
 ### Turno fluido (toggle experimental, 2026-07-19)
 
