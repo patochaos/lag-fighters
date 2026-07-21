@@ -207,7 +207,9 @@ Lo que ya cumple (ambos modos):
 
 Aplicado en el modo clásico tras la auditoría de esta biblia (2026-07-20):
 - **Ley 7 + 9**: economía de AP persistente (`ApEconomy`): ingreso +4 <
-  capacidad 5, ahorro con tope 7 → posiciones ricas/pobres medibles.
+  capacidad 5, ahorro con tope = barra llena → posiciones ricas/pobres
+  medibles y las bolitas nunca mienten (tope 7 duró horas: mostraba AP que
+  el turno físico no podía gastar).
 - **Ley 2 + 9**: bloqueo bancado — la carta Bloquear que bloquea paga +1 AP
   (defender con intención alimenta la economía). El parry salió: la defensa
   es UNA y económica.

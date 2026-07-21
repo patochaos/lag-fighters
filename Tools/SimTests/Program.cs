@@ -333,14 +333,14 @@ class Tests
         try
         {
             var s = NewSim(-2.5f, 2.5f, p1Blocks: false);
-            // dash = 2 AP (slot de 24f) + hadouken 60f: arranca en f24 y cruza
+            // dash = 1 AP (slot de 12f) + hadouken 60f: arranca en f12 y cruza
             s.SetQueue(0, new List<int> { MoveCatalog.DashF, MoveCatalog.Hadouken });
             Run(s, SimConfig.TurnFrames);
             int lost = s.OnTurnEnd(0);
             bool sigue = s.Fighters[0].MoveIndex == MoveCatalog.Hadouken;
             int resto = s.CommittedRemaining(0);
-            Check(lost == 0 && sigue && resto == 24,
-                "overflow (dormido): el hadouken cruza el límite comprometido (2 AP prestados)",
+            Check(lost == 0 && sigue && resto == 12,
+                "overflow (dormido): el hadouken cruza el límite comprometido (1 AP prestado)",
                 $"lost {lost}, move {s.Fighters[0].MoveIndex}, resto {resto}");
             Check(s.Fighters[0].Super == resto, "los frames de overflow cargan la barra de super",
                 $"super {s.Fighters[0].Super}, resto {resto}");
@@ -370,9 +370,12 @@ class Tests
         eco.EndTurn(0, apPerTurn, spentAp: 5, banked: false);
         Check(eco.Stock[0] == 4, "gastar todo te deja corto (ingreso +4)", $"stock {eco.Stock[0]}");
         eco.EndTurn(0, apPerTurn, spentAp: 0, banked: false);
-        Check(eco.Stock[0] == 7, "no gastar GUARDA hasta el tope (4+4 → 7 cap)", $"stock {eco.Stock[0]}");
-        eco.EndTurn(0, apPerTurn, spentAp: 5, banked: true);
-        Check(eco.Stock[0] == 7, "el bloqueo bancado suma +1 (7−5+4+1 → cap 7)", $"stock {eco.Stock[0]}");
+        Check(eco.Stock[0] == 5, "no gastar GUARDA hasta la barra llena (4+4 → cap 5)", $"stock {eco.Stock[0]}");
+        eco.EndTurn(0, apPerTurn, spentAp: 4, banked: true);
+        Check(eco.Stock[0] == 5, "el bloqueo bancado suma +1 (5−4+4+1 → cap 5)", $"stock {eco.Stock[0]}");
+        eco.EndTurn(0, apPerTurn, spentAp: 5, banked: false);
+        eco.EndTurn(0, apPerTurn, spentAp: 4, banked: false);
+        Check(eco.Stock[0] == 4, "gastar el ingreso te mantiene; pasarte te achica", $"stock {eco.Stock[0]}");
     }
 
     // La carta Bloquear que bloquea un golpe banca; el bloqueo automático
@@ -434,11 +437,13 @@ class Tests
         Check(SimConfig.TurnFrames / SimConfig.FramesPerAp == 5, "turno de 60f = 5 AP");
         (int move, int ap)[] esperados =
         {
-            (MoveCatalog.Parry, 1), (MoveCatalog.WalkB, 2), (MoveCatalog.DashF, 2),
-            (MoveCatalog.DashB, 2), (MoveCatalog.AttackA, 2), (MoveCatalog.Grab, 3),
+            // dash a 1 AP (rebalance 2026-07-20): el move barato del modo
+            (MoveCatalog.DashF, 1), (MoveCatalog.DashB, 1),
+            (MoveCatalog.Parry, 1), (MoveCatalog.WalkB, 2), (MoveCatalog.AttackA, 2),
+            (MoveCatalog.Grab, 3),
             (MoveCatalog.Shoryuken, 4), (MoveCatalog.JumpF, 4), (MoveCatalog.JumpN, 4),
-            (MoveCatalog.Tatsu, 4), (MoveCatalog.AttackB, 5), (MoveCatalog.Hadouken, 5),
-            (MoveCatalog.Super, 5),
+            (MoveCatalog.JumpB, 4), (MoveCatalog.Tatsu, 4),
+            (MoveCatalog.AttackB, 5), (MoveCatalog.Hadouken, 5), (MoveCatalog.Super, 5),
         };
         foreach (var (move, ap) in esperados)
         {
@@ -447,17 +452,17 @@ class Tests
         }
     }
 
-    // El move ocupa su slot ENTERO: tras un dash (16f, slot de 24f) la
+    // El move ocupa su slot ENTERO: tras un agarre (30f, slots hasta 36f) la
     // próxima orden espera el fin del slot en neutral (bloqueando).
     static void ElSlotDeApEspaciaLaCola()
     {
         var s = NewSim(-3f, 3f, p1Blocks: false);
-        s.SetQueue(0, new List<int> { MoveCatalog.DashF, MoveCatalog.AttackA });
-        Run(s, 20); // dash terminó en f16; su slot va hasta f24
+        s.SetQueue(0, new List<int> { MoveCatalog.Grab, MoveCatalog.AttackA });
+        Run(s, 33); // el agarre whiffeó y terminó en f30; su slot va hasta f36
         Check(s.Fighters[0].MoveIndex == -1, "en el resto del slot se espera en neutral",
             $"move {s.Fighters[0].MoveIndex}");
         Check(s.IsBlockingState(0), "y en neutral se bloquea (el padding no es un hueco indefenso)");
-        Run(s, 5); // f25: el jab ya tuvo que arrancar en f24
+        Run(s, 5); // f38: el jab ya tuvo que arrancar en f36
         Check(s.Fighters[0].MoveIndex == MoveCatalog.AttackA, "la orden siguiente arranca al abrirse el slot",
             $"move {s.Fighters[0].MoveIndex}");
     }

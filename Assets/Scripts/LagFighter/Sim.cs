@@ -190,13 +190,16 @@ namespace LagFighter
                 Desc = "La defensa base: bloquea retrocediendo despacio. Come guardia, no vida. El agarre la rompe.",
                 MoveDx = -0.38f, MotionStart = 0, MotionEnd = 20 },
 
-            new MoveDef { Id = "dashF", Name = "Dash +", Anim = AnimKind.Dash, Startup = 2, Active = 10, Recovery = 4,
+            // Dash a 12f = 1 AP (2026-07-20, rebalance): EL move barato del
+            // modo AP — un slot justo, movimiento puro. Antes 16f/2 AP y el
+            // costo mínimo del juego era 2: el turno se sentía de a ladrillos.
+            new MoveDef { Id = "dashF", Name = "Dash +", Anim = AnimKind.Dash, Startup = 2, Active = 8, Recovery = 2,
                 Desc = "Arremetida hacia adelante. NO bloquea: es puro compromiso.",
-                MoveDx = 1.0f, MotionStart = 2, MotionEnd = 12 },
+                MoveDx = 1.0f, MotionStart = 2, MotionEnd = 10 },
 
-            new MoveDef { Id = "dashB", Name = "Dash −", Anim = AnimKind.Dash, Startup = 2, Active = 10, Recovery = 4,
+            new MoveDef { Id = "dashB", Name = "Dash −", Anim = AnimKind.Dash, Startup = 2, Active = 8, Recovery = 2,
                 Desc = "Salto atrás rápido. Tampoco bloquea, pero te saca del rango.",
-                MoveDx = -1.0f, MotionStart = 2, MotionEnd = 12 },
+                MoveDx = -1.0f, MotionStart = 2, MotionEnd = 10 },
 
             new MoveDef { Id = "jumpF", Name = "Salto + (patada)", Anim = AnimKind.Jump, Startup = 6, Active = 28, Recovery = 10,
                 Desc = "Jump-in con patada en la bajada (hit 20..28) + 10f de recovery al caer. Pasa hadoukens; en el aire no bloqueás. Guardia −15.",
@@ -988,7 +991,11 @@ namespace LagFighter
         public readonly bool[] ReversalUsed = new bool[2];
         public const int ReversalCost = 2;
 
-        public static int Cap(int apPerTurn) => apPerTurn + 2;    // 60f: guarda hasta 7
+        // Tope de ahorro = LA BARRA LLENA (rebalance 2026-07-20): antes era
+        // capacidad+2 y las bolitas mentían — mostrabas 7 pero el turno
+        // físico banca 5. Con tope = capacidad, las bolitas SIEMPRE son lo
+        // que podés gastar (salvo stun, que se ve en la timeline).
+        public static int Cap(int apPerTurn) => apPerTurn;
         public static int Income(int apPerTurn) => apPerTurn - 1; // 60f: +4 por turno
 
         public void ResetRound(int apPerTurn)

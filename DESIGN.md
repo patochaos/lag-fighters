@@ -80,8 +80,10 @@ Pedido de Patricio: que el turno diga CLARITO qué entra y qué no, y después
 
 - **1 AP = 12 frames → el turno de 60f banca 5 AP** (Lag Mode: 90f→7,
   135f→11, 202f→16, 303f→25). Costo por move = `ceil(frames/12)`
-  (`MoveDef.ApCost`): Bloquear/Dash/Jab 2 · Agarre 3 · Shoryu/Saltos/Tatsu 4
-  · Barrida/Hadouken/Super 5.
+  (`MoveDef.ApCost`): **Dash 1** (rebalance 2026-07-20: pasó de 16f a 12f
+  para que exista el move de 1 AP — el turno se sentía de a ladrillos) ·
+  Bloquear/Jab 2 · Agarre 3 · Shoryu/Saltos/Tatsu 4 · Barrida/Hadouken/
+  Super 5.
 - **Cada move OCUPA su slot entero** (`PaddedTotal`): un dash de 16f reserva
   24f; el sobrante se espera en neutral (bloqueando — el padding no es un
   hueco indefenso). Así los AP nunca mienten sobre los frames: el combate
@@ -90,12 +92,18 @@ Pedido de Patricio: que el turno diga CLARITO qué entra y qué no, y después
   el move Y devuelve el resto del slot (el stun lo reemplaza).
 - **Economía persistente** (`ApEconomy` en Sim.cs, pura — la comparten
   MatchController y el harness; biblia Leyes 2/7/9): **ingreso +4 por turno,
-  lo no gastado SE GUARDA (tope 7)**, arrancás el round a full (5). Gastar
-  los 5 cada turno te deja en turnos de 4; administrar te banca turnos
-  llenos. **Bloqueo bancado**: la CARTA Bloquear que bloquea ≥1 golpe paga
-  +1 AP (el bloqueo automático en neutral defiende pero NO banca). El stock
-  es público: la economía ES la información. Nunca toca la sim → replay y
-  online deterministas sin viajar en el protocolo.
+  lo no gastado SE GUARDA hasta la BARRA LLENA (tope = capacidad, 5)**,
+  arrancás el round a full. El tope era capacidad+2 y se bajó el mismo día:
+  con stock > capacidad las bolitas mentían ("tengo 7" pero el turno banca
+  5). Gastar los 5 cada turno te deja en turnos de 4; administrar te banca
+  turnos llenos. **Bloqueo bancado**: la CARTA Bloquear que bloquea ≥1
+  golpe paga +1 AP (el bloqueo automático en neutral defiende pero NO
+  banca). El stock es público: la economía ES la información. Nunca toca la
+  sim → replay y online deterministas sin viajar en el protocolo.
+- **Bug fix del pref fantasma (2026-07-20)**: el toggle C oculto seguía
+  CARGANDO su PlayerPref — con el pref viejo prendido, FluidTurn quedaba ON
+  y los moves cruzaban el turno "gratis" (tatsus fantasma sin costo, slots
+  comprometidos comiendo AP). En modo AP el pref se ignora.
 - **OVERFLOW/PRÉSTAMO: DORMIDO** (`SimConfig.ApOverflowEnabled = false`,
   nació y se apagó el 2026-07-20): complejizaba probar si lo BÁSICO es
   disfrutable. El código está entero detrás del flag (y un test lo ejercita
@@ -124,12 +132,13 @@ Pedido de Patricio: que el turno diga CLARITO qué entra y qué no, y después
   sus últimos 3 planes ya revelados (Ley 5: leer hábitos, no adivinar).
   Costo "N AP" en cada carta y en el panel de info; timeline con rayitas
   cada 12f y hueco de padding visible tras cada ficha.
-- Lab post-v2 (2000 peleas): P0/P1 parejos (899/767 + 334 empates), stock
-  promedio 6.0/7, ~1 bloqueo bancado/pelea. **A VIGILAR: TIME OVER saltó a
-  ~48%** (antes ~19) — sin parry y con IAs más bloqueadoras el meta IA-IA se
-  puso defensivo; si el juego humano se siente pasivo, los primeros diales
-  son el ingreso (+4→+5 no: mata la economía; mejor encarecer Bloquear a 3
-  AP o bajar el tope de ahorro) y re-agresivizar los picks de la IA.
+- Lab post-rebalance (2000 peleas): P0/P1 clavados (832/831), stock
+  promedio 4.6/5, 1.16 bloqueos bancados/pelea, dashes bien arriba (1 AP).
+  **A VIGILAR: TIME OVER ~45%** (antes del cambio de economía era ~19) —
+  sin parry y con IAs más bloqueadoras el meta IA-IA quedó defensivo; si el
+  juego humano se siente pasivo, los diales son encarecer Bloquear (2→3 AP)
+  y re-agresivizar los picks de la IA (los reemplazos de parry fueron a
+  WalkB).
 
 ### Turno fluido (toggle experimental, 2026-07-19)
 

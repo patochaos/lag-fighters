@@ -75,6 +75,7 @@ namespace LagFighter
         readonly int[] _subMoves = new int[3];
         int _subGroup; // CardDash/CardJump, 0 = cerrado
         int _subCount;
+        RectTransform _gridPanelRt;
         Image _segBg, _segS, _segA, _segR;
         float _segW;
         int _sel;
@@ -360,22 +361,7 @@ namespace LagFighter
                 new Vector2(900f, 22f), 14, new Color(0.5f, 1f, 0.6f), TextAnchor.MiddleRight);
             _status.rectTransform.pivot = new Vector2(1f, 0.5f);
 
-            // mini-picker de dirección (DASH/SALTO): panel chico que se abre
-            // ENCIMA de la carta de grupo. Creado al final: dibuja sobre todo.
-            if (!_builtYomi)
-            {
-                _subPanel = MakeImage(panel.rectTransform, "SubPicker", new Vector2(0.5f, 0.5f), Vector2.zero,
-                    new Vector2(3 * 116f + 16f, CardH + 16f), new Color(0.05f, 0.07f, 0.1f, 0.98f));
-                for (int o = 0; o < 3; o++)
-                {
-                    _subBtn[o] = MakeImage(_subPanel.rectTransform, "Opt" + o, new Vector2(0.5f, 0.5f),
-                        new Vector2((o - 1) * 116f, 0f), new Vector2(110f, CardH - 4f), new Color(0.16f, 0.2f, 0.28f, 1f));
-                    _subLabel[o] = MakeText(_subBtn[o].rectTransform, "T", "", new Vector2(0.5f, 0.5f), Vector2.zero,
-                        new Vector2(108f, 26f), 8, Color.white, TextAnchor.MiddleCenter);
-                    _subLabel[o].font = UIFonts.Pixel;
-                }
-                _subPanel.gameObject.SetActive(false);
-            }
+            _gridPanelRt = panel.rectTransform; // el picker de dirección se posiciona relativo a la grilla
             MakeText(rootRt, "Help", _builtYomi
                     ? "UNA acción por turno: click (o 1-8) la juega YA · de cerca: JAB › AGARRE › PARRY › JAB · el SHORYU gana pero whiffear = recovery\nlos AP no gastados se acumulan (tope 6) · CARGAR junta +2 pero todo golpe es counter"
                     : "click o 1-9 agrega  ·  Backspace borra  ·  ESPACIO cierra el turno  ·  DASH y SALTO preguntan la dirección\ncada carta cuesta AP y lo que no gastás SE GUARDA  ·  BLOQUEAR que bloquea un golpe banca +1 AP  ·  arrastrá tu timeline para mover el ghost",
@@ -386,6 +372,24 @@ namespace LagFighter
             {
                 _doneBtn.gameObject.SetActive(false);
                 _undoBtn.gameObject.SetActive(false);
+            }
+
+            // mini-picker de dirección (DASH/SALTO): creado ÚLTIMO y colgado
+            // del root — dibuja ENCIMA de todo (antes quedaba abajo del texto
+            // de estado y parecía roto). Opaco: es un momento modal.
+            if (!_builtYomi)
+            {
+                _subPanel = MakeImage(rootRt, "SubPicker", new Vector2(0.5f, 0f), Vector2.zero,
+                    new Vector2(3 * 154f + 14f, CardH + 18f), new Color(0.05f, 0.07f, 0.1f, 1f));
+                for (int o = 0; o < 3; o++)
+                {
+                    _subBtn[o] = MakeImage(_subPanel.rectTransform, "Opt" + o, new Vector2(0.5f, 0.5f),
+                        Vector2.zero, new Vector2(148f, CardH - 2f), new Color(0.16f, 0.2f, 0.28f, 1f));
+                    _subLabel[o] = MakeText(_subBtn[o].rectTransform, "T", "", new Vector2(0.5f, 0.5f), Vector2.zero,
+                        new Vector2(146f, 26f), 8, Color.white, TextAnchor.MiddleCenter);
+                    _subLabel[o].font = UIFonts.Pixel;
+                }
+                _subPanel.gameObject.SetActive(false);
             }
         }
 
@@ -738,7 +742,9 @@ namespace LagFighter
         void TryAdd(int mi)
         {
             if (mi == CardDash || mi == CardJump) { OpenSubPicker(mi); return; }
+            // que apretar una carta que no entra NUNCA se sienta muerto
             if (_mc.PlanFits(mi)) SfxLib.Play(SfxLib.Kind.UiClick, 0.6f);
+            else SfxLib.Play(SfxLib.Kind.UiCancel, 0.4f);
             _mc.PlanAdd(mi);
         }
 
@@ -748,10 +754,12 @@ namespace LagFighter
             var opts = group == CardDash ? DashOptions : JumpOptions;
             _subGroup = group;
             _subCount = opts.Length;
+            // encima de la carta del grupo: grilla y picker cuelgan del mismo
+            // root (anclas bottom-center), así que las posiciones se suman
             int pos = System.Array.IndexOf(_order, group);
             _subPanel.rectTransform.anchoredPosition =
-                _cardRt[pos].anchoredPosition + new Vector2(0f, CardH + 12f);
-            _subPanel.rectTransform.sizeDelta = new Vector2(_subCount * 116f + 16f, CardH + 16f);
+                _gridPanelRt.anchoredPosition + _cardRt[pos].anchoredPosition + new Vector2(0f, CardH + 14f);
+            _subPanel.rectTransform.sizeDelta = new Vector2(_subCount * 154f + 14f, CardH + 18f);
             for (int o = 0; o < 3; o++)
             {
                 bool on = o < _subCount;
@@ -759,9 +767,10 @@ namespace LagFighter
                 if (!on) continue;
                 _subMoves[o] = opts[o].move;
                 _subLabel[o].text = $"{o + 1}  {opts[o].label}";
-                _subBtn[o].rectTransform.anchoredPosition = new Vector2((o - (_subCount - 1) * 0.5f) * 116f, 0f);
+                _subBtn[o].rectTransform.anchoredPosition = new Vector2((o - (_subCount - 1) * 0.5f) * 154f, 0f);
             }
             _subPanel.gameObject.SetActive(true);
+            _mc.PreviewHover(_subMoves[0]); // el ghost arranca actuando ADELANTE
             SfxLib.Play(SfxLib.Kind.UiTick, 0.5f);
         }
 
@@ -774,12 +783,16 @@ namespace LagFighter
         void UpdateSubPicker()
         {
             var mp = GameInput.MousePos();
+            int hovered = -1;
             for (int o = 0; o < _subCount; o++)
             {
                 bool over = RectTransformUtility.RectangleContainsScreenPoint(_subBtn[o].rectTransform, mp, null);
                 _subBtn[o].color = over ? new Color(0.28f, 0.38f, 0.52f, 1f) : new Color(0.16f, 0.2f, 0.28f, 1f);
-                if (over) _mc.PreviewHover(_subMoves[o]); // el ghost actúa la variante
+                if (over) hovered = o;
             }
+            // el ghost SIEMPRE actúa una variante concreta (sin hover: la 1ra
+            // — antes quedaba clavado en lo último hovereado y "andaba mal")
+            _mc.PreviewHover(_subMoves[hovered >= 0 ? hovered : 0]);
             int num = GameInput.NumberPressed();
             if (num > 0 && num <= _subCount) { PickSub(num - 1); return; }
             if (GameInput.AddPressed()) { PickSub(0); return; } // Enter = adelante
@@ -798,7 +811,7 @@ namespace LagFighter
         {
             int mv = _subMoves[o];
             CloseSubPicker();
-            if (_mc.PlanFits(mv)) SfxLib.Play(SfxLib.Kind.UiClick, 0.6f);
+            SfxLib.Play(_mc.PlanFits(mv) ? SfxLib.Kind.UiClick : SfxLib.Kind.UiCancel, 0.6f);
             _mc.PlanAdd(mv);
             Highlight(_sel);
         }

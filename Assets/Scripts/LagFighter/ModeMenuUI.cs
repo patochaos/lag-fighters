@@ -214,7 +214,11 @@ namespace LagFighter
             _lagChoice = false; // NORMAL siempre: LAG MODE quedó fuera del menú
             _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_mode", 1), 0, Modes.Length - 1); // arranca donde quedaste
             SimConfig.YomiEnabled = false; // el modo YOMI lo prende StartMatch; acá se apaga al volver
-            SimConfig.CarryoverEnabled = PlayerPrefs.GetInt("lf_carryover", 0) == 1;
+            // BUG FIX (2026-07-20): en modo AP el pref viejo del toggle C se
+            // ignoraba en la UI pero se seguía CARGANDO — con el toggle
+            // prendido de antes, los moves cruzaban el turno "gratis" (el
+            // tatsu fantasma sin costo) y los slots comprometidos comían AP.
+            SimConfig.CarryoverEnabled = !SimConfig.ApEnabled && PlayerPrefs.GetInt("lf_carryover", 0) == 1;
             RefreshCarryLine();
             Layout();
         }
