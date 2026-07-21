@@ -269,11 +269,12 @@ namespace LagFighter
             {
                 Yomi = new YomiSim();
                 _yomiShowLiveAp = true;
+                float slot = Yomi.Close ? YomiCloseSlot : YomiFarSlot;
                 for (int i = 0; i < 2; i++)
                 {
                     var f = Sim.Fighters[i];
                     f.BlockEnabled = false; // la tabla decide, no el auto-bloqueo
-                    f.X = i == 0 ? -YomiFarSlot : YomiFarSlot; // arranca LEJOS
+                    f.X = i == 0 ? -slot : slot;
                     f.PrevX = f.X;
                 }
                 UpdateYomiFloor();
@@ -698,6 +699,50 @@ namespace LagFighter
         // coreografía para que la sim reproduzca el resultado de la tabla
         // (los golpes del ganador conectan, los del perdedor se interrumpen,
         // los whiffs whiffean). El HP final lo dicta YomiSim, no la sim.
+        // El FALLO del turno en una frase: qué regla de la matriz aplicó.
+        // Se muestra en la revelación, ANTES de actuar — reglas primero,
+        // ejecución después (pedido 2026-07-20: que el juego cante la regla).
+        static string YomiRuling(YomiTurnResult r)
+        {
+            string N(YomiAction x) => YomiConfig.Name(x).ToUpperInvariant();
+            var a = r.A0;
+            var b = r.A1;
+            if (r.Tech) return "AGARRE vs AGARRE: ¡TECH! nadie come";
+            if (r.Parry0 || r.Parry1)
+            {
+                int p = r.Parry0 ? 0 : 1;
+                return $"{(p == 0 ? "TU" : "SU")} PARRY bloquea el {N(r.Act(1 - p))} y devuelve 1";
+            }
+            if (r.Dmg0 > 0 && r.Dmg1 > 0) return $"{N(a)} y {N(b)} a la vez: ¡TRADE!";
+            if (r.Dmg0 == 0 && r.Dmg1 == 0)
+            {
+                if (r.Rec0Next && r.Rec1Next) return "doble SHORYU al aire: los dos en RECOVERY";
+                if (r.Rec0Next || r.Rec1Next) return $"¡SHORYU al aire! {(r.Rec0Next ? "quedás" : "queda")} en RECOVERY";
+                if (a == YomiAction.Charge && b == YomiAction.Charge) return "los dos CARGAN: +2 AP cada uno";
+                if (r.CloseBefore != r.CloseAfter) return r.CloseAfter ? "nadie conecta → CERCA" : "nadie conecta → LEJOS";
+                return "nadie conecta";
+            }
+            int w = r.Dmg0 > 0 ? 1 : 0; // el que pegó
+            var wa = r.Act(w);
+            var la = r.Act(1 - w);
+            string who = w == 0 ? "GANÁS VOS" : "GANA EL RIVAL";
+            string reason;
+            if (la == YomiAction.Charge) reason = $"{N(wa)} lo caza CARGANDO: counter";
+            else if (la == YomiAction.Recovery) reason = $"{N(wa)} castiga el RECOVERY: counter";
+            else if (wa == YomiAction.Shoryu) reason = r.CloseBefore ? "SHORYU le gana a TODO de cerca" : "¡lectura antiaérea! SHORYU baja al salto";
+            else if (wa == YomiAction.Jab && la == YomiAction.Kick) reason = "JAB es más rápido que KICK";
+            else if (wa == YomiAction.Jab && la == YomiAction.Grab) reason = "el golpe interrumpe al AGARRE";
+            else if (wa == YomiAction.Jab && la == YomiAction.Jump) reason = "JAB lo baja en el despegue";
+            else if (wa == YomiAction.Kick && la == YomiAction.Grab) reason = "el golpe interrumpe al AGARRE";
+            else if (wa == YomiAction.Kick && la == YomiAction.Dash) reason = r.CloseBefore ? "KICK caza la retirada" : "KICK frena la entrada";
+            else if (wa == YomiAction.Kick && la == YomiAction.Shoryu) reason = "KICK castiga el SHORYU al aire";
+            else if (wa == YomiAction.Jump && la == YomiAction.Kick) reason = "SALTO pasa por ARRIBA del kick";
+            else if (wa == YomiAction.Jump && la == YomiAction.Dash) reason = "la patada de entrada caza al DASH";
+            else if (wa == YomiAction.Grab && la == YomiAction.Parry) reason = "AGARRE rompe el PARRY y tira";
+            else reason = $"{N(wa)} le gana a {N(la)}";
+            return $"{who}: {reason}";
+        }
+
         void BeginYomiTheater()
         {
             var r = _yomiResult;
@@ -729,7 +774,7 @@ namespace LagFighter
             // fase de REVELACIÓN: las dos cartas gigantes, 2.4s de "esto eligió
             // cada uno" antes de que pase nada (espacio o click la apuran)
             _yomiRevealTimer = YomiRevealSeconds;
-            _hud.ShowYomiReveal(r.A0, r.A1, r.CloseBefore);
+            _hud.ShowYomiReveal(r.A0, r.A1, r.CloseBefore, YomiRuling(r));
             _hud.SetPrompt($"TURNO {TurnNumber} — {YomiConfig.Name(r.A0).ToUpperInvariant()} vs {YomiConfig.Name(r.A1).ToUpperInvariant()}");
             SfxLib.Play(SfxLib.Kind.TurnStart, 0.6f);
         }

@@ -114,7 +114,7 @@ namespace LagFighter
         public readonly int[] Hp = { YomiConfig.MaxHp, YomiConfig.MaxHp };
         public readonly int[] Ap = { YomiConfig.StartAp, YomiConfig.StartAp };
         public readonly bool[] Recovery = new bool[2];
-        public bool Close;          // arranca LEJOS, como un round de verdad
+        public bool Close = true;   // arranca CERCA (pedido 2026-07-20): acción desde el turno 1
         public int Turn;            // turnos ya resueltos
         public bool Over;
         public int Winner = -1;     // -1 = empate / sigue

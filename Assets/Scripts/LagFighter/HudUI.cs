@@ -39,6 +39,7 @@ namespace LagFighter
         readonly Text[] _yomiCardName = new Text[2];
         readonly Text[] _yomiCardInfo = new Text[2];
         Text _yomiVs;
+        Text _yomiExplain; // el fallo del turno: qué regla de la matriz aplicó
         float _yomiPop;   // entrada de las cartas (0..1, con overshoot)
         float _yomiDock;  // 0 = grandes al centro · 1 = chicas al costado
         bool _yomiDocked;
@@ -217,6 +218,9 @@ namespace LagFighter
             _yomiVs = MakeTextP(_canvasRt, "YomiVs", "VS", new Vector2(0.5f, 0.5f), new Vector2(0f, 120f),
                 new Vector2(160f, 60f), 32, new Color(1f, 0.85f, 0.3f), TextAnchor.MiddleCenter);
             _yomiVs.gameObject.SetActive(false);
+            _yomiExplain = MakeTextP(_canvasRt, "YomiExplain", "", new Vector2(0.5f, 0.5f), new Vector2(0f, 8f),
+                new Vector2(1500f, 40f), 16, new Color(1f, 0.9f, 0.5f), TextAnchor.MiddleCenter);
+            _yomiExplain.gameObject.SetActive(false);
 
             // REPLAY + SKIP, arriba al medio (solo visible durante la repetición)
             _replayPanel = MakePanel(_canvasRt, "ReplayPanel", new Vector2(0.5f, 1f), new Vector2(0f, -120f), new Vector2(430f, 44f), Palette.Damage);
@@ -1319,7 +1323,7 @@ namespace LagFighter
             return s;
         }
 
-        public void ShowYomiReveal(YomiAction a0, YomiAction a1, bool close)
+        public void ShowYomiReveal(YomiAction a0, YomiAction a1, bool close, string ruling)
         {
             var acts = new[] { a0, a1 };
             for (int i = 0; i < 2; i++)
@@ -1332,6 +1336,10 @@ namespace LagFighter
                 _yomiCardInfo[i].text = YomiCardInfo(acts[i], close);
             }
             _yomiVs.gameObject.SetActive(true);
+            // el FALLO: la regla de la matriz que decidió este turno, cantada
+            // antes de que la acción se actúe
+            _yomiExplain.text = ruling;
+            _yomiExplain.gameObject.SetActive(true);
             _yomiPop = 0f;
             _yomiDock = 0f;
             _yomiDocked = false;
@@ -1349,6 +1357,7 @@ namespace LagFighter
             _yomiCard[0].gameObject.SetActive(false);
             _yomiCard[1].gameObject.SetActive(false);
             _yomiVs.gameObject.SetActive(false);
+            if (_yomiExplain != null) _yomiExplain.gameObject.SetActive(false);
         }
 
         void AnimateYomiCards()
@@ -1377,6 +1386,10 @@ namespace LagFighter
             var vc = _yomiVs.color;
             vc.a = Mathf.Clamp01(_yomiPop * 1.4f - 0.4f);
             _yomiVs.color = vc;
+            // el fallo aparece un pelo después de las cartas y queda durante la acción
+            var ec = _yomiExplain.color;
+            ec.a = Mathf.Clamp01(_yomiPop * 2f - 1f);
+            _yomiExplain.color = ec;
         }
 
         public Image MakeImage(RectTransform parent, string name, Vector2 anchor, Vector2 pos, Vector2 size, Color color)
