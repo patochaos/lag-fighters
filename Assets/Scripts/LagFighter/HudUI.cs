@@ -1604,19 +1604,38 @@ namespace LagFighter
         // YOMI; después se van chicas al costado y quedan de referencia.
         float _openerTimer = -1f;
 
-        public void ShowOpeners(int mi0, int mi1)
+        public void ShowOpeners(List<int> plan0, List<int> plan1)
         {
             for (int i = 0; i < 2; i++)
             {
-                int mi = i == 0 ? mi0 : mi1;
+                var plan = i == 0 ? plan0 : plan1;
+                int mi = plan != null && plan.Count > 0 ? plan[0] : -1;
                 var c = mi >= 0 ? ChipColor(mi) : Palette.Neutral;
                 _yomiCard[i].gameObject.SetActive(true);
                 _yomiCardEdge[i].color = new Color(c.r, c.g, c.b, 0.95f);
                 _yomiCardName[i].text = mi >= 0 ? MoveCatalog.All[mi].Name.ToUpperInvariant() : "PASA";
                 _yomiCardName[i].color = new Color(c.r * 0.45f + 0.55f, c.g * 0.45f + 0.55f, c.b * 0.45f + 0.55f);
-                _yomiCardInfo[i].text = mi >= 0
-                    ? (SimConfig.ApActive ? $"{MoveCatalog.All[mi].ApCost} AP  ·  {MoveCatalog.All[mi].Total}F" : $"{MoveCatalog.All[mi].Total}F")
-                    : "QUIETO, BLOQUEA";
+                // una sola orden: costo y frames · varias: el PLAN entero
+                // encadenado ("DASH + » JAB » JAB") — la carta grande solo
+                // mostraba la primera y el resto quedaba mudo
+                if (mi < 0) _yomiCardInfo[i].text = "QUIETO, BLOQUEA";
+                else if (plan.Count == 1)
+                    _yomiCardInfo[i].text = SimConfig.ApActive
+                        ? $"{MoveCatalog.All[mi].ApCost} AP  ·  {MoveCatalog.All[mi].Total}F"
+                        : $"{MoveCatalog.All[mi].Total}F";
+                else
+                {
+                    var sb = new System.Text.StringBuilder();
+                    for (int k = 0; k < plan.Count; k++)
+                    {
+                        if (k > 0) sb.Append(" » ");
+                        string nm = MoveCatalog.All[plan[k]].Name;
+                        int par = nm.IndexOf('('); // "Salto + (patada)" → "Salto +"
+                        if (par > 0) nm = nm.Substring(0, par).Trim();
+                        sb.Append(nm.ToUpperInvariant());
+                    }
+                    _yomiCardInfo[i].text = sb.ToString();
+                }
             }
             _yomiVs.gameObject.SetActive(true);
             _yomiExplain.gameObject.SetActive(false);

@@ -135,7 +135,8 @@ namespace LagFighter
         // Lag teatral DORMIDO (2026-07-20, pedido): el replay arranca NORMAL
         // y solo se ofrece RÁPIDO. Todo el código de ReplayLagFX y el modo
         // Lag quedan intactos para cuando vuelva la temática.
-        public ReplayViewMode ReplayMode { get; private set; } = ReplayViewMode.Normal;
+        // RÁPIDO por defecto: la acción ya se vio en vivo, el replay es repaso
+        public ReplayViewMode ReplayMode { get; private set; } = ReplayViewMode.Fast;
 
         public void SetReplayMode(ReplayViewMode m)
         {
@@ -1001,7 +1002,7 @@ namespace LagFighter
                 Sim.Over = true;
                 Sim.Winner = Yomi.Winner;
                 _koTimer = 1.4f;
-                Time.timeScale = 0.35f;
+                Time.timeScale = 0.25f; // el golpe del KO, bien en cámara lenta
                 _hud.ShowBigMessage("K.O.", new Color(1f, 0.3f, 0.25f));
                 Announcer.Play();
                 return; // _koTimer → BeginRoundReplay → (log frame vacío) → OnRoundEnd
@@ -1046,10 +1047,9 @@ namespace LagFighter
             _turnHitCount[0] = _turnHitCount[1] = 0;
             _hud.SetTurnSummary("");
             _hud.SetPrompt($"TURNO {TurnNumber} — ¡EJECUTANDO!");
-            // mini-reveal: la primera carta de cada lado, con la presentación
-            // de las cartas YOMI — responde "¿con qué abrió?" antes del caos
-            _hud.ShowOpeners(_plans[0].Count > 0 ? _plans[0][0] : -1,
-                             _plans[1].Count > 0 ? _plans[1][0] : -1);
+            // mini-reveal: el plan de cada lado (la primera carta grande y la
+            // secuencia completa abajo) — responde "¿qué juega?" antes del caos
+            _hud.ShowOpeners(_plans[0], _plans[1]);
             SfxLib.Play(SfxLib.Kind.TurnStart, 0.6f);
         }
 
@@ -1252,9 +1252,9 @@ namespace LagFighter
                     }
                     else
                     {
-                        // KO en cámara lenta: el caído cae despacio, después el banner
+                        // KO en cámara lenta (25%): el golpe final se saborea
                         _koTimer = 1.5f;
-                        Time.timeScale = 0.3f;
+                        Time.timeScale = 0.25f;
                         _hud.ShowBigMessage("K.O.", new Color(1f, 0.3f, 0.25f));
                         Announcer.Play();
                         return;
