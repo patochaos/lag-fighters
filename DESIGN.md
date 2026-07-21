@@ -434,6 +434,24 @@ tabla — la matriz de counters ES la ley**.
   también pega de lejos", "mi parry devuelve 2"); roguelike = draftear
   modificadores de celdas entre peleas. El core discreto los hace triviales.
 
+## Modo CARTAS — copia de Yomi 2 (2026-07-21)
+
+> Ver **[YOMI2-CARDS.md](YOMI2-CARDS.md)**: la investigación completa del
+> Yomi 2 real (rulebook v7.7 + mazo de Grave) y el plan de la copia.
+
+Pedido de Patricio: el combate re-imaginado como cartas, copia casi exacta
+de Yomi 2 **sin combos ni supers** (por ahora), un solo personaje (Grave,
+mazo de 24 con sus números reales, **HP 45** = 90 original a mitad de daño).
+Turnos alternados, opener boca abajo vs boca arriba, attack/throw/block/
+dodge con alturas high/low/mid, speed con empates al jugador activo,
+proyectiles por nivel, dodge con hit-back, throws que derriban, knockdown
+que apura los speeds a 10 y apaga dodges, exchange (Grave: ×2, su innate),
+mano máx 12, remezcla única y time over. Una partida ES el match.
+`CardSim.cs` es la sim pura (calca estructural de `YomiSim.cs`); el teatro
+y la UI solo leen. Entrada **CARTAS** en el menú (vs IA). Tests por regla
+en `Tools/SimTests` (15), lab `cards N` en `Tools/SimHarness` (4000
+partidas: KO 99.9%, 14.4 turnos, P0/P1 parejo, ninguna carta domina).
+
 ## Historial de pivots
 
 1. **Delay queue continuo** (4s de delay, timeline deslizante) — descartado.

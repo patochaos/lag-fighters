@@ -25,6 +25,11 @@ class Program
             RunYomiLab(args.Length > 1 ? int.Parse(args[1]) : 5000);
             return;
         }
+        if (args.Length > 0 && args[0] == "cards")
+        {
+            RunCardsLab(args.Length > 1 ? int.Parse(args[1]) : 5000);
+            return;
+        }
         int matches = args.Length > 0 ? int.Parse(args[0]) : 3000;
         RunLab(matches, carryover: false);
         Console.WriteLine();
@@ -33,6 +38,74 @@ class Program
         Console.WriteLine();
         Console.WriteLine("=== MODO YOMI (discreto: 2 distancias, 1 acción/turno) ===");
         RunYomiLab(matches);
+        Console.WriteLine();
+        Console.WriteLine("=== MODO CARTAS (copia de Yomi 2) ===");
+        RunCardsLab(matches);
+    }
+
+    // Lab del modo CARTAS: partidas completas sobre CardSim con la IA de
+    // openers. Acá se ve si alguna carta domina, cuánto dura una partida,
+    // cuántas terminan por KO vs time over y cómo trabaja la economía de mano.
+    static void RunCardsLab(int matches)
+    {
+        int n = CardCatalog.All.Length;
+        var uses = new long[n];
+        var dmgBy = new long[n];     // daño que causó cada carta (opener + hit-back)
+        long wins0 = 0, wins1 = 0, draws = 0, kos = 0, timeovers = 0, winsFirst = 0, winsSecond = 0;
+        long turnsTotal = 0, wilds = 0, hitbacks = 0, blocksOk = 0, blocksMal = 0;
+        long dodgesOk = 0, projCancels = 0, handSum = 0, handSamples = 0;
+
+        for (int m = 0; m < matches; m++)
+        {
+            // seeds decorrelacionadas: System.Random con seeds consecutivas
+            // arranca con streams parecidos y sesga el head-to-head
+            var ai0 = new SimpleAI(m * 7919 + 13);
+            var ai1 = new SimpleAI(m * 104729 + 57);
+            var s = new CardSim(seed: m + 1, firstPlayer: m % 2);
+            int guard = 0;
+            while (!s.Over && guard++ < 400)
+            {
+                s.StartTurn();
+                if (s.Over) break;
+                (s.Active == 0 ? ai0 : ai1).DoCardExchanges(s);
+                int h0 = ai0.PickCardOpener(s, 0);
+                int h1 = ai1.PickCardOpener(s, 1);
+                var r = s.Resolve(h0, h1);
+                if (s.AwaitingHitBack)
+                {
+                    int side = s.HitBackSide;
+                    r = s.HitBack((side == 0 ? ai0 : ai1).PickCardHitBack(s, side));
+                }
+                ai0.ObserveCard(r.Card1);
+                ai1.ObserveCard(r.Card0);
+
+                uses[r.Card0]++; uses[r.Card1]++;
+                dmgBy[r.Card0] += r.Dmg1 - (r.HitBackSide == 1 && r.HitBackCard >= 0 ? CardCatalog.All[r.HitBackCard].Damage : 0);
+                dmgBy[r.Card1] += r.Dmg0 - (r.HitBackSide == 0 && r.HitBackCard >= 0 ? CardCatalog.All[r.HitBackCard].Damage : 0);
+                if (r.HitBackCard >= 0) { hitbacks++; dmgBy[r.HitBackCard] += CardCatalog.All[r.HitBackCard].Damage; }
+                wilds += r.Wild0 + r.Wild1;
+                if (r.Blocked0) blocksOk++; if (r.Blocked1) blocksOk++;
+                if (r.WrongBlock0) blocksMal++; if (r.WrongBlock1) blocksMal++;
+                if (r.Dodged0) dodgesOk++; if (r.Dodged1) dodgesOk++;
+                if (r.ProjCancel) projCancels++;
+                handSum += s.Hand[0].Count + s.Hand[1].Count; handSamples += 2;
+                if (r.TimeOver) timeovers++;
+            }
+            turnsTotal += s.Turn;
+            if (s.Hp[0] <= 0 || s.Hp[1] <= 0) kos++;
+            if (s.Winner == 0) wins0++; else if (s.Winner == 1) wins1++; else draws++;
+            if (s.Winner >= 0) { if (s.Winner == m % 2) winsFirst++; else winsSecond++; }
+        }
+
+        Console.WriteLine($"partidas: {matches} · P0 {wins0} · P1 {wins1} · empates {draws} · gana el que EMPIEZA {winsFirst} vs {winsSecond}");
+        Console.WriteLine($"KO: {100.0 * kos / matches:0.0}% · time over: {100.0 * (matches - kos) / matches:0.0}% · turnos/partida: {(double)turnsTotal / matches:0.0}");
+        Console.WriteLine($"mano promedio: {(double)handSum / Math.Max(1, handSamples):0.0} · bloqueos bien {blocksOk} · mal {blocksMal} · esquives {dodgesOk} · castigos {hitbacks} · wild swings {wilds} · proyectiles anulados {projCancels}");
+        Console.WriteLine($"{"carta",-22}{"usos",8}{"dmg/uso",10}");
+        for (int i = 0; i < n; i++)
+        {
+            double total = Math.Max(1, uses[i]);
+            Console.WriteLine($"{CardCatalog.All[i].Name,-22}{uses[i],8}{dmgBy[i] / total,10:0.00}");
+        }
     }
 
     // Lab del modo YOMI v2: partidas discretas sobre YomiSim con la IA de

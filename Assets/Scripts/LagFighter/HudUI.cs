@@ -1646,6 +1646,62 @@ namespace LagFighter
             LayoutYomiCards();
         }
 
+        // ---- modo CARTAS: color e info por carta (mismo lenguaje visual
+        // que las cartas de revelación del modo YOMI) ----
+        public static Color CardIdColor(int card)
+        {
+            var d = CardCatalog.All[card];
+            switch (d.Kind)
+            {
+                case CardKind.Throw: return new Color(0.85f, 0.3f, 0.75f);
+                case CardKind.Block: return new Color(0.35f, 0.55f, 0.85f);
+                case CardKind.Dodge: return new Color(0.25f, 0.75f, 0.95f);
+            }
+            if (d.Projectile) return new Color(0.3f, 0.55f, 0.95f);
+            if (card == CardCatalog.SpecialY) return new Color(0.95f, 0.7f, 0.15f);
+            if (card == CardCatalog.SpecialZ) return new Color(0.9f, 0.45f, 0.15f);
+            return d.Height == CardHeight.High ? new Color(0.95f, 0.55f, 0.2f)   // altos: naranja
+                 : d.Height == CardHeight.Low ? new Color(0.9f, 0.32f, 0.24f)    // bajos: rojo
+                 : new Color(0.9f, 0.62f, 0.35f);                                // mid
+        }
+
+        public static string CardIdInfo(int card)
+        {
+            var d = CardCatalog.All[card];
+            switch (d.Kind)
+            {
+                case CardKind.Block: return d.BlocksLow ? "CUBRE BAJO+MID · ROBA 1" : "CUBRE ALTO+MID · ROBA 1";
+                case CardKind.Dodge: return "ESQUIVA · DEVUELVE UN GOLPE";
+                case CardKind.Throw: return $"SPEED {d.Speed} · {d.Damage} DMG · DERRIBA";
+            }
+            string h = d.Height == CardHeight.High ? "ALTO" : d.Height == CardHeight.Low ? "BAJO" : "MID";
+            string s = $"SPEED {d.Speed} · {d.Damage} DMG · {h}";
+            if (d.Projectile) s += $" · PROYECTIL NV.{d.ProjLevel}";
+            if (d.UnsafeOnBlock) s += " · UNSAFE";
+            return s;
+        }
+
+        public void ShowCardsReveal(int c0, int c1, string ruling)
+        {
+            var cards = new[] { c0, c1 };
+            for (int i = 0; i < 2; i++)
+            {
+                var c = CardIdColor(cards[i]);
+                _yomiCard[i].gameObject.SetActive(true);
+                _yomiCardEdge[i].color = new Color(c.r, c.g, c.b, 0.95f);
+                _yomiCardName[i].text = CardCatalog.All[cards[i]].Name.ToUpperInvariant();
+                _yomiCardName[i].color = new Color(c.r * 0.45f + 0.55f, c.g * 0.45f + 0.55f, c.b * 0.45f + 0.55f);
+                _yomiCardInfo[i].text = CardIdInfo(cards[i]);
+            }
+            _yomiVs.gameObject.SetActive(true);
+            _yomiExplain.text = ruling;
+            _yomiExplain.gameObject.SetActive(true);
+            _yomiPop = 0f;
+            _yomiDock = 0f;
+            _yomiDocked = false;
+            LayoutYomiCards();
+        }
+
         public void ShowYomiReveal(YomiAction a0, YomiAction a1, bool close, string ruling)
         {
             var acts = new[] { a0, a1 };

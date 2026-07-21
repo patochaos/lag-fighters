@@ -79,6 +79,21 @@ class Tests
         YomiRecoveryYCounters();
         YomiKoYTech();
         YomiMatrizCompletaNoExplota();
+        CartasAtaqueLeGanaAlAgarre();
+        CartasSpeedYEmpateAlActivo();
+        CartasAlturasDelBloqueo();
+        CartasChipLockdownYRecurring();
+        CartasProyectilVsProyectil();
+        CartasUnsafeSeCastiga();
+        CartasDodgeCastigaStrikesNoProyectiles();
+        CartasThrowDerribaYElKnockdownApura();
+        CartasThrowVsThrowEmpateAlActivo();
+        CartasWildSwingDerribado();
+        CartasRemezclaUnaVezYTimeOver();
+        CartasLimiteDeMano();
+        CartasExchangeSoloNormalesYDosVeces();
+        CartasManoInicialGarantizada();
+        CartasMismaSeedMismaPartida();
         if (SimConfig.LimbsEnabled)
         {
             TresJabsArrancanElBrazo();
@@ -834,5 +849,272 @@ class Tests
             s.OnTurnEnd(1);
         }
         return $"{s.Tick}|{s.Winner}|{s.Fighters[0].Hp}|{s.Fighters[1].Hp}|{s.Fighters[0].X:0.0000}|{s.Fighters[1].X:0.0000}";
+    }
+
+    // ---- MODO CARTAS (copia de Yomi 2): cada regla de la tabla es un test ----
+
+    // Sim con las manos armadas a mano: el combate es lo único bajo prueba.
+    static CardSim NewCards(int active, int card0, int card1)
+    {
+        var s = new CardSim(seed: 1234, firstPlayer: active);
+        s.Hand[0].Clear(); s.Hand[0].Add(card0);
+        s.Hand[1].Clear(); s.Hand[1].Add(card1);
+        return s;
+    }
+
+    static void CartasAtaqueLeGanaAlAgarre()
+    {
+        // E es el ataque MÁS LENTO (speed 4) y aun así le gana al throw: la tabla manda.
+        var s = NewCards(0, CardCatalog.AttackE, CardCatalog.Throw);
+        var r = s.Resolve(0, 0);
+        Check(r.Dmg1 == 7 && r.Dmg0 == 0 && !r.KdNext1,
+            "cartas: ataque > throw sin importar speed", $"dmg1 {r.Dmg1}");
+    }
+
+    static void CartasSpeedYEmpateAlActivo()
+    {
+        // A (s8) vs B (s7): gana A aunque pegue menos.
+        var s = NewCards(1, CardCatalog.AttackA, CardCatalog.AttackB);
+        var r = s.Resolve(0, 0);
+        bool rapido = r.Dmg1 == 3 && r.Dmg0 == 0;
+        // espejo A vs A: el empate lo gana el jugador ACTIVO (acá el 1)
+        s = NewCards(1, CardCatalog.AttackA, CardCatalog.AttackA);
+        r = s.Resolve(0, 0);
+        bool empate = r.Dmg0 == 3 && r.Dmg1 == 0;
+        Check(rapido && empate, "cartas: speed decide y el empate es del activo",
+            $"rapido {rapido} empate {empate}");
+    }
+
+    static void CartasAlturasDelBloqueo()
+    {
+        // A pega BAJO: el Bloqueo Bajo lo para (y roba 1), el Alto lo come entero.
+        var s = NewCards(0, CardCatalog.AttackA, CardCatalog.LowBlock);
+        int deckBefore = s.Deck[1].Count;
+        var r = s.Resolve(0, 0);
+        bool bien = r.Blocked1 && r.Dmg1 == 0 && r.Drew1 == 1 && s.Deck[1].Count == deckBefore - 1
+            && r.Returned1 && s.Hand[1].Contains(CardCatalog.LowBlock); // recurring vuelve
+        s = NewCards(0, CardCatalog.AttackA, CardCatalog.HighBlock);
+        r = s.Resolve(0, 0);
+        bool mal = r.WrongBlock1 && r.Dmg1 == 3 && !s.Hand[1].Contains(CardCatalog.HighBlock);
+        // D pega ALTO: el Alto lo para, el Bajo lo come.
+        s = NewCards(0, CardCatalog.AttackD, CardCatalog.HighBlock);
+        bool altoBien = s.Resolve(0, 0).Dmg1 == 0;
+        s = NewCards(0, CardCatalog.AttackD, CardCatalog.LowBlock);
+        bool altoMal = s.Resolve(0, 0).Dmg1 == 6;
+        // C es MID: cualquiera de los dos lo bloquea.
+        s = NewCards(0, CardCatalog.AttackC, CardCatalog.LowBlock);
+        bool midBajo = s.Resolve(0, 0).Dmg1 == 0;
+        s = NewCards(0, CardCatalog.AttackC, CardCatalog.HighBlock);
+        bool midAlto = s.Resolve(0, 0).Dmg1 == 0;
+        Check(bien && mal && altoBien && altoMal && midBajo && midAlto,
+            "cartas: alturas del bloqueo (low/high/mid)",
+            $"bien {bien} mal {mal} altoBien {altoBien} altoMal {altoMal} mid {midBajo}/{midAlto}");
+    }
+
+    static void CartasChipLockdownYRecurring()
+    {
+        // X bloqueado: 4 de chip, SIN robo (lockdown), y X vuelve a la mano del
+        // zoner (recurring) igual que el block del que bloqueó (el chip no es "hit").
+        var s = NewCards(0, CardCatalog.SpecialX, CardCatalog.LowBlock);
+        int deckBefore = s.Deck[1].Count;
+        var r = s.Resolve(0, 0);
+        Check(r.Blocked1 && r.Chip1 == 4 && r.Dmg1 == 4 && r.Drew1 == 0
+            && s.Deck[1].Count == deckBefore
+            && r.Returned0 && s.Hand[0].Contains(CardCatalog.SpecialX)
+            && r.Returned1 && s.Hand[1].Contains(CardCatalog.LowBlock),
+            "cartas: chip + lockdown + recurring de X",
+            $"chip {r.Chip1} drew {r.Drew1} retX {r.Returned0} retBlk {r.Returned1}");
+    }
+
+    static void CartasProyectilVsProyectil()
+    {
+        // X vs X: mismo nivel → se anulan, nadie pega (los speeds se ignoran).
+        var s = NewCards(0, CardCatalog.SpecialX, CardCatalog.SpecialX);
+        var r = s.Resolve(0, 0);
+        Check(r.ProjCancel && r.Dmg0 == 0 && r.Dmg1 == 0,
+            "cartas: proyectil vs proyectil del mismo nivel se anulan", $"cancel {r.ProjCancel}");
+    }
+
+    static void CartasUnsafeSeCastiga()
+    {
+        // Y bloqueada: chip 2 + robo, y el que bloqueó devuelve UN ataque/throw.
+        var s = NewCards(0, CardCatalog.SpecialY, CardCatalog.HighBlock);
+        s.Hand[1].Add(CardCatalog.Throw); // el castigo disponible
+        var r = s.Resolve(0, 0);
+        bool pendiente = s.AwaitingHitBack && s.HitBackSide == 1 && r.Chip1 == 2 && r.Drew1 == 1;
+        r = s.HitBack(s.Hand[1].IndexOf(CardCatalog.Throw));
+        Check(pendiente && r.HitBackSide == 1 && r.HitBackCard == CardCatalog.Throw
+            && r.Dmg0 == 7 && s.KnockedDown[0],
+            "cartas: unsafe on block se castiga (y el throw del castigo derriba)",
+            $"pend {pendiente} dmg0 {r.Dmg0} kd {s.KnockedDown[0]}");
+    }
+
+    static void CartasDodgeCastigaStrikesNoProyectiles()
+    {
+        // Dodge vs strike: devolvés un golpe. Dodge vs proyectil: esquivás y nada más.
+        var s = NewCards(0, CardCatalog.AttackE, CardCatalog.Dodge);
+        s.Hand[1].Add(CardCatalog.AttackE);
+        var r = s.Resolve(0, 0);
+        bool strike = s.AwaitingHitBack && s.HitBackSide == 1;
+        r = s.HitBack(s.Hand[1].IndexOf(CardCatalog.AttackE));
+        strike &= r.Dmg0 == 7 && r.Dodged1;
+        s = NewCards(0, CardCatalog.SpecialX, CardCatalog.Dodge);
+        r = s.Resolve(0, 0);
+        bool proyectil = !s.AwaitingHitBack && r.Dodged1 && r.Dmg0 == 0 && r.Dmg1 == 0;
+        Check(strike && proyectil, "cartas: dodge castiga strikes pero no proyectiles",
+            $"strike {strike} proyectil {proyectil}");
+    }
+
+    static void CartasThrowDerribaYElKnockdownApura()
+    {
+        // Throw vs block: agarra, 7 y derriba. En el combate siguiente, los moves
+        // lentos del rival suben a speed 10: su D (s5) le gana al A (s8) del caído.
+        var s = NewCards(0, CardCatalog.Throw, CardCatalog.LowBlock);
+        var r = s.Resolve(0, 0);
+        bool agarro = r.Thrown1 && r.Dmg1 == 7 && r.KdNext1 && s.KnockedDown[1];
+        s.Hand[0].Add(CardCatalog.AttackD);   // s5 → eff 10 contra derribado
+        s.Hand[1].Add(CardCatalog.AttackA);   // s8 del caído
+        r = s.Resolve(0, 0);
+        bool apurado = r.Dmg1 == 6 && r.Dmg0 == 0;
+        bool limpio = !s.KnockedDown[1];      // el knockdown dura UN combate
+        Check(agarro && apurado && limpio,
+            "cartas: throw derriba y el knockdown apura los speeds a 10",
+            $"agarro {agarro} apurado {apurado} limpio {limpio}");
+    }
+
+    static void CartasThrowVsThrowEmpateAlActivo()
+    {
+        var s = NewCards(1, CardCatalog.Throw, CardCatalog.Throw);
+        var r = s.Resolve(0, 0);
+        Check(r.Dmg0 == 7 && r.Dmg1 == 0 && s.KnockedDown[0],
+            "cartas: throw vs throw, el empate es del activo y derriba", $"dmg0 {r.Dmg0}");
+    }
+
+    static void CartasWildSwingDerribado()
+    {
+        // Derribado, el dodge es inválido: se descarta y jugás la carta de arriba
+        // del mazo (wild swing).
+        var s = NewCards(0, CardCatalog.Throw, CardCatalog.LowBlock);
+        s.Resolve(0, 0); // deja al 1 derribado
+        s.Hand[0].Add(CardCatalog.LowBlock);
+        s.Hand[1].Add(CardCatalog.Dodge);
+        s.Deck[1].Add(CardCatalog.AttackA); // lo que el swing va a dar vuelta
+        var r = s.Resolve(0, 0);
+        Check(r.Wild1 == 1 && r.Card1 == CardCatalog.AttackA
+            && s.Discard[1].Contains(CardCatalog.Dodge),
+            "cartas: wild swing al abrir con dodge derribado",
+            $"wild {r.Wild1} carta {r.Card1}");
+    }
+
+    static void CartasRemezclaUnaVezYTimeOver()
+    {
+        // Mazo agotado: la PRIMERA vez remezcla el descarte dejando los blocks
+        // afuera; la SEGUNDA es TIME OVER y gana el que tiene más vida.
+        var s = new CardSim(seed: 5, firstPlayer: 0);
+        s.Deck[0].Clear();
+        s.Discard[0].Clear();
+        s.Discard[0].AddRange(new[] { CardCatalog.LowBlock, CardCatalog.HighBlock,
+            CardCatalog.AttackC, CardCatalog.AttackD });
+        int handBefore = s.Hand[0].Count;
+        s.StartTurn(); // primer turno: roba 1 → dispara la remezcla
+        bool remezclo = s.DeckOuts[0] == 1 && !s.Over
+            && s.Discard[0].Count == 2
+            && s.Discard[0].Contains(CardCatalog.LowBlock)
+            && s.Discard[0].Contains(CardCatalog.HighBlock)
+            && s.Hand[0].Count == handBefore + 1
+            && s.Deck[0].Count == 1; // C y D entraron, robó una
+        // segunda vez: mazo Y descarte útiles vacíos → time over por vida
+        s.Deck[0].Clear();
+        s.Hp[1] = 10;
+        s.StartTurn();
+        bool timeOver = s.Over && s.Winner == 0;
+        Check(remezclo && timeOver && s.DeckOuts[0] >= 2,
+            "cartas: remezcla una vez (blocks afuera) y luego TIME OVER",
+            $"remezclo {remezclo} over {s.Over} winner {s.Winner}");
+    }
+
+    static void CartasLimiteDeMano()
+    {
+        // Mano llena (12): lo que robes de más va directo al descarte.
+        var s = new CardSim(seed: 6, firstPlayer: 0);
+        s.Hand[0].Clear();
+        for (int i = 0; i < CardConfig.HandLimit; i++) s.Hand[0].Add(CardCatalog.AttackC);
+        s.Deck[0].Clear();
+        s.Deck[0].Add(CardCatalog.SpecialY);
+        s.Deck[0].Add(CardCatalog.SpecialY);
+        s.Discard[0].Clear();
+        s.Discard[0].Add(CardCatalog.AttackA); // para que la remezcla no dispare time over
+        s.StartTurn(); // roba 1 (primer turno) con la mano llena
+        Check(s.Hand[0].Count == CardConfig.HandLimit && s.Discard[0].Contains(CardCatalog.SpecialY),
+            "cartas: mano máxima 12, el exceso se descarta",
+            $"mano {s.Hand[0].Count} desc {s.Discard[0].Count}");
+    }
+
+    static void CartasExchangeSoloNormalesYDosVeces()
+    {
+        var s = new CardSim(seed: 7, firstPlayer: 0);
+        s.StartTurn();
+        s.Hand[0].Clear();
+        s.Hand[0].AddRange(new[] { CardCatalog.AttackA, CardCatalog.AttackB, CardCatalog.SpecialX });
+        s.Discard[0].Clear();
+        s.Discard[0].AddRange(new[] { CardCatalog.Throw, CardCatalog.Dodge, CardCatalog.SpecialY });
+        bool especialNo = !s.CanExchange(2, 0) && !s.CanExchange(0, 2); // X e Y no tienen ícono
+        bool uno = s.Exchange(0, 0);   // A ↔ Throw
+        bool dos = s.Exchange(0, 0);   // B ↔ Dodge (innate de Grave: dos por turno)
+        bool tresNo = !s.Exchange(0, 0);
+        Check(especialNo && uno && dos && tresNo && s.ExchangesLeft == 0,
+            "cartas: exchange solo normales y máximo dos (innate de Grave)",
+            $"esp {especialNo} 1:{uno} 2:{dos} 3:{!tresNo}");
+    }
+
+    static void CartasManoInicialGarantizada()
+    {
+        var s = new CardSim(seed: 42, firstPlayer: 0);
+        bool ok = true;
+        for (int side = 0; side < 2; side++)
+        {
+            ok &= s.Hand[side].Count == 7; // 3 garantizadas + 4 al azar (sin Burst: no hay gems)
+            ok &= s.Hand[side].Contains(CardCatalog.LowBlock);
+            ok &= s.Hand[side].Contains(CardCatalog.HighBlock);
+            ok &= s.Hand[side].Contains(CardCatalog.Throw);
+            ok &= s.Deck[side].Count == 17; // 24 - 7
+        }
+        Check(ok, "cartas: mano inicial garantizada (blocks + throw + 4)", "");
+    }
+
+    static void CartasMismaSeedMismaPartida()
+    {
+        string a = PartidaDeCartas(2026), b = PartidaDeCartas(2026);
+        Check(a == b, "cartas: misma seed, misma partida", $"{a} vs {b}");
+    }
+
+    static string PartidaDeCartas(int seed)
+    {
+        var s = new CardSim(seed, firstPlayer: 0);
+        for (int turn = 0; turn < 60 && !s.Over; turn++)
+        {
+            s.StartTurn();
+            if (s.Over) break;
+            int h0 = PrimerLegal(s, 0), h1 = PrimerLegal(s, 1);
+            s.Resolve(h0, h1);
+            if (s.AwaitingHitBack) s.HitBack(PrimerGolpe(s, s.HitBackSide));
+        }
+        return $"{s.Turn}|{s.Winner}|{s.Hp[0]}|{s.Hp[1]}|{s.Hand[0].Count}|{s.Hand[1].Count}";
+    }
+
+    static int PrimerLegal(CardSim s, int side)
+    {
+        for (int i = 0; i < s.Hand[side].Count; i++) if (s.LegalOpener(side, i)) return i;
+        return -1;
+    }
+
+    static int PrimerGolpe(CardSim s, int side)
+    {
+        for (int i = 0; i < s.Hand[side].Count; i++)
+        {
+            var k = CardCatalog.All[s.Hand[side][i]].Kind;
+            if (k == CardKind.Attack || k == CardKind.Throw) return i;
+        }
+        return -1;
     }
 }

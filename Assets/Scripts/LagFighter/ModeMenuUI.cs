@@ -12,10 +12,14 @@ namespace LagFighter
         // quedan acá por si IA CUSTOM vuelve. 1v1 LOCAL y POR CÓDIGO ya habían
         // salido el 2026-07-18; TurnCode la usa ONLINE.
         const int QuickAIIdx = 1;
+        // CARTAS (2026-07-21): la copia de Yomi 2 — mazo, mano y combate por
+        // tabla contra la IA. Usa GameMode.VsAI + el flag cards de StartMatch.
+        const int CardsIdx = 2;
         static readonly (string label, string desc, GameMode mode)[] Modes =
         {
             ("PRÁCTICA", "Solo vos y un dummy quieto. Probá comandos, distancias y framedata.", GameMode.Practice),
             ("VS IA", "Directo a pelear: la IA adaptativa en dificultad normal planifica en secreto, igual que vos.", GameMode.VsAI),
+            ("CARTAS", "El combate como cartas (copia de Yomi 2): robá, cambiá con el descarte y jugá tu opener contra la IA.", GameMode.VsAI),
             ("ONLINE", "Sala con código de invitación: uno crea, el otro se une. Turnos con timer de 30s.", GameMode.Online),
         };
 
@@ -214,6 +218,7 @@ namespace LagFighter
             _lagChoice = false; // NORMAL siempre: LAG MODE quedó fuera del menú
             _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_mode", 1), 0, Modes.Length - 1); // arranca donde quedaste
             SimConfig.YomiEnabled = false; // el modo YOMI lo prende StartMatch; acá se apaga al volver
+            SimConfig.CardsEnabled = false; // ídem CARTAS
             // BUG FIX (2026-07-20): en modo AP el pref viejo del toggle C se
             // ignoraba en la UI pero se seguía CARGANDO — con el toggle
             // prendido de antes, los moves cruzaban el turno "gratis" (el
@@ -296,6 +301,11 @@ namespace LagFighter
                 if (idx == QuickAIIdx) // VS IA directo: adaptativa en normal, a pelear
                 {
                     _mc.StartMatch(GameMode.VsAI, _lagChoice, 0, AIProfile.Adaptive, AIDifficulty.Normal);
+                    return;
+                }
+                if (idx == CardsIdx) // CARTAS: la copia de Yomi 2 contra la IA
+                {
+                    _mc.StartMatch(GameMode.VsAI, false, 0, AIProfile.Adaptive, AIDifficulty.Normal, yomi: false, cards: true);
                     return;
                 }
                 if (Modes[idx].mode == GameMode.Online)

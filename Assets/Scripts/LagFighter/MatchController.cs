@@ -59,6 +59,17 @@ namespace LagFighter
         // con los que ARRANCÓ el turno (el resultado se cobra cuando se ve).
         public int YomiDisplayAp(int i) =>
             Yomi == null ? 0 : _yomiShowLiveAp ? Yomi.Ap[i] : _yomiApBefore[i];
+        // ---- Modo CARTAS (copia de Yomi 2, 2026-07-21): el estado real vive
+        // en CardSim (mazos, manos, combate por tabla); la sim de frames actúa
+        // el resultado, igual que en YOMI. Ver YOMI2-CARDS.md.
+        public CardSim Cards { get; private set; }
+        CardTurnResult _cardsResult;
+        readonly int[] _cardsHpBefore = new int[2];
+        public bool CardsPunishing { get; private set; } // esperando el castigo del humano
+        int _cardsRound;                 // alterna quién empieza cada round
+        const float CardsSlot = 0.62f;   // marcas de los peleadores en el teatro
+        const int CardsTheaterFrames = 70;
+
         public float TickFloat => Sim == null ? 0f : Sim.Tick + _acc / SimConfig.TickDuration;
         public GameMode Mode { get; private set; }
         public bool LagMode { get; private set; }
@@ -242,7 +253,7 @@ namespace LagFighter
 
         public void StartMatch(GameMode mode, bool lagMode, int localSide = 0,
             AIProfile aiProfile = AIProfile.Random, AIDifficulty aiDifficulty = AIDifficulty.Normal,
-            bool yomi = false)
+            bool yomi = false, bool cards = false)
         {
             Mode = mode;
             LagMode = lagMode;
@@ -250,6 +261,9 @@ namespace LagFighter
             // Modo YOMI v2 (discreto): la lógica vive en YomiSim; la sim de
             // frames queda de teatro. ModeMenuUI.Open() apaga el flag al volver.
             SimConfig.YomiEnabled = yomi;
+            // Modo CARTAS (copia de Yomi 2): ídem con CardSim.
+            SimConfig.CardsEnabled = cards;
+            _cardsRound = 0;
             // el toggle no viaja en el protocolo online: forzarlo OFF evita desyncs
             if (mode == GameMode.Online || mode == GameMode.Async) SimConfig.CarryoverEnabled = false;
             SelectedAIProfile = aiProfile;
@@ -283,6 +297,19 @@ namespace LagFighter
         void StartRound()
         {
             Sim = new MatchSim();
+            if (SimConfig.CardsEnabled)
+            {
+                // el que empieza alterna por round (el activo gana los empates)
+                Cards = new CardSim(seed: _seed++, firstPlayer: _cardsRound++ % 2);
+                CardsPunishing = false;
+                for (int i = 0; i < 2; i++)
+                {
+                    var f = Sim.Fighters[i];
+                    f.BlockEnabled = false; // la tabla decide, no el auto-bloqueo
+                    f.X = i == 0 ? -CardsSlot : CardsSlot;
+                    f.PrevX = f.X;
+                }
+            }
             if (SimConfig.YomiEnabled)
             {
                 Yomi = new YomiSim();
@@ -326,6 +353,7 @@ namespace LagFighter
 
         void StartPlanning()
         {
+            if (SimConfig.CardsEnabled) { StartCardsPlanning(); return; }
             if (SimConfig.YomiEnabled) { StartYomiPlanning(); return; }
             TurnNumber++;
             if (LagMode && LagLevel != _prevLagLevel)
@@ -1017,6 +1045,343 @@ namespace LagFighter
             StartPlanning();
         }
 
+        // ---------- modo CARTAS (copia de Yomi 2) ----------
+
+        // HP del teatro: los pips del HUD son 6, el juego de cartas usa 45 —
+        // se muestran proporcionales; los números exactos van en prompt y popups.
+        float CardsTheaterHp(int i) => Cards.Hp[i] * (float)SimConfig.MaxHp / CardConfig.MaxHp;
+
+        void StartCardsPlanning()
+        {
+            TurnNumber++;
+            for (int i = 0; i < 2; i++)
+            {
+                TurnStartStun[i] = 0;
+                TurnStartStunKind[i] = StunKind.None;
+                TurnStartCommitted[i] = 0;
+                _plans[i].Clear();
+            }
+            Cards.StartTurn(); // el activo roba 2 (1 el primer turno)
+            if (Cards.Over) { CardsTimeOver(); return; } // el mazo se agotó al robar
+            if (Cards.Active == 1) _ai.DoCardExchanges(Cards);
+            CardsPunishing = false;
+            Picker = 0;
+            State = Flow.Planning;
+            _hud.HideYomiCards();
+            if (Cards.Hand[0].Count == 0)
+            {
+                // sin cartas (astronómicamente raro): wild swing forzado
+                _hud.Feedback(0, "SIN CARTAS: wild swing", new Color(1f, 0.8f, 0.3f));
+                CardsPick(-1);
+                return;
+            }
+            _menu.Open(0);
+            UpdateCardsPrompt();
+        }
+
+        // Público: el menú lo repinta después de cada exchange.
+        public void UpdateCardsPrompt()
+        {
+            bool mine = Cards.Active == 0;
+            string kd = Cards.KnockedDown[0] ? "  ·  ¡DERRIBADO! (sin esquive, sus golpes suben a speed 10)"
+                : Cards.KnockedDown[1] ? "  ·  RIVAL DERRIBADO (sin esquive, tus golpes suben a speed 10)" : "";
+            string ex = mine && Cards.ExchangesLeft > 0 ? $"  ·  CAMBIO ×{Cards.ExchangesLeft}" : "";
+            _hud.SetPrompt($"TURNO {TurnNumber} — {(mine ? "TU TURNO: ganás los empates" : "TURNO RIVAL: gana los empates")}  ·  " +
+                $"HP {Cards.Hp[0]} vs {Cards.Hp[1]}  ·  mazo {Cards.Deck[0].Count} · " +
+                $"rival: mano {Cards.Hand[1].Count} · mazo {Cards.Deck[1].Count}{kd}{ex}");
+        }
+
+        // El click en una carta de la mano cierra el turno: la IA ya eligió en
+        // secreto, la tabla resuelve y el teatro lo actúa.
+        public void CardsPick(int handIdx)
+        {
+            if (!SimConfig.CardsEnabled || State != Flow.Planning || CardsPunishing) return;
+            if (handIdx >= Cards.Hand[0].Count) return;
+            if (handIdx < 0 && Cards.Hand[0].Count > 0) return; // −1 solo con mano vacía
+            // inválida con alternativas legales: no pasa; sin legales, wild swing
+            if (handIdx >= 0 && !Cards.LegalOpener(0, handIdx) && Cards.HasLegalOpener(0)) return;
+            for (int i = 0; i < 2; i++) _cardsHpBefore[i] = Cards.Hp[i];
+            int aiIdx = _ai.PickCardOpener(Cards, 1);
+            _cardsResult = Cards.Resolve(handIdx, aiIdx);
+            if (Cards.AwaitingHitBack)
+            {
+                if (Cards.HitBackSide == 1)
+                    _cardsResult = Cards.HitBack(_ai.PickCardHitBack(Cards, 1));
+                else
+                {
+                    // castigo del humano: la mano se re-ofrece filtrada a golpes/agarres
+                    CardsPunishing = true;
+                    _menu.OpenCardsPunish();
+                    string why = CardCatalog.All[_cardsResult.Card1].UnsafeOnBlock
+                        ? "bloqueaste un move UNSAFE" : "esquivaste un strike";
+                    _hud.SetPrompt($"¡CASTIGO! {why}: devolvé UN golpe o agarre (ESPACIO = no castigar)");
+                    return;
+                }
+            }
+            FinishCardsTurn();
+        }
+
+        // Cierra el castigo pendiente (handIdx −1 = pasar).
+        public void CardsPunish(int handIdx)
+        {
+            if (!CardsPunishing) return;
+            CardsPunishing = false;
+            _cardsResult = Cards.HitBack(handIdx);
+            FinishCardsTurn();
+        }
+
+        // Exchange del turno propio, desde el menú (handIdx ↔ discardIdx).
+        public bool CardsExchange(int handIdx, int discardIdx)
+        {
+            if (!SimConfig.CardsEnabled || State != Flow.Planning || Cards.Active != 0) return false;
+            if (!Cards.Exchange(handIdx, discardIdx)) return false;
+            SfxLib.Play(SfxLib.Kind.UiClick, 0.7f);
+            UpdateCardsPrompt();
+            return true;
+        }
+
+        void FinishCardsTurn()
+        {
+            _ai.ObserveCard(_cardsResult.Card0); // la IA aprende del opener ya revelado
+            BeginCardsTheater();
+        }
+
+        // El FALLO del turno en una frase: qué regla de Yomi 2 decidió.
+        static string CardsRuling(CardTurnResult r)
+        {
+            string N(int c) => CardCatalog.All[c].Name.ToUpperInvariant();
+            var d0 = CardCatalog.All[r.Card0];
+            var d1 = CardCatalog.All[r.Card1];
+            if (r.ProjCancel) return "proyectiles del MISMO NIVEL: se anulan";
+            if (r.Blocked0 || r.Blocked1)
+            {
+                int b = r.Blocked0 ? 0 : 1;
+                var atk = CardCatalog.All[r.Card(1 - b)];
+                string who = b == 0 ? "BLOQUEÁS" : "BLOQUEA";
+                string extra = atk.BlockDamage > 0 ? $" (chip −{atk.BlockDamage})" : "";
+                if (atk.UnsafeOnBlock) extra += " · ¡UNSAFE: hay castigo!";
+                else if (atk.Lockdown) extra += " · lockdown: sin robo";
+                else extra += " · roba 1";
+                return $"{who} bien la altura de {N(r.Card(1 - b))}{extra}";
+            }
+            if (r.WrongBlock0 || r.WrongBlock1)
+            {
+                int b = r.WrongBlock0 ? 0 : 1;
+                var atk = CardCatalog.All[r.Card(1 - b)];
+                string h = atk.Height == CardHeight.High ? "ALTO" : "BAJO";
+                return $"¡bloqueo EQUIVOCADO! {N(r.Card(1 - b))} pega {h} y entra entero";
+            }
+            if (r.Dodged0 || r.Dodged1)
+            {
+                int dd = r.Dodged0 ? 0 : 1;
+                var atk = CardCatalog.All[r.Card(1 - dd)];
+                if (atk.Projectile) return "ESQUIVE al proyectil: lo evita, pero sin castigo";
+                return r.HitBackCard >= 0
+                    ? $"¡ESQUIVE! evita {N(r.Card(1 - dd))} y devuelve {N(r.HitBackCard)}"
+                    : $"¡ESQUIVE! evita {N(r.Card(1 - dd))} (sin castigo)";
+            }
+            if (r.Thrown0 || r.Thrown1)
+            {
+                int v = r.Thrown0 ? 0 : 1;
+                var vic = CardCatalog.All[r.Card(v)];
+                string why = vic.Kind == CardKind.Block ? "AGARRE le gana al bloqueo"
+                    : vic.Kind == CardKind.Dodge ? "AGARRE le gana al esquive"
+                    : "agarre vs agarre: el más rápido tira";
+                return $"{why}: −{r.Dmg(v)} y DERRIBA";
+            }
+            if (r.Dmg0 == 0 && r.Dmg1 == 0) return "nadie conecta";
+            int w = r.Dmg1 > 0 ? 0 : 1; // el que pegó
+            var wd = CardCatalog.All[r.Card(w)];
+            var ld = CardCatalog.All[r.Card(1 - w)];
+            string winner = w == 0 ? "GANÁS VOS" : "GANA EL RIVAL";
+            string reason;
+            if (ld.Kind == CardKind.Throw) reason = "el GOLPE siempre interrumpe al AGARRE";
+            else if (wd.Projectile && ld.Projectile) reason = "proyectil de nivel más alto";
+            else if (wd.Speed == ld.Speed) reason = $"empate de speed {wd.Speed}: gana el jugador ACTIVO";
+            else reason = $"más rápido (speed {wd.Speed} vs {ld.Speed})";
+            return $"{winner}: {reason}";
+        }
+
+        // Cada carta actúa con un move clásico; el resultado real ya está
+        // decidido por CardSim — la sim solo pone poses, sparks y sfx.
+        static int CardsTheaterMove(int card)
+        {
+            switch (card)
+            {
+                case CardCatalog.AttackA:
+                case CardCatalog.AttackB: return MoveCatalog.AttackA;
+                case CardCatalog.AttackC:
+                case CardCatalog.AttackD:
+                case CardCatalog.AttackE: return MoveCatalog.Strong;
+                case CardCatalog.Throw: return MoveCatalog.YomiGrab;
+                case CardCatalog.Dodge: return MoveCatalog.DashB;
+                case CardCatalog.SpecialX: return MoveCatalog.Hadouken;
+                case CardCatalog.SpecialY: return MoveCatalog.Shoryuken;
+                case CardCatalog.SpecialZ: return MoveCatalog.Tatsu;
+                default: return -1; // blocks: quieto (bloquea si le toca)
+            }
+        }
+
+        // primer frame de contacto del move teatral (−1 = no pega)
+        static int CardsTheaterContact(int card)
+        {
+            switch (CardsTheaterMove(card))
+            {
+                case MoveCatalog.AttackA: return 6;
+                case MoveCatalog.Strong: return 14;
+                case MoveCatalog.YomiGrab: return 9;
+                case MoveCatalog.Hadouken: return 16;
+                case MoveCatalog.Shoryuken: return 4;
+                case MoveCatalog.Tatsu: return 14;
+                default: return -1;
+            }
+        }
+
+        int CardsTheaterDelay(CardTurnResult r, int i)
+        {
+            int o = 1 - i;
+            int myC = CardsTheaterContact(r.Card(i)), theirC = CardsTheaterContact(r.Card(o));
+            // me pegaron de verdad y yo también tiraba: que el golpe rival entre primero
+            bool hit = r.Dmg(i) - r.Chip(i) > 0;
+            if (hit && myC >= 0 && theirC >= 0) return Mathf.Max(0, theirC + 8 - myC);
+            // castigo (dodge/unsafe): mi cola arranca después del swing rival
+            if (r.HitBackSide == i && r.HitBackCard >= 0 && theirC >= 0) return theirC + 10;
+            return 0;
+        }
+
+        void BeginCardsTheater()
+        {
+            var r = _cardsResult;
+            _menu.Close();
+            _ghost.Clear();
+            Sim = new MatchSim();
+            for (int i = 0; i < 2; i++)
+            {
+                var f = Sim.Fighters[i];
+                var def = CardCatalog.All[r.Card(i)];
+                // bloquea en el teatro si su carta bloqueó DE VERDAD; con
+                // proyectiles anulados, ambos se cubren del fireball rival
+                f.BlockEnabled = (def.Kind == CardKind.Block && r.Blocked(i)) || r.ProjCancel;
+                f.X = i == 0 ? -CardsSlot : CardsSlot;
+                f.PrevX = f.X;
+                f.Hp = _cardsHpBefore[i] * (float)SimConfig.MaxHp / CardConfig.MaxHp;
+            }
+            for (int i = 0; i < 2; i++)
+            {
+                var q = new List<int>();
+                int mv = CardsTheaterMove(r.Card(i));
+                if (mv >= 0) q.Add(mv);
+                if (r.HitBackSide == i && r.HitBackCard >= 0)
+                {
+                    // el castigo se actúa a continuación (el dodge vuelve a entrar)
+                    if (CardCatalog.All[r.Card(i)].Kind == CardKind.Dodge) q.Add(MoveCatalog.DashF);
+                    int pm = CardsTheaterMove(r.HitBackCard);
+                    if (pm >= 0) q.Add(pm);
+                }
+                if (q.Count > 0) Sim.SetQueue(i, q);
+                Sim.Fighters[i].QueueDelayTick = CardsTheaterDelay(r, i);
+            }
+            TurnStartTick = Sim.Tick;
+            _acc = 0f;
+            _turnDmg[0] = _turnDmg[1] = 0f;
+            _turnHitCount[0] = _turnHitCount[1] = 0;
+            State = Flow.Executing;
+            _yomiRevealTimer = YomiRevealSeconds; // misma revelación: cartas gigantes + fallo
+            _hud.ShowCardsReveal(r.Card0, r.Card1, CardsRuling(r));
+            _hud.SetPrompt($"TURNO {TurnNumber} — {CardCatalog.All[r.Card0].Name.ToUpperInvariant()} vs {CardCatalog.All[r.Card1].Name.ToUpperInvariant()}");
+            SfxLib.Play(SfxLib.Kind.TurnStart, 0.6f);
+        }
+
+        void TickCardsTheater()
+        {
+            if (_yomiRevealTimer > 0f)
+            {
+                _yomiRevealTimer -= Time.deltaTime;
+                if (_yomiRevealTimer < YomiRevealSeconds - 0.35f &&
+                    (GameInput.EndTurnPressed() || GameInput.ClickPressed()))
+                    _yomiRevealTimer = 0f;
+                if (_yomiRevealTimer <= 0f) _hud.DockYomiCards();
+                return;
+            }
+            if (_hitstop > 0f) { _hitstop -= Time.deltaTime * PlaybackSpeed; return; }
+            _acc += Time.deltaTime * PlaybackSpeed * YomiTheaterSpeed;
+            while (_acc >= SimConfig.TickDuration)
+            {
+                _acc -= SimConfig.TickDuration;
+                Sim.Step();
+                DispatchEvents();
+                if (Sim.Over || Sim.Tick - TurnStartTick >= CardsTheaterFrames)
+                {
+                    _acc = 0f;
+                    EndCardsTurn();
+                    return;
+                }
+                if (_hitstop > 0f) return;
+            }
+        }
+
+        void EndCardsTurn()
+        {
+            var r = _cardsResult;
+            // el HP real lo dicta CardSim; el teatro no decide nada
+            for (int i = 0; i < 2; i++) Sim.Fighters[i].Hp = CardsTheaterHp(i);
+            if (!Cards.Over) { Sim.Over = false; Sim.Winner = -1; }
+            for (int i = 0; i < 2; i++)
+            {
+                int real = r.Dmg(i) - r.Chip(i);
+                if (real > 0) _hud.Feedback(i, $"−{real} HP", new Color(1f, 0.42f, 0.35f));
+                if (r.Chip(i) > 0) _hud.Feedback(i, $"−{r.Chip(i)} CHIP (bloqueado)", new Color(1f, 0.75f, 0.4f));
+                if (r.Blocked(i))
+                    _hud.Feedback(i, (i == 0 ? r.Drew0 : r.Drew1) > 0 ? "BLOQUEO: +1 carta" : "BLOQUEO (lockdown: sin robo)",
+                        new Color(0.35f, 0.85f, 1f));
+                if (i == 0 ? r.WrongBlock0 : r.WrongBlock1)
+                    _hud.Feedback(i, "¡ALTURA EQUIVOCADA!", new Color(1f, 0.55f, 0.15f));
+                if (r.Dodged(i)) _hud.Feedback(i, "¡ESQUIVADO!", new Color(0.3f, 0.95f, 1f));
+                if (r.KdNext(i)) _hud.Feedback(i, "¡DERRIBADO!", new Color(1f, 0.6f, 0.4f));
+                if (i == 0 ? r.Returned0 : r.Returned1)
+                    _hud.Feedback(i, "la carta VUELVE a la mano", new Color(0.7f, 0.95f, 0.7f));
+                int wild = i == 0 ? r.Wild0 : r.Wild1;
+                if (wild > 0) _hud.Feedback(i, $"WILD SWING ×{wild} (opener inválido)", new Color(1f, 0.8f, 0.3f));
+            }
+            if (r.HitBackSide >= 0 && r.HitBackCard >= 0)
+                _hud.Feedback(r.HitBackSide, $"CASTIGO: {CardCatalog.All[r.HitBackCard].Name}", new Color(1f, 0.55f, 0.9f));
+            _hud.AddTurnLog($"T{TurnNumber}  <color=#8cc8ff>{CardCatalog.All[r.Card0].Short}</color> −{r.Dmg1}  ·  <color=#ffa080>{CardCatalog.All[r.Card1].Short}</color> −{r.Dmg0}");
+            _hud.SetTurnSummary($"último turno: {CardCatalog.All[r.Card0].Name} vs {CardCatalog.All[r.Card1].Name} — vos −{r.Dmg0} · rival −{r.Dmg1}");
+
+            if (Cards.Over)
+            {
+                Sim.Over = true;
+                Sim.Winner = Cards.Winner;
+                // una partida de cartas ES el match (Yomi 2 no tiene rounds):
+                // dejar al ganador a un round del cierre → OnRoundEnd termina todo
+                if (Cards.Winner >= 0) _wins[Cards.Winner] = RoundsToWin - 1;
+                if (Cards.Hp[0] <= 0 || Cards.Hp[1] <= 0)
+                {
+                    _koTimer = 1.4f;
+                    Time.timeScale = 0.25f;
+                    _hud.ShowBigMessage("K.O.", new Color(1f, 0.3f, 0.25f));
+                    Announcer.Play();
+                    return; // _koTimer → BeginRoundReplay → (log vacío) → OnRoundEnd
+                }
+                CardsTimeOver();
+                return;
+            }
+            StartPlanning();
+        }
+
+        // Mazos agotados dos veces: TIME OVER, decide la vida (regla de Yomi 2).
+        void CardsTimeOver()
+        {
+            Sim.Over = true;
+            Sim.Winner = Cards.Winner;
+            if (Cards.Winner >= 0) _wins[Cards.Winner] = RoundsToWin - 1; // partida única
+            for (int i = 0; i < 2; i++) Sim.Fighters[i].Hp = CardsTheaterHp(i);
+            _menu.Close();
+            _hud.ShowBigMessage("TIME OVER\n<size=18>mazos agotados: decide la vida</size>", new Color(1f, 0.85f, 0.3f));
+            SfxLib.Play(SfxLib.Kind.Ko, 0.6f);
+            OnRoundEnd();
+        }
+
         // ---------- execution ----------
 
         void BeginExecution()
@@ -1224,7 +1589,8 @@ namespace LagFighter
 
             if (State == Flow.Executing)
             {
-                if (SimConfig.YomiEnabled) TickYomiTheater();
+                if (SimConfig.CardsEnabled) TickCardsTheater();
+                else if (SimConfig.YomiEnabled) TickYomiTheater();
                 else TickExecuting();
             }
             else if (State == Flow.Replay) TickReplay();
@@ -1491,10 +1857,11 @@ namespace LagFighter
 
         void DispatchEvents()
         {
-            // Teatro YOMI: la sim es un títere MUDO — pone sparks, sfx y poses,
-            // pero los carteles y números los dicta la tabla (EndYomiTurn).
-            // Sin esto, sus whiffs/counters internos contradicen el resultado.
-            bool yomiTheater = SimConfig.YomiEnabled && State == Flow.Executing;
+            // Teatro YOMI/CARTAS: la sim es un títere MUDO — pone sparks, sfx y
+            // poses, pero los carteles y números los dicta la tabla
+            // (EndYomiTurn / EndCardsTurn). Sin esto, sus whiffs/counters
+            // internos contradicen el resultado.
+            bool yomiTheater = (SimConfig.YomiEnabled || SimConfig.CardsEnabled) && State == Flow.Executing;
             foreach (var ev in Sim.LastEvents)
             {
                 int def = 1 - ev.Attacker;

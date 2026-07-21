@@ -36,7 +36,7 @@ namespace LagFighter
         // siguiente, que arranca con menos.
         public static bool ApEnabled = true;
         public const int FramesPerAp = 12;
-        public static bool ApActive => ApEnabled && !YomiEnabled; // en YOMI los AP son otra cosa (YomiSim)
+        public static bool ApActive => ApEnabled && !YomiEnabled && !CardsEnabled; // en YOMI/CARTAS los recursos son otros
 
         // OVERFLOW/PRÉSTAMO — DESACTIVADO a pedido (2026-07-20, mismo día que
         // nació): pasarse del presupuesto complejizaba entender si lo BÁSICO
@@ -62,6 +62,11 @@ namespace LagFighter
         // sim de frames) se retiró el mismo día: era una quimera — la tabla
         // decía una cosa y los frames decidían otra por abajo.
         public static bool YomiEnabled = false;
+
+        // ---- Modo CARTAS (2026-07-21): copia de Yomi 2 — la lógica vive en
+        // CardSim.cs (mazos, manos, combate por tabla con speeds y alturas).
+        // Igual que en YOMI, la sim de frames es solo TEATRO del resultado.
+        public static bool CardsEnabled = false;
         // 20 turnos por round → TIME OVER y decide la vida. Calibrado con la
         // distribución natural del lab: mediana 13, p75 21; con 20 el 75% de
         // las peleas termina por KO y el juez solo corta la cola de stalls.
