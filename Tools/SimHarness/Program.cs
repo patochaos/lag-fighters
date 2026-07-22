@@ -30,6 +30,11 @@ class Program
             RunCardsLab(args.Length > 1 ? int.Parse(args[1]) : 5000);
             return;
         }
+        if (args.Length > 0 && args[0] == "cardstrace")
+        {
+            RunCardsTrace(args.Length > 1 ? int.Parse(args[1]) : 1);
+            return;
+        }
         int matches = args.Length > 0 ? int.Parse(args[0]) : 3000;
         RunLab(matches, carryover: false);
         Console.WriteLine();
@@ -41,6 +46,79 @@ class Program
         Console.WriteLine();
         Console.WriteLine("=== MODO CARTAS (copia de Yomi 2) ===");
         RunCardsLab(matches);
+    }
+
+    // Traza LEGIBLE de una partida completa de cartas, turno a turno: la
+    // radiografía de "¿la pelea tiene sentido?" — manos, robos, exchanges,
+    // openers, resultado y HP. Uso: cardstrace [seed]
+    static void RunCardsTrace(int seed)
+    {
+        string CardName(int c) => CardCatalog.All[c].Name;
+        string Pile(System.Collections.Generic.List<int> pile)
+        {
+            var counts = new int[CardCatalog.All.Length];
+            foreach (int c in pile) counts[c]++;
+            var sb = new System.Text.StringBuilder();
+            for (int c = 0; c < counts.Length; c++)
+            {
+                if (counts[c] == 0) continue;
+                if (sb.Length > 0) sb.Append(' ');
+                sb.Append(CardCatalog.All[c].Short);
+                if (counts[c] > 1) sb.Append('x').Append(counts[c]);
+            }
+            return sb.Length == 0 ? "-" : sb.ToString();
+        }
+
+        var ai0 = new SimpleAI(seed * 7919 + 13);
+        var ai1 = new SimpleAI(seed * 104729 + 57);
+        var s = new CardSim(seed, firstPlayer: 0);
+        Console.WriteLine($"=== PARTIDA (seed {seed}) — HP {CardConfig.MaxHp} cada uno, P0 empieza ===");
+        int guard = 0;
+        while (!s.Over && guard++ < 200)
+        {
+            int active = s.Active;
+            int deckBefore = s.Deck[active].Count;
+            s.StartTurn();
+            if (s.Over) { Console.WriteLine($"T{s.Turn}: TIME OVER al robar (mazos agotados)"); break; }
+            Console.WriteLine($"\nT{s.Turn} — turno de P{active} (robó {deckBefore - s.Deck[active].Count})");
+            int exBefore = s.ExchangesLeft;
+            (active == 0 ? ai0 : ai1).DoCardExchanges(s);
+            if (s.ExchangesLeft < exBefore)
+                Console.WriteLine($"   P{active} cambió {exBefore - s.ExchangesLeft} carta(s) con el descarte");
+            Console.WriteLine($"   mano P0 [{Pile(s.Hand[0])}]  ·  mano P1 [{Pile(s.Hand[1])}]");
+            string kd = s.KnockedDown[0] ? "  P0 DERRIBADO" : s.KnockedDown[1] ? "  P1 DERRIBADO" : "";
+            if (kd != "") Console.WriteLine($"   {kd}");
+            int h0 = ai0.PickCardOpener(s, 0), h1 = ai1.PickCardOpener(s, 1);
+            var r = s.Resolve(h0, h1);
+            if (s.AwaitingHitBack)
+            {
+                int side = s.HitBackSide;
+                r = s.HitBack((side == 0 ? ai0 : ai1).PickCardHitBack(s, side));
+            }
+            ai0.ObserveCard(r.Card1);
+            ai1.ObserveCard(r.Card0);
+            string res = $"   {CardName(r.Card0)}  VS  {CardName(r.Card1)}";
+            if (r.ProjCancel) res += "  → proyectiles anulados";
+            if (r.Blocked0) res += "  → P0 bloquea bien";
+            if (r.Blocked1) res += "  → P1 bloquea bien";
+            if (r.WrongBlock0) res += "  → P0 bloqueó MAL la altura";
+            if (r.WrongBlock1) res += "  → P1 bloqueó MAL la altura";
+            if (r.Dodged0) res += "  → P0 esquiva";
+            if (r.Dodged1) res += "  → P1 esquiva";
+            if (r.HitBackCard >= 0) res += $"  → P{r.HitBackSide} castiga con {CardName(r.HitBackCard)}";
+            if (r.Dmg0 > 0) res += $"  → P0 recibe {r.Dmg0}" + (r.Chip0 > 0 ? $" ({r.Chip0} chip)" : "");
+            if (r.Dmg1 > 0) res += $"  → P1 recibe {r.Dmg1}" + (r.Chip1 > 0 ? $" ({r.Chip1} chip)" : "");
+            if (r.KdNext0) res += "  → P0 derribado";
+            if (r.KdNext1) res += "  → P1 derribado";
+            if (r.Returned0) res += "  → la de P0 vuelve";
+            if (r.Returned1) res += "  → la de P1 vuelve";
+            if (r.Wild0 + r.Wild1 > 0) res += $"  → wild swing x{r.Wild0 + r.Wild1}";
+            if (r.Dmg0 == 0 && r.Dmg1 == 0 && !r.Blocked0 && !r.Blocked1 && !r.Dodged0 && !r.Dodged1 && !r.ProjCancel)
+                res += "  → nadie conecta";
+            Console.WriteLine(res);
+            Console.WriteLine($"   HP: P0 {s.Hp[0]} · P1 {s.Hp[1]}   mazos: {s.Deck[0].Count}/{s.Deck[1].Count}   descartes: [{Pile(s.Discard[0])}] [{Pile(s.Discard[1])}]");
+        }
+        Console.WriteLine($"\n=== FIN en {s.Turn} turnos — {(s.Winner < 0 ? "EMPATE" : $"gana P{s.Winner}")} (HP {s.Hp[0]} vs {s.Hp[1]}) ===");
     }
 
     // Lab del modo CARTAS: partidas completas sobre CardSim con la IA de

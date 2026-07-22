@@ -174,6 +174,61 @@ caza al que bloquea bajo esperando A/B.
   dodge→backdash) y HP del HUD proporcional (los números exactos van en
   prompt y popups).
 
+## 3. Auditoría mecánica por mecánica (2026-07-21, segunda pasada)
+
+Mapeo contra el rulebook v7.7. ✔ = implementado fiel · ✂ = cortado a
+propósito (con el porqué) · ≈ = adaptado.
+
+| Mecánica de Yomi 2 | Estado | Dónde / por qué |
+|---|---|---|
+| Mazo de 30 por personaje | ≈ | 24 (sin supers ×2 ni ability ×2) — `CardCatalog.DeckCounts` |
+| Mano inicial: blocks + throw + burst + 4 | ≈ | 7 cartas (sin Burst: no hay gems) — test lo clava |
+| Supers al descarte en el setup | ✂ | no hay supers |
+| Turnos alternados, sorteo inicial | ✔ | `Active`, alterna por revancha |
+| Draw 2 (1 el primero) · rival no roba en tu turno | ✔ | `StartTurn` + test |
+| Mano máxima 12 (exceso al descarte) | ✔ | `AddToHand` + test |
+| Exchange (1/turno · Grave: 2, su innate) | ✔ | `Exchange`, solo normales, solo el activo + test |
+| Ability (Wind Summon) | ✂ | buffea combos y supers: sin ellos no hace nada |
+| Power Up (par → meter/fetch super) | ✂ | paga en super meter, que no existe |
+| Gem Storm / Burst / gem specials | ✂ | sin gems (nota: el Burst era la válvula del derribado) |
+| Opener boca abajo (activo) → boca arriba → reveal | ≈ | picks simultáneos en secreto — equivalente en información |
+| Attack > Throw (sin importar speed) | ✔ | test: E (s4) le gana al Agarre |
+| Throw > Block y Dodge · derriba | ✔ | tests |
+| Block/Dodge > Attack con altura correcta | ✔ | tests de las 6 combinaciones de altura |
+| Strike vs strike: speed, empate al ACTIVO | ✔ | test con Active=1 |
+| Throw vs throw: speed, empate al activo | ✔ | test |
+| Proyectil vs proyectil: SOLO nivel; igual = se anulan | ✔ | test X vs X |
+| Proyectil vs strike: speed normal | ✔ | rama general |
+| Bloqueo exitoso: roba 1 | ✔ | test |
+| Lockdown (X): sin robo al bloquearlo | ✔ | test |
+| Block damage (chip) de los especiales | ✔ | X 4 · Y 2 · Z 1 — el chip NO es "hit" |
+| Recurring: vuelve si abriste y no te pegaron | ✔ | blocks y X + límite de mano |
+| Unsafe on block (Y): robás y devolvés UN golpe | ✔ | test, con el orden oficial (robo → castigo → recurring) |
+| Dodge: castiga strikes, NO proyectiles | ✔ | test |
+| Castigo = ender (sin combo después) | ✔ | no hay combos: un solo golpe |
+| Castigo con pump | ✂ | pump es parte del sistema de combos |
+| Knockdown: sin dodges + speeds rivales a 10, UN combate | ✔ | test (D s5→10 le gana al A s8 del caído) |
+| Ambos derribados = se cancela | ✔ | `FinishCombat` |
+| The Edge (+3 speed, máx 10) | ✂ | ninguna carta de Grave lo genera sin gems |
+| Wild swing (opener inválido → mazo) | ✔ | test (dodge derribado) |
+| Remezcla ÚNICA dejando blocks (y supers) afuera | ✔ | test; sin supers quedan los 2 blocks |
+| Segunda vez sin mazo = TIME OVER por vida | ✔ | test + fix: si salta a mitad de combate, se juzga DESPUÉS de aplicar el daño del turno |
+| Descarte público y consultable | ✔ | HUD: descarte compacto de AMBOS lados siempre visible |
+| Combos (chains, linkers, enders, combo points) | ✂ | pedido explícito: "sin combos por ahora" |
+| Super meter por chains | ✂ | ídem |
+
+### Qué asegura que una pelea completa funcione
+
+- **Ataques**: 8 cartas de golpe + 3 agarres por mazo; la IA recupera
+  golpes por exchange si se queda sin ataques en mano.
+- **Defensas**: 2 bloqueos (recurring: casi siempre disponibles), 3
+  esquives, y el exchange para recuperarlos del descarte.
+- **Recupero de cartas**: robo 2/turno + robo por bloqueo + recurring
+  (blocks y X vuelven solos) + exchange ×2 — la mano promedio del lab es
+  8.9/12: la economía respira.
+- **Cierre**: KO en el 99.9% de 4000 partidas (14.4 turnos promedio);
+  el 0.1% restante termina por time over con juez por vida.
+
 ### Después (anotado, no ahora)
 
 - Combos con combo points (la razón de ser de las letras A-E).

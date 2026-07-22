@@ -418,11 +418,29 @@ namespace LagFighter
                     want = s.Discard[me].IndexOf(CardCatalog.HighBlock);
                 if (want < 0 && !s.Hand[me].Contains(CardCatalog.Throw))
                     want = s.Discard[me].IndexOf(CardCatalog.Throw);
+                // sin ataques en mano: recuperar el mejor golpe del descarte
+                if (want < 0 && !HasAttackInHand(s, me))
+                {
+                    int bestDmg = 0;
+                    for (int d = 0; d < s.Discard[me].Count; d++)
+                    {
+                        var def = CardCatalog.All[s.Discard[me][d]];
+                        if (def.Kind == CardKind.Attack && def.IsNormal && def.Damage > bestDmg)
+                        { bestDmg = def.Damage; want = d; }
+                    }
+                }
                 if (want < 0) return;
 
                 int give = CardToGive(s, me);
                 if (give < 0 || !s.Exchange(give, want)) return;
             }
+        }
+
+        static bool HasAttackInHand(CardSim s, int me)
+        {
+            foreach (int c in s.Hand[me])
+                if (CardCatalog.All[c].Kind == CardKind.Attack) return true;
+            return false;
         }
 
         // Qué soltar en el exchange: un dodge sobrante o la normal repetida más débil.

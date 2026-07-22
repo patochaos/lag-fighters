@@ -452,6 +452,17 @@ y la UI solo leen. Entrada **CARTAS** en el menú (vs IA). Tests por regla
 en `Tools/SimTests` (15), lab `cards N` en `Tools/SimHarness` (4000
 partidas: KO 99.9%, 14.4 turnos, P0/P1 parejo, ninguna carta domina).
 
+**Segunda pasada (mismo día, auditoría completa)**: mapeo mecánica por
+mecánica contra el rulebook en YOMI2-CARDS.md §3 (qué está fiel, qué se
+cortó y por qué). Fixes: el time over a mitad de combate juzgaba con el HP
+viejo; la IA no recuperaba ataques por exchange; el castigo del humano
+ahora muestra las cartas reveladas ANTES de elegir. UI: panel por lado con
+**HP reales /45** (los pips de 6 son proporcionales), mano/mazo/**descarte
+público compacto de ambos** (regla de Yomi 2: siempre consultable),
+derribo y cambios restantes; guard bar apagada (acá no existe). Traza
+legible de partidas: `dotnet run --project Tools/SimHarness -- cardstrace
+[seed]` — la radiografía de que la pelea tiene sentido.
+
 ## Historial de pivots
 
 1. **Delay queue continuo** (4s de delay, timeline deslizante) — descartado.

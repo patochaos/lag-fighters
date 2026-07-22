@@ -405,6 +405,12 @@ namespace LagFighter
                     ? (Hp[0] == Hp[1] ? -1 : (Hp[0] > Hp[1] ? 0 : 1))
                     : (Hp[0] <= 0 ? 1 : 0);
             }
+            else if (Over)
+            {
+                // TIME OVER saltó a mitad del combate (robo por bloqueo con el
+                // mazo seco): re-juzgar con el daño de ESTE turno ya aplicado
+                Winner = Hp[0] == Hp[1] ? -1 : (Hp[0] > Hp[1] ? 0 : 1);
+            }
 
             Active = 1 - Active;
         }

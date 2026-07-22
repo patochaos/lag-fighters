@@ -1109,11 +1109,15 @@ namespace LagFighter
                     _cardsResult = Cards.HitBack(_ai.PickCardHitBack(Cards, 1));
                 else
                 {
-                    // castigo del humano: la mano se re-ofrece filtrada a golpes/agarres
+                    // castigo del humano: la mano se re-ofrece filtrada a golpes/
+                    // agarres, y las cartas reveladas quedan a la vista (chicas)
+                    // para que se entienda QUÉ estás castigando
                     CardsPunishing = true;
-                    _menu.OpenCardsPunish();
                     string why = CardCatalog.All[_cardsResult.Card1].UnsafeOnBlock
                         ? "bloqueaste un move UNSAFE" : "esquivaste un strike";
+                    _hud.ShowCardsReveal(_cardsResult.Card0, _cardsResult.Card1, $"{why}: elegí el castigo");
+                    _hud.DockYomiCards();
+                    _menu.OpenCardsPunish();
                     _hud.SetPrompt($"¡CASTIGO! {why}: devolvé UN golpe o agarre (ESPACIO = no castigar)");
                     return;
                 }
@@ -1159,7 +1163,10 @@ namespace LagFighter
                 var atk = CardCatalog.All[r.Card(1 - b)];
                 string who = b == 0 ? "BLOQUEÁS" : "BLOQUEA";
                 string extra = atk.BlockDamage > 0 ? $" (chip −{atk.BlockDamage})" : "";
-                if (atk.UnsafeOnBlock) extra += " · ¡UNSAFE: hay castigo!";
+                if (atk.UnsafeOnBlock)
+                    extra += r.HitBackCard >= 0
+                        ? $" · ¡UNSAFE! castiga con {N(r.HitBackCard)}"
+                        : " · UNSAFE, pero no castiga";
                 else if (atk.Lockdown) extra += " · lockdown: sin robo";
                 else extra += " · roba 1";
                 return $"{who} bien la altura de {N(r.Card(1 - b))}{extra}";

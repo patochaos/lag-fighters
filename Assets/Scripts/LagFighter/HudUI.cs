@@ -43,6 +43,9 @@ namespace LagFighter
         readonly Image[][] _stockPips = new Image[2][];
         readonly Text[] _stockLabel = new Text[2];
         readonly Text[] _openingsLabel = new Text[2];
+        // panel del modo CARTAS: los números reales por lado (HP /45, mano,
+        // mazo y el descarte PÚBLICO compacto — regla de Yomi 2: siempre visible)
+        readonly Text[] _cardsInfo = new Text[2];
         readonly Image[] _yomiCard = new Image[2];
         readonly Image[] _yomiCardEdge = new Image[2];
         readonly Text[] _yomiCardName = new Text[2];
@@ -553,6 +556,15 @@ namespace LagFighter
             apT.rectTransform.pivot = new Vector2(left ? 0f : 1f, 0.5f);
             _apLabel[i] = apT;
             _apLabel[i].gameObject.SetActive(false);
+
+            // panel del modo CARTAS bajo la vida (a −186 como el stock: no
+            // pisa el botón OPC del lado derecho): HP exacto + mazo/mano/
+            // descarte público. Los pips de vida son 6 y acá el HP es 45.
+            _cardsInfo[i] = MakeTextP(_canvasRt, "CardsInfo" + i, "", new Vector2(left ? 0f : 1f, 1f),
+                new Vector2(sign * 28f, -186f), new Vector2(560f, 44f), 8,
+                new Color(1f, 1f, 1f, 0.8f), left ? TextAnchor.UpperLeft : TextAnchor.UpperRight);
+            _cardsInfo[i].rectTransform.pivot = new Vector2(left ? 0f : 1f, 1f);
+            _cardsInfo[i].gameObject.SetActive(false);
         }
 
         // circulitos procedurales (el proyecto no usa assets: todo se genera).
@@ -804,7 +816,9 @@ namespace LagFighter
                     : lf.ArmHp <= 0f && lf.LegHp <= 0f ? "SIN BRAZO · SIN PIERNA"
                     : lf.ArmHp <= 0f ? "SIN BRAZO" : lf.LegHp <= 0f ? "SIN PIERNA" : "";
 
-                float g = sim.Fighters[i].Guard / SimConfig.GuardMax;
+                // en CARTAS no hay guard gauge: la barra vacía en vez de una
+                // llena eterna que no significa nada
+                float g = SimConfig.CardsEnabled ? 0f : sim.Fighters[i].Guard / SimConfig.GuardMax;
                 _guardFill[i].rectTransform.sizeDelta = new Vector2(GuardBarW * g, 9f);
                 _guardFill[i].color = g <= 0.25f
                     ? Color.Lerp(Palette.Guard, new Color(1f, 0.2f, 0.15f), Mathf.PingPong(Time.time * 4f, 1f))
@@ -890,6 +904,25 @@ namespace LagFighter
                         new Vector2(sSign * 28f, -186f - rowsUsed * (dotS + 6f) - 10f);
                 }
 
+                // panel del modo CARTAS: HP real, derribo, cambios del turno
+                // y el descarte público de AMBOS lados (regla: siempre visible)
+                bool cardsOn = SimConfig.CardsEnabled && _mc.Cards != null &&
+                               flow != MatchController.Flow.ModeSelect;
+                if (_cardsInfo[i].gameObject.activeSelf != cardsOn) _cardsInfo[i].gameObject.SetActive(cardsOn);
+                if (cardsOn)
+                {
+                    var cs = _mc.Cards;
+                    string kd = cs.KnockedDown[i] ? "  ·  ¡DERRIBADO!" : "";
+                    string ex = i == cs.Active && i == 0 && cs.ExchangesLeft > 0 &&
+                                flow == MatchController.Flow.Planning ? $"  ·  cambios ×{cs.ExchangesLeft}" : "";
+                    string turno = i == cs.Active ? "  ·  activo (gana empates)" : "";
+                    _cardsInfo[i].text =
+                        $"HP {cs.Hp[i]}/{CardConfig.MaxHp}{turno}{kd}{ex}\n" +
+                        $"mano {cs.Hand[i].Count} · mazo {cs.Deck[i].Count} · desc: {CardsDiscardCompact(cs.Discard[i])}";
+                    _cardsInfo[i].color = cs.KnockedDown[i]
+                        ? new Color(1f, 0.6f, 0.4f, 0.95f) : new Color(1f, 1f, 1f, 0.8f);
+                }
+
                 for (int w = 0; w < MatchController.RoundsToWin; w++)
                 {
                     var c = _winPips[i][w].color;
@@ -951,6 +984,25 @@ namespace LagFighter
             UpdateBanner(sim, flow);
             UpdateHover();
             UpdateScreenFlash();
+        }
+
+        // El descarte agrupado por carta ("A×2 B AGR X"): info PÚBLICA de
+        // Yomi 2 — de acá salen las lecturas ("ya no tiene bloqueos") y los
+        // cambios propios.
+        static string CardsDiscardCompact(List<int> pile)
+        {
+            if (pile.Count == 0) return "—";
+            var counts = new int[CardCatalog.All.Length];
+            foreach (int c in pile) counts[c]++;
+            var sb = new System.Text.StringBuilder();
+            for (int c = 0; c < counts.Length; c++)
+            {
+                if (counts[c] == 0) continue;
+                if (sb.Length > 0) sb.Append(' ');
+                sb.Append(CardCatalog.All[c].Short);
+                if (counts[c] > 1) sb.Append('×').Append(counts[c]);
+            }
+            return sb.ToString();
         }
 
         // decae rápido: 2-3 frames de blanco y listo (unscaled: el hitstop
