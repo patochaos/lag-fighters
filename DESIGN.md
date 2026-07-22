@@ -457,11 +457,22 @@ mecánica contra el rulebook en YOMI2-CARDS.md §3 (qué está fiel, qué se
 cortó y por qué). Fixes: el time over a mitad de combate juzgaba con el HP
 viejo; la IA no recuperaba ataques por exchange; el castigo del humano
 ahora muestra las cartas reveladas ANTES de elegir. UI: panel por lado con
-**HP reales /45** (los pips de 6 son proporcionales), mano/mazo/**descarte
-público compacto de ambos** (regla de Yomi 2: siempre consultable),
-derribo y cambios restantes; guard bar apagada (acá no existe). Traza
-legible de partidas: `dotnet run --project Tools/SimHarness -- cardstrace
-[seed]` — la radiografía de que la pelea tiene sentido.
+HP reales, mano/mazo/**descarte público compacto de ambos** (regla de
+Yomi 2: siempre consultable), derribo y cambios restantes; guard bar
+apagada (acá no existe). Traza legible: `cardstrace [seed]`.
+
+**v2 (2026-07-22): la copia COMPLETA + Jaina** (ver YOMI2-CARDS.md §0):
+mazos de 30 reales con supers y abilities, super meter (0-3★), Power Up,
+COMBOS enteros (combo points, chains con +1★ por letra, starters/linkers/
+enders, KD solo sin combo), pumps, Invocar Viento / Tiro en Arco (ongoing
+2 combates), innates (doble exchange / Imprudencia), edge en la sim, wild
+swing que DEBE jugar la super con meter. HP reales 90/85. **Dos
+personajes**: Grave y Jaina (selector en el menú, rival sorteado). La mano
+es un abanico estilo **Slay the Spire** (`CardHandUI.cs`): cartas grandes
+solapadas, hover 1.5× al frente, CAMBIO/PODER/PUMP/TERMINAR; el teatro
+actúa el combo entero en secuencia con el move más parecido por carta.
+Único corte: GEMS. Lab: KO 100%, 17 turnos, espejos 50/50, Jaina 60/40
+sobre Grave (matchup real — vigilar con humanos). 119 tests.
 
 ## Historial de pivots
 

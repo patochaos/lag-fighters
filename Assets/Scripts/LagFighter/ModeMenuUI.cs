@@ -206,9 +206,18 @@ namespace LagFighter
             return t;
         }
 
+        // CARTAS: elegir personaje (paso 8) — las cartas y los números salen
+        // del catálogo real, así el menú nunca miente
+        static readonly (string label, string desc)[] CardChars =
+        {
+            ("GRAVE", "HP 90 · combo 4 · DOS cambios por turno · la Espada s11 de reversal y la super esquive que devuelve 40."),
+            ("JAINA", "HP 85 · combo 5 · agresiva: sangra por cartas (Imprudencia), Arco que castiga y supers baratas."),
+        };
+
         int OptionCount => _step == 1 ? Modes.Length :
             _step == 3 ? AIProfiles.Length :
-            _step == 4 ? AIDifficulties.Length : _step == 5 ? OnlineOptions.Length : 0;
+            _step == 4 ? AIDifficulties.Length : _step == 5 ? OnlineOptions.Length :
+            _step == 8 ? CardChars.Length : 0;
 
         public void Open()
         {
@@ -242,6 +251,7 @@ namespace LagFighter
                               _step == 4 ? "IA CUSTOM — ELEGÍ DIFICULTAD" :
                               _step == 5 ? "ONLINE — SALA CON CÓDIGO" :
                               _step == 6 ? "ESCRIBÍ EL CÓDIGO DE LA SALA" :
+                              _step == 8 ? "CARTAS — ELEGÍ TU PERSONAJE" :
                               "ESPERANDO AL RIVAL…";
 
             _bigCode.gameObject.SetActive(_step >= 6);
@@ -271,7 +281,8 @@ namespace LagFighter
                 _cards[i].rectTransform.anchoredPosition = new Vector2(x, y);
                 _cardLabels[i].text = _step == 1 ? Modes[i].label :
                     _step == 3 ? AIProfiles[i].label :
-                    _step == 5 ? OnlineOptions[i].label : AIDifficulties[i].label;
+                    _step == 5 ? OnlineOptions[i].label :
+                    _step == 8 ? CardChars[i].label : AIDifficulties[i].label;
                 _cardLabels[i].fontSize = count >= 4 ? 16 : 24;
             }
             _desc.rectTransform.anchoredPosition = new Vector2(0f, count > 4 ? -145f : -86f);
@@ -289,7 +300,8 @@ namespace LagFighter
             }
             _desc.text = _step == 1 ? Modes[_sel].desc :
                 _step == 3 ? AIProfiles[_sel].desc :
-                _step == 5 ? OnlineOptions[_sel].desc : AIDifficulties[_sel].desc;
+                _step == 5 ? OnlineOptions[_sel].desc :
+                _step == 8 ? CardChars[_sel].desc : AIDifficulties[_sel].desc;
         }
 
         void Confirm(int idx)
@@ -303,9 +315,11 @@ namespace LagFighter
                     _mc.StartMatch(GameMode.VsAI, _lagChoice, 0, AIProfile.Adaptive, AIDifficulty.Normal);
                     return;
                 }
-                if (idx == CardsIdx) // CARTAS: la copia de Yomi 2 contra la IA
+                if (idx == CardsIdx) // CARTAS: primero elegí tu personaje
                 {
-                    _mc.StartMatch(GameMode.VsAI, false, 0, AIProfile.Adaptive, AIDifficulty.Normal, yomi: false, cards: true);
+                    _step = 8;
+                    _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_cardchar", 0), 0, CardChars.Length - 1);
+                    Layout();
                     return;
                 }
                 if (Modes[idx].mode == GameMode.Online)
@@ -343,6 +357,13 @@ namespace LagFighter
                     _step = 6;
                     Layout();
                 }
+                return;
+            }
+            if (_step == 8) // CARTAS: personaje elegido, a jugar
+            {
+                PlayerPrefs.SetInt("lf_menu_cardchar", idx);
+                _mc.StartMatch(GameMode.VsAI, false, 0, AIProfile.Adaptive, AIDifficulty.Normal,
+                    yomi: false, cards: true, cardsChar: idx);
                 return;
             }
             if (_step == 3)

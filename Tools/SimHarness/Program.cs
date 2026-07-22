@@ -48,141 +48,173 @@ class Program
         RunCardsLab(matches);
     }
 
-    // Traza LEGIBLE de una partida completa de cartas, turno a turno: la
-    // radiografía de "¿la pelea tiene sentido?" — manos, robos, exchanges,
-    // openers, resultado y HP. Uso: cardstrace [seed]
+    // Traza LEGIBLE de una partida completa de cartas v2, turno a turno:
+    // manos, main phase (ability/power up/exchange), openers, combos, pumps,
+    // castigos, meter y HP. Uso: cardstrace [seed]
     static void RunCardsTrace(int seed)
     {
-        string CardName(int c) => CardCatalog.All[c].Name;
-        string Pile(System.Collections.Generic.List<int> pile)
+        var s = new CardSim(seed, firstPlayer: 0, CardCatalog.GraveIdx, CardCatalog.JainaIdx);
+        var ai0 = new SimpleAI(seed * 7919 + 13);
+        var ai1 = new SimpleAI(seed * 104729 + 57);
+        string CardName(int side, int c) => s.Def(side, c).Name;
+        string Pile(int side, System.Collections.Generic.List<int> pile)
         {
-            var counts = new int[CardCatalog.All.Length];
+            var counts = new int[CardCatalog.CardsPerChar];
             foreach (int c in pile) counts[c]++;
             var sb = new System.Text.StringBuilder();
             for (int c = 0; c < counts.Length; c++)
             {
                 if (counts[c] == 0) continue;
                 if (sb.Length > 0) sb.Append(' ');
-                sb.Append(CardCatalog.All[c].Short);
+                sb.Append(s.Def(side, c).Short);
                 if (counts[c] > 1) sb.Append('x').Append(counts[c]);
             }
             return sb.Length == 0 ? "-" : sb.ToString();
         }
 
-        var ai0 = new SimpleAI(seed * 7919 + 13);
-        var ai1 = new SimpleAI(seed * 104729 + 57);
-        var s = new CardSim(seed, firstPlayer: 0);
-        Console.WriteLine($"=== PARTIDA (seed {seed}) — HP {CardConfig.MaxHp} cada uno, P0 empieza ===");
+        Console.WriteLine($"=== {s.Chr[0].Name} (HP {s.Chr[0].MaxHp}) vs {s.Chr[1].Name} (HP {s.Chr[1].MaxHp}) — seed {seed}, P0 empieza ===");
         int guard = 0;
         while (!s.Over && guard++ < 200)
         {
             int active = s.Active;
             int deckBefore = s.Deck[active].Count;
             s.StartTurn();
-            if (s.Over) { Console.WriteLine($"T{s.Turn}: TIME OVER al robar (mazos agotados)"); break; }
-            Console.WriteLine($"\nT{s.Turn} — turno de P{active} (robó {deckBefore - s.Deck[active].Count})");
+            if (s.Over) { Console.WriteLine($"T{s.Turn}: TIME OVER al robar"); break; }
+            Console.WriteLine($"\nT{s.Turn} — turno de P{active} ({s.Chr[active].Name}, robó {deckBefore - s.Deck[active].Count})");
             int exBefore = s.ExchangesLeft;
-            (active == 0 ? ai0 : ai1).DoCardExchanges(s);
-            if (s.ExchangesLeft < exBefore)
-                Console.WriteLine($"   P{active} cambió {exBefore - s.ExchangesLeft} carta(s) con el descarte");
-            Console.WriteLine($"   mano P0 [{Pile(s.Hand[0])}]  ·  mano P1 [{Pile(s.Hand[1])}]");
-            string kd = s.KnockedDown[0] ? "  P0 DERRIBADO" : s.KnockedDown[1] ? "  P1 DERRIBADO" : "";
-            if (kd != "") Console.WriteLine($"   {kd}");
+            int meterBefore = s.Meter[active];
+            bool abilityBefore = s.AbilityUsed;
+            bool puBefore = s.PowerUpUsed;
+            (active == 0 ? ai0 : ai1).DoCardMainPhase(s);
+            if (s.AbilityUsed && !abilityBefore) Console.WriteLine($"   P{active} juega su ABILITY ({s.Chr[active].AbilityText.Split(':')[0]})");
+            if (s.PowerUpUsed && !puBefore) Console.WriteLine($"   P{active} hace POWER UP (meter {meterBefore}→{s.Meter[active]})");
+            if (s.ExchangesLeft < exBefore) Console.WriteLine($"   P{active} cambió {exBefore - s.ExchangesLeft} carta(s)");
+            Console.WriteLine($"   mano P0 [{Pile(0, s.Hand[0])}]  ·  mano P1 [{Pile(1, s.Hand[1])}]  ·  meter {s.Meter[0]}/{s.Meter[1]}");
+            if (s.KnockedDown[0]) Console.WriteLine("   P0 DERRIBADO");
+            if (s.KnockedDown[1]) Console.WriteLine("   P1 DERRIBADO");
             int h0 = ai0.PickCardOpener(s, 0), h1 = ai1.PickCardOpener(s, 1);
             var r = s.Resolve(h0, h1);
-            if (s.AwaitingHitBack)
-            {
-                int side = s.HitBackSide;
-                r = s.HitBack((side == 0 ? ai0 : ai1).PickCardHitBack(s, side));
-            }
-            ai0.ObserveCard(r.Card1);
-            ai1.ObserveCard(r.Card0);
-            string res = $"   {CardName(r.Card0)}  VS  {CardName(r.Card1)}";
+            if (s.AwaitingFollowup) (s.FollowSide == 0 ? ai0 : ai1).DoCardFollowup(s);
+            r = s.LastResult;
+            ai0.ObserveCard(s.Def(1, r.Card1).Kind);
+            ai1.ObserveCard(s.Def(0, r.Card0).Kind);
+            string res = $"   {CardName(0, r.Card0)}  VS  {CardName(1, r.Card1)}";
+            if (r.Reckless) res += "  → IMPRUDENCIA (2 y roba)";
+            if (r.Arc0) res += "  → P0 come el ARCO";
+            if (r.Arc1) res += "  → P1 come el ARCO";
             if (r.ProjCancel) res += "  → proyectiles anulados";
             if (r.Blocked0) res += "  → P0 bloquea bien";
             if (r.Blocked1) res += "  → P1 bloquea bien";
-            if (r.WrongBlock0) res += "  → P0 bloqueó MAL la altura";
-            if (r.WrongBlock1) res += "  → P1 bloqueó MAL la altura";
+            if (r.WrongBlock0) res += "  → P0 bloqueó MAL";
+            if (r.WrongBlock1) res += "  → P1 bloqueó MAL";
             if (r.Dodged0) res += "  → P0 esquiva";
             if (r.Dodged1) res += "  → P1 esquiva";
-            if (r.HitBackCard >= 0) res += $"  → P{r.HitBackSide} castiga con {CardName(r.HitBackCard)}";
+            if (r.SuperCounter >= 0) res += $"  → ¡SUPER DODGE de P{r.SuperCounter}: 40!";
+            for (int i = 0; i < 2; i++)
+                if (r.Combo(i).Count > 0)
+                {
+                    var sb = new System.Text.StringBuilder();
+                    foreach (int c in r.Combo(i)) { if (sb.Length > 0) sb.Append('>'); sb.Append(s.Def(i, c).Short); }
+                    res += $"  → COMBO P{i}: {sb}";
+                }
+            if (r.PumpExtra0 > 0) res += $"  → pump P0 +{r.PumpExtra0}";
+            if (r.PumpExtra1 > 0) res += $"  → pump P1 +{r.PumpExtra1}";
+            if (r.HitBackCard >= 0) res += $"  → P{r.HitBackSide} castiga con {CardName(r.HitBackSide, r.HitBackCard)}";
+            if (r.Meter0 > 0) res += $"  → P0 +{r.Meter0} meter";
+            if (r.Meter1 > 0) res += $"  → P1 +{r.Meter1} meter";
             if (r.Dmg0 > 0) res += $"  → P0 recibe {r.Dmg0}" + (r.Chip0 > 0 ? $" ({r.Chip0} chip)" : "");
             if (r.Dmg1 > 0) res += $"  → P1 recibe {r.Dmg1}" + (r.Chip1 > 0 ? $" ({r.Chip1} chip)" : "");
+            if (r.Self0 > 0) res += $"  → P0 se hace {r.Self0}";
+            if (r.Self1 > 0) res += $"  → P1 se hace {r.Self1}";
             if (r.KdNext0) res += "  → P0 derribado";
             if (r.KdNext1) res += "  → P1 derribado";
-            if (r.Returned0) res += "  → la de P0 vuelve";
-            if (r.Returned1) res += "  → la de P1 vuelve";
             if (r.Wild0 + r.Wild1 > 0) res += $"  → wild swing x{r.Wild0 + r.Wild1}";
-            if (r.Dmg0 == 0 && r.Dmg1 == 0 && !r.Blocked0 && !r.Blocked1 && !r.Dodged0 && !r.Dodged1 && !r.ProjCancel)
-                res += "  → nadie conecta";
             Console.WriteLine(res);
-            Console.WriteLine($"   HP: P0 {s.Hp[0]} · P1 {s.Hp[1]}   mazos: {s.Deck[0].Count}/{s.Deck[1].Count}   descartes: [{Pile(s.Discard[0])}] [{Pile(s.Discard[1])}]");
+            Console.WriteLine($"   HP: P0 {s.Hp[0]} · P1 {s.Hp[1]}   mazos: {s.Deck[0].Count}/{s.Deck[1].Count}   desc: [{Pile(0, s.Discard[0])}] [{Pile(1, s.Discard[1])}]");
         }
-        Console.WriteLine($"\n=== FIN en {s.Turn} turnos — {(s.Winner < 0 ? "EMPATE" : $"gana P{s.Winner}")} (HP {s.Hp[0]} vs {s.Hp[1]}) ===");
+        Console.WriteLine($"\n=== FIN en {s.Turn} turnos — {(s.Winner < 0 ? "EMPATE" : $"gana P{s.Winner} ({s.Chr[Math.Max(0, s.Winner)].Name})")} (HP {s.Hp[0]} vs {s.Hp[1]}) ===");
     }
 
-    // Lab del modo CARTAS: partidas completas sobre CardSim con la IA de
-    // openers. Acá se ve si alguna carta domina, cuánto dura una partida,
-    // cuántas terminan por KO vs time over y cómo trabaja la economía de mano.
+    // Lab del modo CARTAS v2: partidas completas con la IA (main phase,
+    // combos, pumps, supers). Rota los matchups Grave/Jaina.
     static void RunCardsLab(int matches)
     {
-        int n = CardCatalog.All.Length;
-        var uses = new long[n];
-        var dmgBy = new long[n];     // daño que causó cada carta (opener + hit-back)
-        long wins0 = 0, wins1 = 0, draws = 0, kos = 0, timeovers = 0, winsFirst = 0, winsSecond = 0;
-        long turnsTotal = 0, wilds = 0, hitbacks = 0, blocksOk = 0, blocksMal = 0;
-        long dodgesOk = 0, projCancels = 0, handSum = 0, handSamples = 0;
+        var wins = new long[2, 2];   // [char0][char1] → wins de P0
+        var games = new long[2, 2];
+        long draws = 0, kos = 0, winsFirst = 0, winsSecond = 0;
+        long turnsTotal = 0, comboCards = 0, combos = 0, pumps = 0, hitbacks = 0;
+        long supersPlayed = 0, meterGained = 0, wilds = 0, arcs = 0, reckless = 0, superCounters = 0;
+        long blocksOk = 0, blocksMal = 0, dodgesOk = 0, projCancels = 0, handSum = 0, handSamples = 0;
+        var usesByChar = new long[2, CardCatalog.CardsPerChar];
 
         for (int m = 0; m < matches; m++)
         {
-            // seeds decorrelacionadas: System.Random con seeds consecutivas
-            // arranca con streams parecidos y sesga el head-to-head
+            int c0 = (m / 2) % 2, c1 = m % 2;
             var ai0 = new SimpleAI(m * 7919 + 13);
             var ai1 = new SimpleAI(m * 104729 + 57);
-            var s = new CardSim(seed: m + 1, firstPlayer: m % 2);
+            var s = new CardSim(seed: m + 1, firstPlayer: (m / 4) % 2, c0, c1);
             int guard = 0;
-            while (!s.Over && guard++ < 400)
+            while (!s.Over && guard++ < 300)
             {
                 s.StartTurn();
                 if (s.Over) break;
-                (s.Active == 0 ? ai0 : ai1).DoCardExchanges(s);
+                (s.Active == 0 ? ai0 : ai1).DoCardMainPhase(s);
                 int h0 = ai0.PickCardOpener(s, 0);
                 int h1 = ai1.PickCardOpener(s, 1);
                 var r = s.Resolve(h0, h1);
-                if (s.AwaitingHitBack)
-                {
-                    int side = s.HitBackSide;
-                    r = s.HitBack((side == 0 ? ai0 : ai1).PickCardHitBack(s, side));
-                }
-                ai0.ObserveCard(r.Card1);
-                ai1.ObserveCard(r.Card0);
+                if (s.AwaitingFollowup) (s.FollowSide == 0 ? ai0 : ai1).DoCardFollowup(s);
+                r = s.LastResult;
+                ai0.ObserveCard(s.Def(1, r.Card1).Kind);
+                ai1.ObserveCard(s.Def(0, r.Card0).Kind);
 
-                uses[r.Card0]++; uses[r.Card1]++;
-                dmgBy[r.Card0] += r.Dmg1 - (r.HitBackSide == 1 && r.HitBackCard >= 0 ? CardCatalog.All[r.HitBackCard].Damage : 0);
-                dmgBy[r.Card1] += r.Dmg0 - (r.HitBackSide == 0 && r.HitBackCard >= 0 ? CardCatalog.All[r.HitBackCard].Damage : 0);
-                if (r.HitBackCard >= 0) { hitbacks++; dmgBy[r.HitBackCard] += CardCatalog.All[r.HitBackCard].Damage; }
+                usesByChar[c0, r.Card0]++;
+                usesByChar[c1, r.Card1]++;
+                for (int i = 0; i < 2; i++)
+                {
+                    int n = r.Combo(i).Count;
+                    if (n > 0) { combos++; comboCards += n; }
+                    foreach (int c in r.Combo(i)) if (s.Def(i, c).IsSuper) supersPlayed++;
+                    if (r.Card(i) >= 0 && s.Def(i, r.Card(i)).IsSuper) supersPlayed++;
+                }
+                meterGained += r.Meter0 + r.Meter1;
+                if (r.PumpExtra0 > 0) pumps++;
+                if (r.PumpExtra1 > 0) pumps++;
+                if (r.HitBackCard >= 0) hitbacks++;
+                if (r.SuperCounter >= 0) superCounters++;
+                if (r.Arc0) arcs++; if (r.Arc1) arcs++;
+                if (r.Reckless) reckless++;
                 wilds += r.Wild0 + r.Wild1;
                 if (r.Blocked0) blocksOk++; if (r.Blocked1) blocksOk++;
                 if (r.WrongBlock0) blocksMal++; if (r.WrongBlock1) blocksMal++;
                 if (r.Dodged0) dodgesOk++; if (r.Dodged1) dodgesOk++;
                 if (r.ProjCancel) projCancels++;
                 handSum += s.Hand[0].Count + s.Hand[1].Count; handSamples += 2;
-                if (r.TimeOver) timeovers++;
             }
             turnsTotal += s.Turn;
+            games[c0, c1]++;
             if (s.Hp[0] <= 0 || s.Hp[1] <= 0) kos++;
-            if (s.Winner == 0) wins0++; else if (s.Winner == 1) wins1++; else draws++;
-            if (s.Winner >= 0) { if (s.Winner == m % 2) winsFirst++; else winsSecond++; }
+            if (s.Winner == 0) wins[c0, c1]++;
+            else if (s.Winner < 0) draws++;
+            if (s.Winner >= 0) { if (s.Winner == (m / 4) % 2) winsFirst++; else winsSecond++; }
         }
 
-        Console.WriteLine($"partidas: {matches} · P0 {wins0} · P1 {wins1} · empates {draws} · gana el que EMPIEZA {winsFirst} vs {winsSecond}");
-        Console.WriteLine($"KO: {100.0 * kos / matches:0.0}% · time over: {100.0 * (matches - kos) / matches:0.0}% · turnos/partida: {(double)turnsTotal / matches:0.0}");
-        Console.WriteLine($"mano promedio: {(double)handSum / Math.Max(1, handSamples):0.0} · bloqueos bien {blocksOk} · mal {blocksMal} · esquives {dodgesOk} · castigos {hitbacks} · wild swings {wilds} · proyectiles anulados {projCancels}");
-        Console.WriteLine($"{"carta",-22}{"usos",8}{"dmg/uso",10}");
-        for (int i = 0; i < n; i++)
+        string[] cn = { "Grave", "Jaina" };
+        Console.WriteLine($"partidas: {matches} · empates {draws} · gana el que EMPIEZA {winsFirst} vs {winsSecond}");
+        Console.WriteLine($"KO: {100.0 * kos / matches:0.0}% · turnos/partida: {(double)turnsTotal / matches:0.0} · mano promedio: {(double)handSum / Math.Max(1, handSamples):0.0}");
+        Console.WriteLine($"combos: {combos} ({(double)comboCards / Math.Max(1, combos):0.0} cartas/combo) · pumps {pumps} · supers jugadas {supersPlayed} · meter por chains {meterGained}");
+        Console.WriteLine($"castigos {hitbacks} · super-dodge counters {superCounters} · arcos {arcs} · imprudencias {reckless} · wild swings {wilds}");
+        Console.WriteLine($"bloqueos bien {blocksOk} · mal {blocksMal} · esquives {dodgesOk} · proyectiles anulados {projCancels}");
+        for (int a = 0; a < 2; a++)
+            for (int b = 0; b < 2; b++)
+                if (games[a, b] > 0)
+                    Console.WriteLine($"  {cn[a]} vs {cn[b]}: {100.0 * wins[a, b] / games[a, b]:0.0}% para {cn[a]} ({games[a, b]} partidas)");
+        for (int c = 0; c < 2; c++)
         {
-            double total = Math.Max(1, uses[i]);
-            Console.WriteLine($"{CardCatalog.All[i].Name,-22}{uses[i],8}{dmgBy[i] / total,10:0.00}");
+            Console.WriteLine($"  usos como opener — {cn[c]}:");
+            var chr = CardCatalog.Chars[c];
+            for (int i = 0; i < CardCatalog.CardsPerChar; i++)
+                if (usesByChar[c, i] > 0)
+                    Console.WriteLine($"    {chr.Cards[i].Name,-26}{usesByChar[c, i],8}");
         }
     }
 

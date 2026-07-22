@@ -1,9 +1,54 @@
-# Modo CARTAS — la copia de Yomi 2 (2026-07-21)
+# Modo CARTAS — la copia de Yomi 2
 
-> Objetivo (pedido de Patricio): re-imaginar el combate como cartas. Copia
-> casi exacta de **Yomi 2** de Sirlin, simplificada: **sin combos ni supers
-> por ahora**, el resto igual. Un solo personaje (Grave, el shoto). Es un
-> MODO nuevo — los modos clásico y YOMI discreto siguen intactos.
+> Objetivo (pedido de Patricio): re-imaginar el combate como cartas, copia
+> de **Yomi 2** de Sirlin. La v1 (2026-07-21) cortaba combos y supers; la
+> **v2 (2026-07-22) es la copia COMPLETA**: combos, super meter, supers,
+> power up, abilities, pumps, edge y DOS personajes (Grave y Jaina). Lo
+> único que queda afuera son los GEMS (customización aparte del core).
+> Es un MODO nuevo — clásico y YOMI discreto siguen intactos.
+
+## 0. La v2 en una pantalla (2026-07-22)
+
+- **Mazos de 30 REALES**: 10 normales A-E, 3 agarres, 3 esquives, 2 blocks,
+  X/Y/Z ×2, S1/S2 ×2 (una copia de cada super arranca en el DESCARTE,
+  recuperable con Power Up) y la ability ×2. HP reales: Grave 90, Jaina 85.
+- **Super meter (0-3 ★)**: se gana con Power Up (par descartado: +2, o
+  super del descarte +1) y con **chain combos** (+1 por paso de letra,
+  cobrado al instante — podés generar el meter de la super DENTRO del combo
+  que la termina, como en el rulebook).
+- **Combos completos**: combo points por personaje (Grave 4, Jaina 5),
+  chains (A→B→C…), starters (agarre), linkers (Z), enders (X/Y/S1),
+  can't-combo (S1 de Jaina). El KNOCKDOWN del agarre solo queda si NO
+  seguís de combo; el último move del combo decide KD/edge.
+- **Pumps**: Z quema el otro Z (+8/+7), la Y de Jaina quema cualquier carta
+  (+5), su S1 quema hasta 2 supers (+9 c/u). No gastan combo points.
+- **Abilities ongoing (2 combates)**: **Invocar Viento** (Grave): proyectil
+  Nv.2 que le gana a esquives, +4/+2, supers a 2 CP (habilita Throw>S1).
+  **Tiro en Arco** (Jaina): el rival que abre con ataque come 7 y no
+  combea/pumpea; con bloqueo come 5 chip; la Y de Jaina pasa a ser segura.
+- **Innates**: Grave cambia DOS veces por turno; Jaina (Imprudencia) si
+  cierra su main phase con ambos blocks en el descarte: −2 HP y roba 1.
+- **Supers**: Grave S1 Corazón de Dragón (s15, 20, unsafe, ★★) y S2 Poder
+  de las Tormentas (★★★, super esquive: evita y devuelve 40 a strikes);
+  Jaina S1 Dragón Rojo (★, s12, 10, sin combo, pump +9×2) y S2 Aliento de
+  Dragón (★★, proyectil Nv.3, 18). El wild swing que da una super con
+  meter DEBE jugarla (regla real).
+- **UI nueva**: mano estilo **Slay the Spire** (`CardHandUI.cs`) — abanico
+  de cartas grandes solapadas abajo, hover que agranda 1.5× y trae al
+  frente, speed/daño en números grandes, estrellas de costo; botones
+  CAMBIO / PODER (par → meter o super) / PUMP / TERMINAR-PASAR; pickers
+  modales para el descarte y el beneficio del poder. Selector de personaje
+  en el menú (GRAVE/JAINA; el rival lo sortea la casa).
+- **Teatro**: el combo entero se ACTÚA en secuencia (cada carta con el move
+  clásico más parecido: A/B→jab, C/D/E→golpe fuerte, X→proyectil,
+  Y→shoryuken, Z→tatsu, S1/S2 de Jaina→Shinku, agarre→agarre); la
+  duración escala con el largo del combo.
+- **Lab v2** (4000 partidas, IA con main phase completa): KO 100%, 17
+  turnos/partida, espejos 50/50, **Jaina 60/40 sobre Grave** (matchup real:
+  S1 barata + Y s14 + chip 5 — vigilar con humanos), 16.7k combos, 4.6k
+  pumps, 4.8k supers jugadas, 4.1k meter por chains, 1.6k imprudencias.
+  Tests: **119 ok** (uno por regla, incluidos los combos del rulebook:
+  Throw>D>E = 20+1★ exacto).
 
 ## 1. Investigación — las reglas reales de Yomi 2
 
@@ -62,8 +107,8 @@ sirlin.net ("Introducing Yomi 2").
   próximo combate: tus **dodges quedan deshabilitados** y los ataques y
   throws rivales más lentos que speed 10 **se aceleran a 10**. Dura UN
   combate. Ambos derribados = se cancela.
-- **The Edge**: +3 speed (máx 10) por un combate. Grave no lo genera sin
-  gems → queda anotado, no implementado.
+- **The Edge**: +3 speed (máx 10) por un combate. Implementado en la sim;
+  ni Grave ni Jaina lo generan sin gems.
 - **Wild swing**: si tu opener es inválido (dodge estando derribado, super
   sin meter…), lo descartás y jugás la carta de arriba del mazo como opener,
   repitiendo hasta que salga una válida.
@@ -76,8 +121,8 @@ sirlin.net ("Introducing Yomi 2").
   recuperables por exchange). La SEGUNDA vez: **TIME OVER**, gana el que
   tiene más HP.
 - Los combos multiplican daño y generan super meter (A→B→C = +2 meter);
-  cada personaje tiene un tope de combo points. **Todo esto queda AFUERA
-  en esta primera versión.**
+  cada personaje tiene un tope de combo points. **Implementado completo en
+  la v2.**
 
 ### El mazo de Grave (real, Mizuumi) — HP 90, Zoning, max combo 4
 
@@ -98,6 +143,21 @@ sirlin.net ("Introducing Yomi 2").
 | S1. Dragonheart | 2 | Super | 15 | 20 | 1 | Mid | FUERA (sin supers) |
 | S2. True Power of Storms | 2 | Super dodge | — | 40 | — | — | FUERA |
 | Wind Summon | 2 | Ability | — | — | — | — | FUERA (buffea combos/supers) |
+
+### El mazo de Jaina (real, Mizuumi) — HP 85, Zoning, max combo 5
+
+Normales idénticas a Grave (regla de Yomi 2: el esqueleto es común).
+Innate **Imprudencia**: cerrar la main phase con ambos blocks en el
+descarte = −2 HP y roba 1 (la agresión paga cartas con sangre).
+
+| Carta | Speed | Dmg | Chip | Notas |
+|---|---|---|---|---|
+| X. Flame Arrow | 7 | 7 | **5** | Proyectil Nv.1, Recurring, Lockdown, ender 1CP |
+| Y. Dragonheart | **14** | 8 | 1 | Unsafe, pump any+5, **−5 propio** (gratis con HP ≤ 35), segura con Arco, ender 3CP |
+| Z. Crossfire Kick | 8 | 6 | 3 | High, linker 2CP, pump Z+7 |
+| S1. Red Dragon | 12 | 10 | 2 | **★**, sin combo, unsafe, pump 2 supers +9 c/u |
+| S2. Dragon's Breath | 8 | 18 | 4 | **★★**, proyectil **Nv.3**, ender 2CP |
+| Tiro en Arco (ability) | — | — | — | ongoing 2 combates: ataque rival abre → 7 y sin combo/pump · bloqueo rival → 5 chip |
 
 La lógica del personaje: A/B pegan BAJO y rápido, D/E pegan ALTO y fuerte
 pero lento → el speed premia el golpe débil y el daño premia el lento: la
@@ -183,13 +243,13 @@ propósito (con el porqué) · ≈ = adaptado.
 |---|---|---|
 | Mazo de 30 por personaje | ≈ | 24 (sin supers ×2 ni ability ×2) — `CardCatalog.DeckCounts` |
 | Mano inicial: blocks + throw + burst + 4 | ≈ | 7 cartas (sin Burst: no hay gems) — test lo clava |
-| Supers al descarte en el setup | ✂ | no hay supers |
+| Supers al descarte en el setup | ✔ | v2: una copia de cada una, recuperables |
 | Turnos alternados, sorteo inicial | ✔ | `Active`, alterna por revancha |
 | Draw 2 (1 el primero) · rival no roba en tu turno | ✔ | `StartTurn` + test |
 | Mano máxima 12 (exceso al descarte) | ✔ | `AddToHand` + test |
 | Exchange (1/turno · Grave: 2, su innate) | ✔ | `Exchange`, solo normales, solo el activo + test |
-| Ability (Wind Summon) | ✂ | buffea combos y supers: sin ellos no hace nada |
-| Power Up (par → meter/fetch super) | ✂ | paga en super meter, que no existe |
+| Ability (Wind Summon / Arc Shot) | ✔ | v2: ongoing 2 combates, con tests |
+| Power Up (par → meter/fetch super) | ✔ | v2: ambas ramas, con test |
 | Gem Storm / Burst / gem specials | ✂ | sin gems (nota: el Burst era la válvula del derribado) |
 | Opener boca abajo (activo) → boca arriba → reveal | ≈ | picks simultáneos en secreto — equivalente en información |
 | Attack > Throw (sin importar speed) | ✔ | test: E (s4) le gana al Agarre |
@@ -206,16 +266,16 @@ propósito (con el porqué) · ≈ = adaptado.
 | Unsafe on block (Y): robás y devolvés UN golpe | ✔ | test, con el orden oficial (robo → castigo → recurring) |
 | Dodge: castiga strikes, NO proyectiles | ✔ | test |
 | Castigo = ender (sin combo después) | ✔ | no hay combos: un solo golpe |
-| Castigo con pump | ✂ | pump es parte del sistema de combos |
+| Castigo con pump | ✔ | v2 |
 | Knockdown: sin dodges + speeds rivales a 10, UN combate | ✔ | test (D s5→10 le gana al A s8 del caído) |
 | Ambos derribados = se cancela | ✔ | `FinishCombat` |
-| The Edge (+3 speed, máx 10) | ✂ | ninguna carta de Grave lo genera sin gems |
+| The Edge (+3 speed, máx 10) | ≈ | v2: el efecto está implementado; ni Grave ni Jaina lo generan sin gems |
 | Wild swing (opener inválido → mazo) | ✔ | test (dodge derribado) |
 | Remezcla ÚNICA dejando blocks (y supers) afuera | ✔ | test; sin supers quedan los 2 blocks |
 | Segunda vez sin mazo = TIME OVER por vida | ✔ | test + fix: si salta a mitad de combate, se juzga DESPUÉS de aplicar el daño del turno |
 | Descarte público y consultable | ✔ | HUD: descarte compacto de AMBOS lados siempre visible |
-| Combos (chains, linkers, enders, combo points) | ✂ | pedido explícito: "sin combos por ahora" |
-| Super meter por chains | ✂ | ídem |
+| Combos (chains, linkers, enders, combo points) | ✔ | v2 completo, con los combos del rulebook como tests |
+| Super meter por chains | ✔ | v2: +1 por paso de letra, al instante |
 
 ### Qué asegura que una pelea completa funcione
 

@@ -904,21 +904,24 @@ namespace LagFighter
                         new Vector2(sSign * 28f, -186f - rowsUsed * (dotS + 6f) - 10f);
                 }
 
-                // panel del modo CARTAS: HP real, derribo, cambios del turno
-                // y el descarte público de AMBOS lados (regla: siempre visible)
+                // panel del modo CARTAS: HP real, meter (★), ability activa,
+                // derribo y el descarte público de AMBOS lados
                 bool cardsOn = SimConfig.CardsEnabled && _mc.Cards != null &&
                                flow != MatchController.Flow.ModeSelect;
                 if (_cardsInfo[i].gameObject.activeSelf != cardsOn) _cardsInfo[i].gameObject.SetActive(cardsOn);
                 if (cardsOn)
                 {
                     var cs = _mc.Cards;
+                    string stars = new string('★', cs.Meter[i]) + new string('☆', CardConfig.MeterCap - cs.Meter[i]);
                     string kd = cs.KnockedDown[i] ? "  ·  ¡DERRIBADO!" : "";
+                    string ab = cs.Ongoing[i] > 0
+                        ? $"  ·  {cs.Chr[i].Cards[CardCatalog.Ability].Name.ToUpperInvariant()} ×{cs.Ongoing[i]}" : "";
                     string ex = i == cs.Active && i == 0 && cs.ExchangesLeft > 0 &&
                                 flow == MatchController.Flow.Planning ? $"  ·  cambios ×{cs.ExchangesLeft}" : "";
-                    string turno = i == cs.Active ? "  ·  activo (gana empates)" : "";
+                    string turno = i == cs.Active ? "  ·  activo" : "";
                     _cardsInfo[i].text =
-                        $"HP {cs.Hp[i]}/{CardConfig.MaxHp}{turno}{kd}{ex}\n" +
-                        $"mano {cs.Hand[i].Count} · mazo {cs.Deck[i].Count} · desc: {CardsDiscardCompact(cs.Discard[i])}";
+                        $"{cs.Chr[i].Name} · HP {cs.Hp[i]}/{cs.Chr[i].MaxHp} · {stars}{turno}{kd}{ab}{ex}\n" +
+                        $"mano {cs.Hand[i].Count} · mazo {cs.Deck[i].Count} · desc: {CardsDiscardCompact(cs, i)}";
                     _cardsInfo[i].color = cs.KnockedDown[i]
                         ? new Color(1f, 0.6f, 0.4f, 0.95f) : new Color(1f, 1f, 1f, 0.8f);
                 }
@@ -989,17 +992,18 @@ namespace LagFighter
         // El descarte agrupado por carta ("A×2 B AGR X"): info PÚBLICA de
         // Yomi 2 — de acá salen las lecturas ("ya no tiene bloqueos") y los
         // cambios propios.
-        static string CardsDiscardCompact(List<int> pile)
+        static string CardsDiscardCompact(CardSim s, int side)
         {
+            var pile = s.Discard[side];
             if (pile.Count == 0) return "—";
-            var counts = new int[CardCatalog.All.Length];
+            var counts = new int[CardCatalog.CardsPerChar];
             foreach (int c in pile) counts[c]++;
             var sb = new System.Text.StringBuilder();
             for (int c = 0; c < counts.Length; c++)
             {
                 if (counts[c] == 0) continue;
                 if (sb.Length > 0) sb.Append(' ');
-                sb.Append(CardCatalog.All[c].Short);
+                sb.Append(s.Def(side, c).Short);
                 if (counts[c] > 1) sb.Append('×').Append(counts[c]);
             }
             return sb.ToString();
@@ -1699,51 +1703,58 @@ namespace LagFighter
         }
 
         // ---- modo CARTAS: color e info por carta (mismo lenguaje visual
-        // que las cartas de revelación del modo YOMI) ----
-        public static Color CardIdColor(int card)
+        // que las cartas de revelación del modo YOMI; por CardDef porque
+        // cada personaje tiene su mazo) ----
+        public static Color CardDefColor(in CardDef d, int card)
         {
-            var d = CardCatalog.All[card];
+            if (d.IsSuper) return new Color(1f, 0.78f, 0.2f);           // supers: doradas
             switch (d.Kind)
             {
                 case CardKind.Throw: return new Color(0.85f, 0.3f, 0.75f);
                 case CardKind.Block: return new Color(0.35f, 0.55f, 0.85f);
                 case CardKind.Dodge: return new Color(0.25f, 0.75f, 0.95f);
+                case CardKind.Ability: return new Color(0.5f, 0.85f, 0.6f);
             }
             if (d.Projectile) return new Color(0.3f, 0.55f, 0.95f);
             if (card == CardCatalog.SpecialY) return new Color(0.95f, 0.7f, 0.15f);
             if (card == CardCatalog.SpecialZ) return new Color(0.9f, 0.45f, 0.15f);
-            return d.Height == CardHeight.High ? new Color(0.95f, 0.55f, 0.2f)   // altos: naranja
-                 : d.Height == CardHeight.Low ? new Color(0.9f, 0.32f, 0.24f)    // bajos: rojo
-                 : new Color(0.9f, 0.62f, 0.35f);                                // mid
+            return d.Height == CardHeight.High ? new Color(0.95f, 0.55f, 0.2f)
+                 : d.Height == CardHeight.Low ? new Color(0.9f, 0.32f, 0.24f)
+                 : new Color(0.9f, 0.62f, 0.35f);
         }
 
-        public static string CardIdInfo(int card)
+        public static string CardDefInfo(in CardDef d)
         {
-            var d = CardCatalog.All[card];
             switch (d.Kind)
             {
                 case CardKind.Block: return d.BlocksLow ? "CUBRE BAJO+MID · ROBA 1" : "CUBRE ALTO+MID · ROBA 1";
-                case CardKind.Dodge: return "ESQUIVA · DEVUELVE UN GOLPE";
+                case CardKind.Dodge:
+                    return d.DodgeCounter > 0
+                        ? $"SUPER ESQUIVE · DEVUELVE {d.DodgeCounter} · {new string('★', d.SuperCost)}"
+                        : "ESQUIVA · DEVUELVE UN GOLPE";
+                case CardKind.Ability: return "HABILIDAD · 2 COMBATES";
                 case CardKind.Throw: return $"SPEED {d.Speed} · {d.Damage} DMG · DERRIBA";
             }
             string h = d.Height == CardHeight.High ? "ALTO" : d.Height == CardHeight.Low ? "BAJO" : "MID";
             string s = $"SPEED {d.Speed} · {d.Damage} DMG · {h}";
-            if (d.Projectile) s += $" · PROYECTIL NV.{d.ProjLevel}";
+            if (d.Projectile) s += $" · PROY NV.{d.ProjLevel}";
             if (d.UnsafeOnBlock) s += " · UNSAFE";
+            if (d.IsSuper) s += $" · {new string('★', d.SuperCost)}";
             return s;
         }
 
-        public void ShowCardsReveal(int c0, int c1, string ruling)
+        public void ShowCardsReveal(CardSim s, int c0, int c1, string ruling)
         {
-            var cards = new[] { c0, c1 };
             for (int i = 0; i < 2; i++)
             {
-                var c = CardIdColor(cards[i]);
+                int card = i == 0 ? c0 : c1;
+                var d = s.Def(i, card);
+                var c = CardDefColor(d, card);
                 _yomiCard[i].gameObject.SetActive(true);
                 _yomiCardEdge[i].color = new Color(c.r, c.g, c.b, 0.95f);
-                _yomiCardName[i].text = CardCatalog.All[cards[i]].Name.ToUpperInvariant();
+                _yomiCardName[i].text = d.Name.ToUpperInvariant();
                 _yomiCardName[i].color = new Color(c.r * 0.45f + 0.55f, c.g * 0.45f + 0.55f, c.b * 0.45f + 0.55f);
-                _yomiCardInfo[i].text = CardIdInfo(cards[i]);
+                _yomiCardInfo[i].text = CardDefInfo(d);
             }
             _yomiVs.gameObject.SetActive(true);
             _yomiExplain.text = ruling;

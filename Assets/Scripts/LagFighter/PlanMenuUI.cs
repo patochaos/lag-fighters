@@ -49,20 +49,6 @@ namespace LagFighter
         int[] _order = ClassicOrder;
         int _cols = 6;
         bool _builtYomi;
-        // Modo CARTAS (copia de Yomi 2): la grilla ES la mano (hasta 12,
-        // posición = índice de mano) y se reconstruye cada turno. Estados:
-        // opener (click juega) · castigo (solo golpes/agarres, ESPACIO pasa)
-        // · cambio (elegís qué soltar y un picker ofrece el descarte).
-        bool _builtCards;
-        bool _punishMode;
-        bool _exMode;
-        int _exGive = -1;                 // índice de mano elegido para soltar
-        Image _exPanel;
-        readonly Image[] _exBtns = new Image[9];
-        readonly Text[] _exLabels = new Text[9];
-        readonly int[] _exCards = new int[9];
-        int _exCount;
-        float _gridTotalH;
         RectTransform _canvasRt;
 
         MatchController _mc;
@@ -122,23 +108,11 @@ namespace LagFighter
             if (_root != null) Destroy(_root);
             _subGroup = 0; // el picker vivía dentro de _root
             _builtYomi = SimConfig.YomiEnabled;
-            _builtCards = SimConfig.CardsEnabled;
-            _punishMode = _exMode = false;
-            _exGive = -1;
-            _order = _builtCards ? CardsHand() : _builtYomi ? YomiOrder : ClassicOrder;
-            _cols = _builtCards ? 6 : _builtYomi ? YomiOrder.Length : 3; // clásico: 3×3, teclas 1-9
+            _order = _builtYomi ? YomiOrder : ClassicOrder;
+            _cols = _builtYomi ? YomiOrder.Length : 3; // clásico: 3×3, teclas 1-9
             _sel = 0;
             Build(_canvasRt);
             _root.SetActive(false);
-        }
-
-        // La mano actual como grilla: posición = índice de mano (CardsPick
-        // y el resto de la tubería usan ese índice directo).
-        int[] CardsHand()
-        {
-            var cs = _mc.Cards;
-            if (cs == null || cs.Hand[0].Count == 0) return new int[0];
-            return cs.Hand[0].ToArray();
         }
 
         static Color CategoryColor(int mi)
@@ -223,11 +197,9 @@ namespace LagFighter
             }
         }
 
-        // Nombre en la carta: en YOMI el valor de _order es una YomiAction;
-        // en CARTAS es un id de CardCatalog.
+        // Nombre en la carta: en YOMI el valor de _order es una YomiAction.
         string DisplayName(int mi)
         {
-            if (_builtCards) return CardCatalog.All[mi].Name.ToUpperInvariant();
             if (mi == CardDash) return "DASH";
             if (mi == CardJump) return "SALTO";
             return _builtYomi
@@ -235,50 +207,9 @@ namespace LagFighter
                 : MoveCatalog.All[mi].Name.ToUpperInvariant();
         }
 
-        // color de categoría según el modo (en YOMI/CARTAS, el mismo color
-        // que las cartas de revelación del HUD)
-        Color CardColor(int v) => _builtCards ? HudUI.CardIdColor(v)
-            : _builtYomi ? HudUI.YomiActionColor((YomiAction)v) : CategoryColor(Rep(v));
-
-        // ---- textos del modo CARTAS ----
-
-        static string CardsTag(int card)
-        {
-            switch (card)
-            {
-                case CardCatalog.AttackA:
-                case CardCatalog.AttackB: return "PEGA BAJO · GANA AL AGARRE · LO PARA EL BLOQUEO BAJO";
-                case CardCatalog.AttackC: return "PEGA MID · CUALQUIER BLOQUEO LO PARA";
-                case CardCatalog.AttackD:
-                case CardCatalog.AttackE: return "PEGA ALTO · GANA AL AGARRE · LO PARA EL BLOQUEO ALTO";
-                case CardCatalog.Throw: return "GANA A BLOQUEOS Y ESQUIVES · PIERDE CON GOLPES · DERRIBA";
-                case CardCatalog.Dodge: return "EVITA GOLPES · CASTIGA STRIKES · PIERDE CON AGARRE";
-                case CardCatalog.LowBlock: return "PARA BAJOS Y MIDS · ROBA 1 · VUELVE A LA MANO";
-                case CardCatalog.HighBlock: return "PARA ALTOS Y MIDS · ROBA 1 · VUELVE A LA MANO";
-                case CardCatalog.SpecialX: return "PROYECTIL NV.1 · CHIP 4 · SIN ROBO AL BLOQUEARLO · VUELVE";
-                case CardCatalog.SpecialY: return "SPEED 11: EL REVERSAL · UNSAFE SI TE LO BLOQUEAN";
-                default: return "PEGA ALTO A SPEED 7 · EL MIXUP RÁPIDO DE ALTURA";
-            }
-        }
-
-        static string CardsDesc(int card)
-        {
-            switch (card)
-            {
-                case CardCatalog.AttackA: return "El poke: lo más rápido de la mano (speed 8), pega poco y BAJO.";
-                case CardCatalog.AttackB: return "Un pelín más lento que A, un punto más de daño. También BAJO.";
-                case CardCatalog.AttackC: return "El medio de la tabla: speed 6, 5 de daño, cualquier bloqueo lo para.";
-                case CardCatalog.AttackD: return "Pesado y ALTO: castiga al que bloquea bajo esperando A/B.";
-                case CardCatalog.AttackE: return "El más lento (speed 4) y el que más pega (7). Solo entra con lectura.";
-                case CardCatalog.Throw: return "7 de daño y DERRIBA: derribado no esquivás y sus golpes suben a speed 10.";
-                case CardCatalog.Dodge: return "Esquiva cualquier golpe; si era un strike, devolvés UNA carta de ataque o agarre.";
-                case CardCatalog.LowBlock: return "La defensa que se paga sola: roba 1 carta y vuelve a la mano si no te pegan.";
-                case CardCatalog.HighBlock: return "Ídem bajo, pero cubre lo ALTO. Ojo: el agarre rompe cualquier bloqueo.";
-                case CardCatalog.SpecialX: return "El motor de mano del zoner: pega 8, hace 4 de chip, no deja robar y VUELVE.";
-                case CardCatalog.SpecialY: return "Speed 11: le gana a todo lo demás. Pero si te lo bloquean, hay castigo.";
-                default: return "Speed 7 que pega ALTO: el que bloquea bajo por miedo a A/B lo come entero.";
-            }
-        }
+        // color de categoría según el modo (en YOMI, por acción — mismo
+        // color que las cartas de revelación del HUD)
+        Color CardColor(int v) => _builtYomi ? HudUI.YomiActionColor((YomiAction)v) : CategoryColor(Rep(v));
 
         void Build(RectTransform canvasRt)
         {
@@ -347,25 +278,11 @@ namespace LagFighter
 
                 // costo en AP abajo a la derecha (YOMI: su tabla · clásico:
                 // ceil(frames/12) — el presupuesto del turno ES en AP)
-                if (_builtYomi || (!_builtCards && SimConfig.ApActive))
+                if (_builtYomi || SimConfig.ApActive)
                 {
                     int cost = _builtYomi ? YomiConfig.Cost((YomiAction)mi) : MoveCatalog.All[Rep(mi)].ApCost;
                     var costT = MakeText(card.rectTransform, "Cost", cost == 0 ? "GRATIS" : $"{cost} AP",
                         new Vector2(1f, 0f), new Vector2(-8f, 10f), new Vector2(60f, 14f), 8,
-                        new Color(0.5f, 0.95f, 1f, 0.85f), TextAnchor.MiddleRight);
-                    costT.font = UIFonts.Pixel;
-                    costT.rectTransform.pivot = new Vector2(1f, 0.5f);
-                }
-                else if (_builtCards)
-                {
-                    // en CARTAS lo que importa es speed y daño (o qué cubre)
-                    var d = CardCatalog.All[mi];
-                    string txt = d.Kind == CardKind.Block ? (d.BlocksLow ? "BAJO+MID" : "ALTO+MID")
-                        : d.Kind == CardKind.Dodge ? "ESQUIVA"
-                        : d.Kind == CardKind.Throw ? $"s{d.Speed}·{d.Damage}·KD"
-                        : $"s{d.Speed}·{d.Damage}";
-                    var costT = MakeText(card.rectTransform, "Cost", txt,
-                        new Vector2(1f, 0f), new Vector2(-8f, 10f), new Vector2(86f, 14f), 8,
                         new Color(0.5f, 0.95f, 1f, 0.85f), TextAnchor.MiddleRight);
                     costT.font = UIFonts.Pixel;
                     costT.rectTransform.pivot = new Vector2(1f, 0.5f);
@@ -458,10 +375,7 @@ namespace LagFighter
             _status.rectTransform.pivot = new Vector2(1f, 0.5f);
 
             _gridPanelRt = panel.rectTransform; // el picker de dirección se posiciona relativo a la grilla
-            _gridTotalH = totalH;
-            MakeText(rootRt, "Help", _builtCards
-                    ? "tu MANO: click (o 1-9/0) juega la carta · golpes por SPEED (empate al activo) · bloqueá la ALTURA correcta · AGARRE rompe bloqueos\nCAMBIO recupera cartas del descarte (2 por turno) · bloquear roba carta · el descarte rival es público"
-                    : _builtYomi
+            MakeText(rootRt, "Help", _builtYomi
                     ? "UNA acción por turno: click (o 1-8) la juega YA · de cerca: JAB › AGARRE › PARRY › JAB · el SHORYU gana pero whiffear = recovery\nlos AP no gastados se acumulan (tope 6) · CARGAR junta +2 pero todo golpe es counter"
                     : "click o 1-9 agrega  ·  Backspace borra  ·  ESPACIO cierra el turno  ·  DASH y SALTO preguntan la dirección\ncada carta cuesta AP y lo que no gastás SE GUARDA  ·  BLOQUEAR que bloquea un golpe banca +1 AP  ·  arrastrá tu timeline para mover el ghost",
                 new Vector2(0.5f, 0f), new Vector2(0f, 14f), new Vector2(1300f, 36f), 13, new Color(1f, 1f, 1f, 0.45f), TextAnchor.MiddleCenter);
@@ -471,28 +385,6 @@ namespace LagFighter
             {
                 _doneBtn.gameObject.SetActive(false);
                 _undoBtn.gameObject.SetActive(false);
-            }
-
-            // en CARTAS: sin BORRAR; el botón grande es contextual
-            // (CAMBIO / CANCELAR / PASAR el castigo) — RefreshCardsButtons manda
-            if (_builtCards)
-            {
-                _undoBtn.gameObject.SetActive(false);
-                _doneBtn.gameObject.SetActive(false);
-
-                // picker de exchange: una fila de botones con las normales del
-                // descarte, encima de la grilla; creado acá, se llena al abrir
-                _exPanel = MakeImage(rootRt, "ExPicker", new Vector2(0.5f, 0f),
-                    new Vector2(0f, 26f + totalH + 46f), new Vector2(400f, CardH + 18f), new Color(0.05f, 0.07f, 0.1f, 1f));
-                for (int o = 0; o < _exBtns.Length; o++)
-                {
-                    _exBtns[o] = MakeImage(_exPanel.rectTransform, "Ex" + o, new Vector2(0.5f, 0.5f),
-                        Vector2.zero, new Vector2(184f, CardH - 2f), new Color(0.16f, 0.2f, 0.28f, 1f));
-                    _exLabels[o] = MakeText(_exBtns[o].rectTransform, "T", "", new Vector2(0.5f, 0.5f), Vector2.zero,
-                        new Vector2(180f, 26f), 8, Color.white, TextAnchor.MiddleCenter);
-                    _exLabels[o].font = UIFonts.Pixel;
-                }
-                _exPanel.gameObject.SetActive(false);
             }
 
             // mini-picker de dirección (DASH/SALTO): creado ÚLTIMO y colgado
@@ -545,32 +437,11 @@ namespace LagFighter
 
         public void Open(int picker)
         {
-            // CARTAS: la mano cambia cada turno → grilla nueva siempre
-            if (SimConfig.CardsEnabled || _builtYomi != SimConfig.YomiEnabled ||
-                _builtCards != SimConfig.CardsEnabled) Rebuild();
+            if (_builtYomi != SimConfig.YomiEnabled) Rebuild(); // el modo cambió: otra grilla
             _root.SetActive(true);
             _active = true;
             RefreshWake();
             Highlight(_sel);
-        }
-
-        // CARTAS: se abre para elegir el castigo (dodge a strike / unsafe
-        // bloqueado) — la mano ya cambió (el opener salió), grilla nueva.
-        public void OpenCardsPunish()
-        {
-            Rebuild();
-            _punishMode = true;
-            _root.SetActive(true);
-            _active = true;
-            Highlight(0);
-        }
-
-        void CancelExchange()
-        {
-            _exMode = false;
-            _exGive = -1;
-            if (_exPanel != null) _exPanel.gameObject.SetActive(false);
-            RefreshCardStates();
         }
 
         void RefreshWake()
@@ -649,24 +520,6 @@ namespace LagFighter
         void RefreshCardStates()
         {
             if (_cardOverlay == null) return;
-            if (_builtCards)
-            {
-                var cs = _mc.Cards;
-                for (int i = 0; i < _order.Length; i++)
-                {
-                    bool ok;
-                    var d = CardCatalog.All[_order[i]];
-                    if (_punishMode) ok = d.Kind == CardKind.Attack || d.Kind == CardKind.Throw;
-                    else if (_exMode) ok = d.IsNormal && i != _exGive;
-                    else ok = cs != null && (cs.LegalOpener(0, i) || !cs.HasLegalOpener(0));
-                    _cardOverlay[i].gameObject.SetActive(!ok);
-                    _cardOvfMark[i].gameObject.SetActive(false);
-                    var cc = CardColor(_order[i]);
-                    _cardEdge[i].color = new Color(cc.r, cc.g, cc.b, 0.9f);
-                }
-                RefreshCardsButtons();
-                return;
-            }
             if (_builtYomi)
             {
                 // legalidad de la matriz: distancia + AP + recovery
@@ -702,25 +555,9 @@ namespace LagFighter
             }
         }
 
-        // botón contextual del modo CARTAS: CAMBIO / CANCELAR / PASAR castigo
-        void RefreshCardsButtons()
-        {
-            if (!_builtCards || _doneBtn == null) return;
-            var cs = _mc.Cards;
-            bool show = _punishMode || _exMode ||
-                (cs != null && !cs.Over && cs.Active == 0 && cs.ExchangesLeft > 0);
-            if (_doneBtn.gameObject.activeSelf != show) _doneBtn.gameObject.SetActive(show);
-            if (!show) return;
-            _doneLabel.text = _punishMode ? "PASAR\n<size=11>(no castigar)</size>"
-                : _exMode ? "CANCELAR\n<size=11>el cambio</size>"
-                : $"CAMBIO ×{cs.ExchangesLeft}\n<size=11>con el descarte</size>";
-            _doneLabel.fontSize = 14;
-        }
-
         void Highlight(int pos)
         {
             int n = _order.Length;
-            if (n == 0) return; // mano vacía: no hay nada que resaltar
             _sel = ((pos % n) + n) % n;
             for (int i = 0; i < n; i++)
             {
@@ -734,26 +571,6 @@ namespace LagFighter
             var cat = CardColor(mi);
             _detailTitle.text = DisplayName(mi);
             _detailTitle.color = new Color(cat.r * 0.5f + 0.5f, cat.g * 0.5f + 0.5f, cat.b * 0.5f + 0.5f);
-
-            // panel de info CARTAS: speed/daño/altura + la fila de la tabla
-            if (_builtCards)
-            {
-                _detailFrames.text = HudUI.CardIdInfo(mi);
-                _segS.rectTransform.sizeDelta = new Vector2(0f, 8f);
-                _segA.rectTransform.sizeDelta = new Vector2(0f, 8f);
-                _segR.rectTransform.sizeDelta = new Vector2(0f, 8f);
-                bool mine = _mc.Cards != null && _mc.Cards.Active == 0;
-                _detailAdv.text = mine ? "TU TURNO: ganás los empates de speed" : "TURNO RIVAL: gana los empates de speed";
-                _detailTag.text = CardsTag(mi);
-                _detailTag.color = new Color(cat.r * 0.6f + 0.4f, cat.g * 0.6f + 0.4f, cat.b * 0.6f + 0.4f);
-                _detail.text = CardsDesc(mi);
-                _status.text = _punishMode ? "¡CASTIGO! elegí un golpe o agarre · ESPACIO pasa"
-                    : _exMode ? (_exGive < 0 ? "CAMBIO: elegí qué carta SOLTAR · Backspace cancela"
-                                             : "CAMBIO: elegí qué RECUPERAR del descarte")
-                    : "elegí UNA carta: click la juega YA · el rival ya eligió en secreto";
-                _status.color = _punishMode ? new Color(1f, 0.55f, 0.9f) : new Color(0.5f, 1f, 0.6f);
-                return;
-            }
 
             // panel de info YOMI: costo, daño, y la fila de la matriz en la
             // distancia actual — sin framedata (acá no existen los frames)
@@ -811,9 +628,6 @@ namespace LagFighter
             // el mini-picker de dirección abierto captura todo el input
             if (_subGroup != 0) { UpdateSubPicker(); return; }
 
-            // ídem el picker de exchange del modo CARTAS
-            if (_builtCards && _exMode && _exGive >= 0) { UpdateExchangePicker(); return; }
-
             // hover: pasar el mouse por una carta ya muestra qué hace,
             // sin tener que apretarla (apretar = agregarla al plan)
             var mp = GameInput.MousePos();
@@ -850,7 +664,6 @@ namespace LagFighter
                 for (int i = 0; i < _cardRt.Length; i++)
                 {
                     if (!RectTransformUtility.RectangleContainsScreenPoint(_cardRt[i], pos, null)) continue;
-                    if (_builtCards) { CardsClick(i); return; }  // la mano manda
                     if (_builtYomi) { TryPlayYomi(i); return; } // una acción = el turno entero
                     TryAdd(_order[i]);
                     Highlight(i);
@@ -867,7 +680,6 @@ namespace LagFighter
                     RectTransformUtility.RectangleContainsScreenPoint(_doneBtn.rectTransform, pos, null))
                 {
                     SfxLib.Play(SfxLib.Kind.UiClick, 0.8f);
-                    if (_builtCards) { CardsContextButton(); return; }
                     _mc.PlanConfirm();
                     return;
                 }
@@ -896,129 +708,18 @@ namespace LagFighter
             int num = GameInput.NumberPressed();
             if (num > 0 && num <= _order.Length)
             {
-                if (_builtCards) { Highlight(num - 1); CardsClick(num - 1); }
-                else if (_builtYomi) { Highlight(num - 1); TryPlayYomi(num - 1); }
+                if (_builtYomi) { Highlight(num - 1); TryPlayYomi(num - 1); }
                 else { TryAdd(_order[num - 1]); Highlight(num - 1); }
             }
             else if (GameInput.AddPressed())
             {
-                if (_builtCards) { CardsClick(_sel); return; }
                 if (_builtYomi) { TryPlayYomi(_sel); return; }
                 TryAdd(_order[_sel]);
                 Highlight(_sel);
             }
-            if (_builtCards)
-            {
-                // Backspace cancela el cambio · ESPACIO pasa el castigo
-                if (GameInput.UndoPressed() && _exMode) { CancelExchange(); Highlight(_sel); }
-                if (GameInput.EndTurnPressed() && _punishMode) _mc.CardsPunish(-1);
-                return;
-            }
             if (_builtYomi) return; // sin cola: no hay BORRAR ni cerrar turno aparte
             if (GameInput.UndoPressed()) { TryUndo(); Highlight(_sel); }
             if (GameInput.EndTurnPressed()) _mc.PlanConfirm();
-        }
-
-        // ---- interacción del modo CARTAS ----
-
-        void CardsContextButton()
-        {
-            if (_punishMode) { _mc.CardsPunish(-1); return; }
-            if (_exMode) { CancelExchange(); Highlight(_sel); return; }
-            _exMode = true;
-            _exGive = -1;
-            RefreshCardStates();
-            Highlight(_sel);
-        }
-
-        void CardsClick(int idx)
-        {
-            if (idx < 0 || idx >= _order.Length) return;
-            var d = CardCatalog.All[_order[idx]];
-            if (_punishMode)
-            {
-                bool okP = d.Kind == CardKind.Attack || d.Kind == CardKind.Throw;
-                SfxLib.Play(okP ? SfxLib.Kind.UiClick : SfxLib.Kind.UiCancel, okP ? 0.8f : 0.5f);
-                if (okP) _mc.CardsPunish(idx);
-                return;
-            }
-            if (_exMode)
-            {
-                if (!d.IsNormal) { SfxLib.Play(SfxLib.Kind.UiCancel, 0.5f); return; }
-                _exGive = idx;
-                OpenExchangePicker();
-                return;
-            }
-            var cs = _mc.Cards;
-            bool ok = cs != null && (cs.LegalOpener(0, idx) || !cs.HasLegalOpener(0));
-            SfxLib.Play(ok ? SfxLib.Kind.UiClick : SfxLib.Kind.UiCancel, ok ? 0.8f : 0.5f);
-            if (ok) _mc.CardsPick(idx);
-        }
-
-        // Fila con las normales del DESCARTE propio (con conteo): elegir una
-        // completa el cambio; click afuera o Backspace cancela.
-        void OpenExchangePicker()
-        {
-            var disc = _mc.Cards.Discard[0];
-            _exCount = 0;
-            for (int c = 0; c < CardCatalog.All.Length && _exCount < _exBtns.Length; c++)
-            {
-                if (!CardCatalog.All[c].IsNormal) continue;
-                int n = 0;
-                foreach (int x in disc) if (x == c) n++;
-                if (n == 0) continue;
-                _exCards[_exCount] = c;
-                _exLabels[_exCount].text = n > 1 ? $"{CardCatalog.All[c].Name} ×{n}" : CardCatalog.All[c].Name;
-                _exCount++;
-            }
-            if (_exCount == 0)
-            {
-                SfxLib.Play(SfxLib.Kind.UiCancel, 0.5f);
-                CancelExchange();
-                Highlight(_sel);
-                return;
-            }
-            float w = 190f;
-            for (int o = 0; o < _exBtns.Length; o++)
-            {
-                bool on = o < _exCount;
-                _exBtns[o].gameObject.SetActive(on);
-                if (on) _exBtns[o].rectTransform.anchoredPosition = new Vector2((o - (_exCount - 1) * 0.5f) * w, 0f);
-            }
-            _exPanel.rectTransform.sizeDelta = new Vector2(_exCount * w + 14f, CardH + 18f);
-            _exPanel.rectTransform.anchoredPosition = new Vector2(0f, 26f + _gridTotalH + 46f);
-            _exPanel.gameObject.SetActive(true);
-            RefreshCardStates();
-            SfxLib.Play(SfxLib.Kind.UiTick, 0.5f);
-        }
-
-        void UpdateExchangePicker()
-        {
-            var mp = GameInput.MousePos();
-            for (int o = 0; o < _exCount; o++)
-                _exBtns[o].color = RectTransformUtility.RectangleContainsScreenPoint(_exBtns[o].rectTransform, mp, null)
-                    ? new Color(0.26f, 0.34f, 0.46f, 1f) : new Color(0.16f, 0.2f, 0.28f, 1f);
-            if (GameInput.UndoPressed()) { CancelExchange(); Highlight(_sel); return; }
-            if (!GameInput.ClickPressed()) return;
-            for (int o = 0; o < _exCount; o++)
-            {
-                if (!RectTransformUtility.RectangleContainsScreenPoint(_exBtns[o].rectTransform, mp, null)) continue;
-                int discIdx = _mc.Cards.Discard[0].IndexOf(_exCards[o]);
-                int give = _exGive;
-                CancelExchange();
-                if (discIdx >= 0 && _mc.CardsExchange(give, discIdx))
-                {
-                    // la mano cambió: grilla nueva, mismo turno
-                    Rebuild();
-                    _root.SetActive(true);
-                    _active = true;
-                    Highlight(0);
-                }
-                return;
-            }
-            // click afuera: cancela el cambio
-            CancelExchange();
-            Highlight(_sel);
         }
 
         // YOMI: jugar la carta seleccionada resuelve el turno entero

@@ -293,32 +293,116 @@ namespace LagFighter
             return null;
         }
 
-        // ---- MODO CARTAS (copia de Yomi 2): opener, exchange y castigo ----
+        // ---- MODO CARTAS v2 (copia completa de Yomi 2): main phase entera,
+        // opener (con supers), combos, pumps y castigo ----
 
-        readonly int[] _seenCardKind = new int[4]; // attack/throw/block/dodge revelados del rival
+        readonly int[] _seenCardKind = new int[5]; // attack/throw/block/dodge/ability revelados del rival
 
-        public void ObserveCard(int cardId) =>
-            _seenCardKind[(int)CardCatalog.All[cardId].Kind]++;
+        public void ObserveCard(CardKind kind) => _seenCardKind[(int)kind]++;
+
+        // Main phase completa del turno propio: ability, power up y exchanges.
+        public void DoCardMainPhase(CardSim s)
+        {
+            int me = s.Active;
+
+            // 1) ability: Grave espera tener con qué aprovechar el viento;
+            //    Jaina tira el arco apenas puede presionar
+            int abIdx = s.Hand[me].IndexOf(CardCatalog.Ability);
+            if (abIdx >= 0 && s.CanPlayAbility(abIdx))
+            {
+                bool grave = s.CharIdx[me] == CardCatalog.GraveIdx;
+                double chance = grave
+                    ? (s.Meter[me] >= 2 || s.Hand[me].Contains(CardCatalog.Super1) ? 0.6 : 0.15)
+                    : 0.5;
+                if (_rng.NextDouble() < chance) s.PlayAbility(abIdx);
+            }
+
+            // 2) power up: descartar un par que no duela; fetch de super si
+            //    hay una esperando en el descarte
+            TryPowerUp(s, me);
+
+            // 3) exchanges: blocks que falten, después agarre, después golpes
+            while (s.ExchangesLeft > 0)
+            {
+                int want = -1;
+                if (!s.Hand[me].Contains(CardCatalog.LowBlock))
+                    want = s.Discard[me].IndexOf(CardCatalog.LowBlock);
+                if (want < 0 && !s.Hand[me].Contains(CardCatalog.HighBlock))
+                    want = s.Discard[me].IndexOf(CardCatalog.HighBlock);
+                if (want < 0 && !s.Hand[me].Contains(CardCatalog.Throw))
+                    want = s.Discard[me].IndexOf(CardCatalog.Throw);
+                if (want < 0 && !HasAttackInHand(s, me))
+                {
+                    int bestDmg = 0;
+                    for (int d = 0; d < s.Discard[me].Count; d++)
+                    {
+                        var def = s.Def(me, s.Discard[me][d]);
+                        if (def.Kind == CardKind.Attack && def.IsNormal && def.Damage > bestDmg)
+                        { bestDmg = def.Damage; want = d; }
+                    }
+                }
+                if (want < 0) return;
+                int give = CardToGive(s, me);
+                if (give < 0 || !s.Exchange(give, want)) return;
+            }
+        }
+
+        void TryPowerUp(CardSim s, int me)
+        {
+            if (s.PowerUpUsed || s.Meter[me] >= CardConfig.MeterCap) return;
+            // buscar un par "quemable": C, esquives sobrantes, D, E
+            int[] burnable = { CardCatalog.AttackC, CardCatalog.Dodge, CardCatalog.AttackD, CardCatalog.AttackE };
+            foreach (int card in burnable)
+            {
+                int a = -1, b = -1;
+                for (int i = 0; i < s.Hand[me].Count; i++)
+                    if (s.Hand[me][i] == card) { if (a < 0) a = i; else { b = i; break; } }
+                if (b < 0) continue;
+                if (card == CardCatalog.Dodge && _rng.NextDouble() < 0.5) continue;
+                bool fetch = false; int super = -1;
+                int s1 = s.Discard[me].Contains(CardCatalog.Super1) ? CardCatalog.Super1 : -1;
+                int s2 = s.Discard[me].Contains(CardCatalog.Super2) ? CardCatalog.Super2 : -1;
+                if (!s.Hand[me].Contains(CardCatalog.Super1) && s1 >= 0) { fetch = true; super = s1; }
+                else if (!s.Hand[me].Contains(CardCatalog.Super2) && s2 >= 0 && _rng.NextDouble() < 0.4) { fetch = true; super = s2; }
+                s.PowerUp(a, b, fetch, super);
+                return;
+            }
+        }
+
+        static bool HasAttackInHand(CardSim s, int me)
+        {
+            foreach (int c in s.Hand[me])
+                if (s.Def(me, c).Kind == CardKind.Attack) return true;
+            return false;
+        }
 
         // Elige el opener (índice de MANO). Lee el estado como un jugador:
         // rival derribado = mixup fuerte, yo derribado = bloquear o reversal,
-        // y una lectura del hábito rival según dificultad.
+        // supers cuando pagan, y una lectura del hábito según dificultad.
         public int PickCardOpener(CardSim s, int me)
         {
             var hand = s.Hand[me];
             int opp = 1 - me;
             int atkFast = -1, atkStrong = -1, thr = -1, dodge = -1,
-                blockHigh = -1, blockLow = -1, proj = -1, reversal = -1;
+                blockHigh = -1, blockLow = -1, proj = -1, reversal = -1,
+                super1 = -1, super2 = -1;
             for (int i = 0; i < hand.Count; i++)
             {
-                var d = CardCatalog.All[hand[i]];
+                var d = s.Def(me, hand[i]);
+                if (d.IsSuper)
+                {
+                    if (s.Meter[me] < d.SuperCost) continue; // impagable: ni mirarla
+                    if (hand[i] == CardCatalog.Super1) super1 = i;
+                    else if (d.Kind != CardKind.Dodge || !s.KnockedDown[me]) super2 = i;
+                    continue;
+                }
                 switch (d.Kind)
                 {
                     case CardKind.Attack:
                         if (hand[i] == CardCatalog.SpecialY) reversal = i;
                         if (d.Projectile) proj = i;
-                        if (atkFast < 0 || d.Speed > CardCatalog.All[hand[atkFast]].Speed) atkFast = i;
-                        if (atkStrong < 0 || d.Damage > CardCatalog.All[hand[atkStrong]].Damage) atkStrong = i;
+                        if (atkFast < 0 || d.Speed > s.Def(me, hand[atkFast]).Speed) atkFast = i;
+                        if (atkStrong < 0 || d.Damage > s.Def(me, hand[atkStrong]).Damage) atkStrong = i;
                         break;
                     case CardKind.Throw: thr = i; break;
                     case CardKind.Dodge: if (!s.KnockedDown[me]) dodge = i; break;
@@ -333,17 +417,31 @@ namespace LagFighter
 
             double r = _rng.NextDouble();
 
-            // rival derribado: no puede esquivar y tus lentos suben a 10 → mixup
+            // el ARCO rival castiga los ataques (7 al abrir): agarre, bloqueo
+            // o esquive hasta que se apague — como haría cualquier humano
+            if (s.ArcActive(opp) && _rng.NextDouble() < 0.8)
+            {
+                if (thr >= 0 && r < 0.45) return thr;
+                if (dodge >= 0 && r < 0.6) return dodge;
+                int blkArc = AnyBlock();
+                if (blkArc >= 0) return blkArc;
+                if (thr >= 0) return thr;
+                if (dodge >= 0) return dodge;
+            }
+
+            // rival derribado: mixup fuerte — el momento de la super de ataque
             if (s.KnockedDown[opp])
             {
+                if (super1 >= 0 && s.Def(me, hand[super1]).Kind == CardKind.Attack && r < 0.45) return super1;
                 if (r < 0.55 && atkStrong >= 0) return atkStrong;
                 if (r < 0.85 && thr >= 0) return thr;
                 if (atkFast >= 0) return atkFast;
             }
-            // derribado yo: bloquear adivinando altura, o el reversal (s11 no se apura)
+            // derribado yo: bloquear adivinando altura, o el reversal
             if (s.KnockedDown[me])
             {
-                if (r < 0.30 && reversal >= 0) return reversal;
+                if (r < 0.20 && super1 >= 0 && s.Def(me, hand[super1]).Speed >= 10) return super1;
+                if (r < 0.35 && reversal >= 0) return reversal;
                 int blk = AnyBlock();
                 if (blk >= 0) return blk;
             }
@@ -354,22 +452,24 @@ namespace LagFighter
             if (_rng.NextDouble() < counterChance)
             {
                 int habit = CardHabit();
-                if (habit == (int)CardKind.Block && thr >= 0) return thr;      // al tortuga: agarre
-                if (habit == (int)CardKind.Throw && atkFast >= 0) return atkFast; // al agarrón: golpe
+                if (habit == (int)CardKind.Block && thr >= 0) return thr;
+                if (habit == (int)CardKind.Throw && atkFast >= 0) return atkFast;
                 if (habit == (int)CardKind.Attack)
                 {
-                    // esquivar es caro: solo con mano gorda; si no, bloquear
+                    // la super dodge de Grave es LA lectura anti-strike
+                    if (super2 >= 0 && s.Def(me, hand[super2]).DodgeCounter > 0 && _rng.NextDouble() < 0.4) return super2;
                     if (dodge >= 0 && hand.Count >= 6 && _rng.NextDouble() < 0.5) return dodge;
                     int blk = AnyBlock();
                     if (blk >= 0) return blk;
                 }
-                if (habit == (int)CardKind.Dodge && thr >= 0) return thr;      // throw le gana al dodge
+                if (habit == (int)CardKind.Dodge && thr >= 0) return thr;
             }
 
-            // mezcla base: pega, agarra, bloquea, y X para construir mano
-            if (r < 0.20 && atkFast >= 0) return atkFast;
+            // mezcla base: pega, agarra, bloquea, zonea; supers cuando sobra meter
+            if (r < 0.10 && super2 >= 0 && s.Def(me, hand[super2]).Kind == CardKind.Attack) return super2;
+            if (r < 0.22 && atkFast >= 0) return atkFast;
             if (r < 0.36 && atkStrong >= 0) return atkStrong;
-            if (r < 0.48 && proj >= 0) return proj;       // recurring + lockdown: el motor de mano
+            if (r < 0.48 && proj >= 0) return proj;
             if (r < 0.64 && thr >= 0) return thr;
             if (r < 0.86) { int blk = AnyBlock(); if (blk >= 0) return blk; }
             if (dodge >= 0 && hand.Count >= 5) return dodge;
@@ -385,65 +485,68 @@ namespace LagFighter
             int best = -1, bestN = 0;
             for (int i = 0; i < _seenCardKind.Length; i++)
                 if (_seenCardKind[i] > bestN) { bestN = _seenCardKind[i]; best = i; }
-            return bestN >= 3 ? best : -1; // sin muestra no hay lectura
+            return bestN >= 3 ? best : -1;
         }
 
-        // El castigo (dodge a strike / unsafe bloqueado): el golpe más caro,
-        // pero prefiere el throw si derriba y la mano rival está gorda.
-        public int PickCardHitBack(CardSim s, int me)
+        // Resuelve TODO el followup pendiente: castigo, combo y pumps.
+        public void DoCardFollowup(CardSim s)
         {
-            int best = -1, bestDmg = -1, thr = -1;
-            for (int i = 0; i < s.Hand[me].Count; i++)
+            int guard = 0;
+            while (s.AwaitingFollowup && guard++ < 24)
             {
-                var d = CardCatalog.All[s.Hand[me][i]];
-                if (d.Kind == CardKind.Throw) thr = i;
-                if (d.Kind != CardKind.Attack && d.Kind != CardKind.Throw) continue;
-                if (d.Damage > bestDmg) { bestDmg = d.Damage; best = i; }
-            }
-            if (thr >= 0 && _rng.NextDouble() < 0.35) return thr; // el knockdown también paga
-            return best;
-        }
-
-        // Main phase del activo IA: recuperar blocks que falten (la regla de
-        // oro de Yomi 2) y después mejorar la mano. Grave banca dos exchanges.
-        public void DoCardExchanges(CardSim s)
-        {
-            int me = s.Active;
-            while (s.ExchangesLeft > 0)
-            {
-                int want = -1;
-                if (!s.Hand[me].Contains(CardCatalog.LowBlock))
-                    want = s.Discard[me].IndexOf(CardCatalog.LowBlock);
-                if (want < 0 && !s.Hand[me].Contains(CardCatalog.HighBlock))
-                    want = s.Discard[me].IndexOf(CardCatalog.HighBlock);
-                if (want < 0 && !s.Hand[me].Contains(CardCatalog.Throw))
-                    want = s.Discard[me].IndexOf(CardCatalog.Throw);
-                // sin ataques en mano: recuperar el mejor golpe del descarte
-                if (want < 0 && !HasAttackInHand(s, me))
+                int me = s.FollowSide;
+                if (s.FollowIsHitBack)
                 {
-                    int bestDmg = 0;
-                    for (int d = 0; d < s.Discard[me].Count; d++)
+                    if (!s.HitBackPlayed)
                     {
-                        var def = CardCatalog.All[s.Discard[me][d]];
-                        if (def.Kind == CardKind.Attack && def.IsNormal && def.Damage > bestDmg)
-                        { bestDmg = def.Damage; want = d; }
+                        int best = -1, bestDmg = -1;
+                        for (int i = 0; i < s.Hand[me].Count; i++)
+                        {
+                            var d = s.Def(me, s.Hand[me][i]);
+                            if (d.Kind != CardKind.Attack && d.Kind != CardKind.Throw) continue;
+                            if (d.IsSuper && s.Meter[me] < d.SuperCost) continue;
+                            int dmg = d.Damage + (d.KnockdownOnHit ? 3 : 0); // el KD vale
+                            if (dmg > bestDmg) { bestDmg = dmg; best = i; }
+                        }
+                        s.HitBack(best);
                     }
+                    else if (s.CanPumpLast()) s.PumpLast(9);
+                    else s.FollowupEnd();
+                    continue;
                 }
-                if (want < 0) return;
 
-                int give = CardToGive(s, me);
-                if (give < 0 || !s.Exchange(give, want)) return;
+                // combo: ¿parar acá para conservar el knockdown del agarre?
+                var last = s.Def(me, s.LastPlayed);
+                if (last.KnockdownOnHit && _rng.NextDouble() < 0.45)
+                {
+                    s.FollowupEnd();
+                    continue;
+                }
+                var opts = s.ComboOptions(me);
+                if (opts.Count == 0)
+                {
+                    if (s.CanPumpLast()) { s.PumpLast(9); continue; }
+                    s.FollowupEnd();
+                    continue;
+                }
+                // puntuar cada continuación: daño + paso de cadena (meter) + super
+                int bestIdx = -1; double bestScore = -1;
+                foreach (int i in opts)
+                {
+                    var d = s.Def(me, s.Hand[me][i]);
+                    double score = d.Damage;
+                    if (last.Combo == ComboType.Chain && d.Combo == ComboType.Chain &&
+                        d.ChainLetter == last.ChainLetter + 1) score += 3;   // +1 meter
+                    if (d.IsSuper) score += 5;
+                    if (d.SelfDamage > 0 && s.Hp[me] <= 20) score -= 6;      // no suicidarse
+                    if (score > bestScore) { bestScore = score; bestIdx = i; }
+                }
+                if (bestIdx < 0 || !s.ComboAdd(bestIdx)) s.FollowupEnd();
+                else if (s.AwaitingFollowup && s.CanPumpLast() && _rng.NextDouble() < 0.7) s.PumpLast(9);
             }
         }
 
-        static bool HasAttackInHand(CardSim s, int me)
-        {
-            foreach (int c in s.Hand[me])
-                if (CardCatalog.All[c].Kind == CardKind.Attack) return true;
-            return false;
-        }
-
-        // Qué soltar en el exchange: un dodge sobrante o la normal repetida más débil.
+        // Qué soltar en el exchange: un esquive sobrante o la normal repetida más débil.
         int CardToGive(CardSim s, int me)
         {
             var hand = s.Hand[me];
@@ -454,7 +557,7 @@ namespace LagFighter
             int give = -1, giveDmg = 99;
             for (int i = 0; i < hand.Count; i++)
             {
-                var d = CardCatalog.All[hand[i]];
+                var d = s.Def(me, hand[i]);
                 if (!d.IsNormal || d.Kind != CardKind.Attack) continue;
                 bool dup = false;
                 for (int j = 0; j < hand.Count; j++) if (j != i && hand[j] == hand[i]) dup = true;
