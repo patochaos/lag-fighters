@@ -1378,6 +1378,8 @@ namespace LagFighter
             State = Flow.Executing;
             _yomiRevealTimer = YomiRevealSeconds;
             _hud.ShowCardsReveal(Cards, r.Card0, r.Card1, CardsRuling(r));
+            // la cadena del combo/castigo, visible durante TODA la ejecución
+            _hud.ShowCardsComboChain(Cards, r);
             _hud.SetPrompt($"TURNO {TurnNumber} — {Cards.Def(0, r.Card0).Name.ToUpperInvariant()} vs {Cards.Def(1, r.Card1).Name.ToUpperInvariant()}");
             SfxLib.Play(SfxLib.Kind.TurnStart, 0.6f);
         }

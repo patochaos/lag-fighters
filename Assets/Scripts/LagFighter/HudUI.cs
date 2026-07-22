@@ -46,6 +46,10 @@ namespace LagFighter
         // panel del modo CARTAS: los números reales por lado (HP /45, mano,
         // mazo y el descarte PÚBLICO compacto — regla de Yomi 2: siempre visible)
         readonly Text[] _cardsInfo = new Text[2];
+        // la CADENA del combo en pantalla durante la ejecución:
+        // OPENER » CARTA 2 » CARTA 3 » +PUMP (una fila por lado con cadena)
+        readonly List<GameObject> _comboItems = new List<GameObject>();
+        readonly Text[] _rowLabels = new Text[2]; // "VOS"/"RIVAL" de las timelines
         readonly Image[] _yomiCard = new Image[2];
         readonly Image[] _yomiCardEdge = new Image[2];
         readonly Text[] _yomiCardName = new Text[2];
@@ -200,9 +204,9 @@ namespace LagFighter
             // protagonistas: acá se cargan los movimientos, que se vean bien
             _row1 = new TimelineRow(this, "Row1", y: 246f, height: 52f, dim: true, side: 1);
             _row0 = new TimelineRow(this, "Row0", y: 312f, height: 52f, dim: false, side: 0);
-            MakeTextP(_canvasRt, "Row0Label", "VOS", new Vector2(0.5f, 0f), new Vector2(-RowW / 2f - 52f, 312f + 26f), new Vector2(90f, 20f),
+            _rowLabels[0] = MakeTextP(_canvasRt, "Row0Label", "VOS", new Vector2(0.5f, 0f), new Vector2(-RowW / 2f - 52f, 312f + 26f), new Vector2(90f, 20f),
                 8, Palette.P1, TextAnchor.MiddleRight);
-            MakeTextP(_canvasRt, "Row1Label", "RIVAL", new Vector2(0.5f, 0f), new Vector2(-RowW / 2f - 52f, 246f + 26f), new Vector2(90f, 20f),
+            _rowLabels[1] = MakeTextP(_canvasRt, "Row1Label", "RIVAL", new Vector2(0.5f, 0f), new Vector2(-RowW / 2f - 52f, 246f + 26f), new Vector2(90f, 20f),
                 8, Palette.P2, TextAnchor.MiddleRight);
 
             _banner = MakeText(_canvasRt, "Banner", "", new Vector2(0.5f, 0.5f), new Vector2(0f, 150f), new Vector2(1200f, 160f),
@@ -948,7 +952,7 @@ namespace LagFighter
                         default: badge = $"HIT {rem}F"; bc = Palette.Damage; break;
                     }
                 }
-                else if (_mc.OverflowFrames(i) is int ovf && ovf > 0)
+                else if (!SimConfig.CardsEnabled && _mc.OverflowFrames(i) is int ovf && ovf > 0)
                 {
                     // turno fluido: este move cruza el turno (o ya cruzó
                     // y arrancás comprometido)
@@ -975,6 +979,8 @@ namespace LagFighter
             {
                 _row0.AreaRt.gameObject.SetActive(rowsOn);
                 _row1.AreaRt.gameObject.SetActive(rowsOn);
+                _rowLabels[0].gameObject.SetActive(rowsOn);
+                _rowLabels[1].gameObject.SetActive(rowsOn);
             }
             if (rowsOn)
                 for (int r = 0; r < 2; r++)
@@ -1809,6 +1815,90 @@ namespace LagFighter
             _yomiCard[1].gameObject.SetActive(false);
             _yomiVs.gameObject.SetActive(false);
             if (_yomiExplain != null) _yomiExplain.gameObject.SetActive(false);
+            ClearComboChain();
+        }
+
+        // ---- la cadena del combo, EN PANTALLA mientras se ejecuta ----
+
+        public void ClearComboChain()
+        {
+            foreach (var go in _comboItems) if (go != null) Destroy(go);
+            _comboItems.Clear();
+        }
+
+        // Chips "OPENER » CARTA » CARTA » +PUMP" para cada lado que encadenó
+        // (combo, castigo o contragolpe). Quedan visibles durante TODO el
+        // teatro, debajo del fallo — se lee qué secuencia está pasando.
+        public void ShowCardsComboChain(CardSim s, CardTurnResult r)
+        {
+            ClearComboChain();
+            float y = -56f;
+            for (int side = 0; side < 2; side++)
+            {
+                bool hasCombo = r.Combo(side).Count > 0;
+                bool hasPunish = r.HitBackSide == side && r.HitBackCard >= 0;
+                bool hasCounter = r.SuperCounter == side;
+                int pumpExtra = side == 0 ? r.PumpExtra0 : r.PumpExtra1;
+                if (!hasCombo && !hasPunish && !hasCounter && pumpExtra == 0) continue;
+
+                // armar las entradas de la fila: (texto, color)
+                var items = new List<(string txt, Color c)>();
+                Color SideCol(int card) => CardDefColor(s.Def(side, card), card);
+                string Nm(int card)
+                {
+                    string n = s.Def(side, card).Name.ToUpperInvariant();
+                    int par = n.IndexOf('(');
+                    return par > 0 ? n.Substring(0, par).Trim() : n;
+                }
+                if (hasPunish)
+                {
+                    items.Add(("¡CASTIGO!", new Color(1f, 0.55f, 0.9f)));
+                    items.Add((Nm(r.HitBackCard), SideCol(r.HitBackCard)));
+                }
+                else if (hasCounter)
+                {
+                    items.Add((Nm(r.Card(side)), SideCol(r.Card(side))));
+                    items.Add(($"CONTRAGOLPE {s.Def(side, r.Card(side)).DodgeCounter}", new Color(1f, 0.78f, 0.2f)));
+                }
+                else
+                {
+                    items.Add((Nm(r.Card(side)), SideCol(r.Card(side))));
+                    foreach (int c in r.Combo(side)) items.Add((Nm(c), SideCol(c)));
+                }
+                if (pumpExtra > 0) items.Add(($"+{pumpExtra} PUMP", new Color(1f, 0.85f, 0.3f)));
+
+                // fila centrada: chip · » · chip · » · chip
+                const float chipW = 172f, chipH = 34f, arrowW = 26f;
+                float total = items.Count * chipW + (items.Count - 1) * arrowW;
+                float x = -total / 2f + chipW / 2f;
+                string who = side == 0 ? "VOS" : "RIVAL";
+                var tag = MakeTextP(_canvasRt, "ComboTag" + side, who, new Vector2(0.5f, 0.5f),
+                    new Vector2(-total / 2f - 40f, y), new Vector2(70f, 20f), 8,
+                    side == 0 ? new Color(0.55f, 0.85f, 1f) : new Color(1f, 0.6f, 0.45f), TextAnchor.MiddleRight);
+                tag.rectTransform.pivot = new Vector2(1f, 0.5f);
+                _comboItems.Add(tag.gameObject);
+                for (int k = 0; k < items.Count; k++)
+                {
+                    var (txt, col) = items[k];
+                    var chip = MakeImage(_canvasRt, $"ComboChip{side}_{k}", new Vector2(0.5f, 0.5f),
+                        new Vector2(x, y), new Vector2(chipW, chipH), new Color(0.07f, 0.08f, 0.11f, 0.96f));
+                    _comboItems.Add(chip.gameObject);
+                    MakeImage(chip.rectTransform, "Edge", new Vector2(0f, 0.5f), new Vector2(3f, 0f),
+                        new Vector2(5f, chipH - 6f), new Color(col.r, col.g, col.b, 0.95f));
+                    var t = MakeTextP(chip.rectTransform, "T", txt, new Vector2(0.5f, 0.5f), new Vector2(4f, 0f),
+                        new Vector2(chipW - 16f, chipH - 4f), 8,
+                        new Color(col.r * 0.45f + 0.55f, col.g * 0.45f + 0.55f, col.b * 0.45f + 0.55f), TextAnchor.MiddleCenter);
+                    if (k < items.Count - 1)
+                    {
+                        var arrow = MakeTextP(_canvasRt, $"ComboArr{side}_{k}", "»", new Vector2(0.5f, 0.5f),
+                            new Vector2(x + chipW / 2f + arrowW / 2f, y), new Vector2(arrowW, 26f), 16,
+                            new Color(1f, 0.85f, 0.3f), TextAnchor.MiddleCenter);
+                        _comboItems.Add(arrow.gameObject);
+                    }
+                    x += chipW + arrowW;
+                }
+                y -= 44f; // la fila del otro lado, debajo
+            }
         }
 
         void AnimateYomiCards()

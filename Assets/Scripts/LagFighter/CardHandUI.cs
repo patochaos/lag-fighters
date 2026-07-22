@@ -39,7 +39,7 @@ namespace LagFighter
         bool _pickIsPower; // false: descarte del exchange · true: beneficio del power up
         // panel de detalle a la derecha
         Image _infoBg;
-        Text _detailTitle, _detailStats, _detailTag, _detail, _status;
+        Text _detailTitle, _detailStats, _detail, _status;
         Mode _mode = Mode.Opener;
         int _exGive = -1;   // ExchangeGive: carta elegida para soltar
         int _powerA = -1;   // PowerA→B: primera carta del par
@@ -122,6 +122,17 @@ namespace LagFighter
                 case CardCatalog.LowBlock: return "Para bajos y mids, roba 1 y vuelve a la mano si no te pegan.";
                 case CardCatalog.HighBlock: return "Para altos y mids, roba 1 y vuelve. El agarre lo rompe.";
                 case CardCatalog.Ability: return "Se juega en TU main phase (no es un opener). " + S.Chr[0].AbilityText;
+                case CardCatalog.SpecialX: return "El proyectil que trabaja solo: pega, chipea, no deja robar al que lo bloquea y VUELVE a tu mano.";
+                case CardCatalog.SpecialY: return d.SelfDamage > 0
+                    ? "El reversal que cuesta sangre: más rápido que casi todo, pero pagás vida y si te lo bloquean hay castigo."
+                    : "El reversal: más rápido que casi todo lo demás, pero si te lo bloquean hay castigo.";
+                case CardCatalog.SpecialZ: return "El golpe ALTO con pump: castiga al que bloquea bajo, y el otro Z se quema para pegar más.";
+                case CardCatalog.Super1: return d.Combo == ComboType.CantCombo
+                    ? "La super barata: no combea, pero pumpeada con supers pega muchísimo."
+                    : "La super de daño: confirmala desde un combo (con Viento entra tras el agarre) o usala de lectura.";
+                case CardCatalog.Super2: return d.DodgeCounter > 0
+                    ? "La apuesta máxima: esquiva cualquier golpe y le devuelve 40 a los strikes. Pierde con el agarre."
+                    : "El proyectil Nv.3: arrasa cualquier otro proyectil y pega 18 de una.";
             }
             return Props(d);
         }
@@ -254,8 +265,8 @@ namespace LagFighter
                         new Vector2(0f, 34f), new Vector2(CardW, 20f), 13, new Color(1f, 0.85f, 0.3f), TextAnchor.MiddleCenter);
 
                 // propiedades abajo (legibles al agrandarse)
-                MakeText(card.rectTransform, "Props", Props(d), new Vector2(0.5f, 0f), new Vector2(0f, 44f),
-                    new Vector2(CardW - 12f, 56f), 7, new Color(1f, 1f, 1f, 0.78f), TextAnchor.UpperCenter);
+                MakeText(card.rectTransform, "Props", Props(d), new Vector2(0.5f, 0f), new Vector2(0f, 46f),
+                    new Vector2(CardW - 12f, 58f), 8, new Color(1f, 1f, 1f, 0.85f), TextAnchor.UpperCenter);
 
                 // tecla
                 if (i < 10)
@@ -286,15 +297,14 @@ namespace LagFighter
             }
             _pickPanel.gameObject.SetActive(false);
 
-            // panel de detalle a la derecha: solo aparece con hover (vacío
-            // era una caja negra muerta en la pantalla)
-            _infoBg = MakeImage(rootRt, "InfoBg", new Vector2(1f, 0f), new Vector2(-180f, 420f),
-                new Vector2(330f, 210f), new Color(0.04f, 0.05f, 0.07f, 0.94f));
+            // panel de detalle a la derecha: solo aparece con hover. Textos
+            // GRANDES y con aire — la primera versión se pisaba y era ilegible.
+            _infoBg = MakeImage(rootRt, "InfoBg", new Vector2(1f, 0f), new Vector2(-205f, 455f),
+                new Vector2(380f, 270f), new Color(0.03f, 0.04f, 0.06f, 0.98f));
             var ibr = _infoBg.rectTransform;
-            _detailTitle = MakeText(ibr, "Title", "", new Vector2(0.5f, 1f), new Vector2(0f, -18f), new Vector2(306f, 22f), 12, Color.white, TextAnchor.MiddleLeft);
-            _detailStats = MakeText(ibr, "Stats", "", new Vector2(0.5f, 1f), new Vector2(0f, -44f), new Vector2(306f, 20f), 10, new Color(0.95f, 0.88f, 0.55f), TextAnchor.MiddleLeft);
-            _detailTag = MakeText(ibr, "Tag", "", new Vector2(0.5f, 1f), new Vector2(0f, -68f), new Vector2(306f, 30f), 8, Color.white, TextAnchor.UpperLeft);
-            _detail = MakeText(ibr, "Desc", "", new Vector2(0.5f, 1f), new Vector2(0f, -104f), new Vector2(306f, 96f), 12, new Color(1f, 1f, 1f, 0.85f), TextAnchor.UpperLeft, pixel: false);
+            _detailTitle = MakeText(ibr, "Title", "", new Vector2(0.5f, 1f), new Vector2(0f, -24f), new Vector2(348f, 30f), 13, Color.white, TextAnchor.MiddleLeft);
+            _detailStats = MakeText(ibr, "Stats", "", new Vector2(0.5f, 1f), new Vector2(0f, -64f), new Vector2(348f, 60f), 9, new Color(0.95f, 0.88f, 0.55f), TextAnchor.UpperLeft);
+            _detail = MakeText(ibr, "Desc", "", new Vector2(0.5f, 1f), new Vector2(0f, -138f), new Vector2(348f, 124f), 15, new Color(1f, 1f, 1f, 0.92f), TextAnchor.UpperLeft, pixel: false);
 
             // estado / instrucciones del modo, arriba del abanico
             _status = MakeText(rootRt, "Status", "", new Vector2(0.5f, 0f), new Vector2(0f, BaseY + CardH + 28f),
@@ -629,9 +639,9 @@ namespace LagFighter
             var col = HudUI.CardDefColor(d, card);
             _detailTitle.text = d.Name.ToUpperInvariant();
             _detailTitle.color = new Color(col.r * 0.5f + 0.5f, col.g * 0.5f + 0.5f, col.b * 0.5f + 0.5f);
-            _detailStats.text = HudUI.CardDefInfo(d);
-            _detailTag.text = Props(d);
-            _detailTag.color = new Color(col.r * 0.6f + 0.4f, col.g * 0.6f + 0.4f, col.b * 0.6f + 0.4f);
+            // una sola línea de stats + una de propiedades, cada una en su
+            // lugar (la tag duplicada pisaba todo)
+            _detailStats.text = HudUI.CardDefInfo(d) + "\n" + Props(d);
             _detail.text = DetailDesc(card, d);
         }
     }
