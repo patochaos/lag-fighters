@@ -289,6 +289,98 @@ propósito (con el porqué) · ≈ = adaptado.
 - **Cierre**: KO en el 99.9% de 4000 partidas (14.4 turnos promedio);
   el 0.1% restante termina por time over con juez por vida.
 
+
+## 5. Análisis de CASUALIZACIÓN (2026-07-22) — qué cortar sin romper el balance
+
+> Pedido de Patricio: análisis puro, sin código. Qué se puede simplificar o
+> remover del modo CARTAS para hacerlo más casual. Los números salen del
+> lab (4000 partidas IA vs IA, ~68.000 combates).
+
+### El criterio
+
+**"Casual" acá significa tres cosas medibles**: (1) menos REGLAS
+simultáneas que recordar, (2) menos DECISIONES por turno (hoy un turno
+propio puede encadenar: exchange ×2 → power up con 2 elecciones → ability
+→ opener → combo carta a carta → pump → parar-o-seguir), y (3) menos
+EXCEPCIONES ("...salvo que", el veneno de la curva de entrada).
+
+**"Sin romper el balance" tiene una regla de oro**: los cortes SIMÉTRICOS
+(le sacan lo mismo a los dos jugadores) son seguros por construcción; los
+ASIMÉTRICOS (tocan una carta o habilidad de UN personaje) mueven el
+matchup y necesitan re-medición. Hoy el matchup es Jaina 60/40 — un corte
+asimétrico bien elegido puede incluso EMPAREJAR.
+
+### La tabla: costo cognitivo vs valor real
+
+| Mecánica | Costo cognitivo | Uso real (lab) | Veredicto |
+|---|---|---|---|
+| **The Edge** | 1 regla muerta (nadie la genera sin gems) | **0 usos** | **CORTAR YA** — costo cero, hoy solo existe en el manual |
+| **Pumps** | alto: 3 combustibles distintos, decisión extra tras cada golpe, botón propio | 1.2/partida | **CORTAR** — es LA excepción fiddly; simétrico casi todo (ver nota Jaina S1) |
+| **Lockdown (X sin robo)** | 1 excepción a "bloquear roba" | frecuente pero invisible | **CORTAR** — bloquear SIEMPRE roba: una regla menos, buff parejo al defensor |
+| **Power Up doble opción** | media: par + elegir beneficio + elegir cuál super | 1 de cada ~2 turnos propios | **SIMPLIFICAR**: "par → +1★ y recuperá una super si hay" (una sola opción, sin picker) |
+| **Wind Summon (3 efectos)** | alto: nivel+2, gana a esquives, +4/+2, CP de super | se juega seguido | **SIMPLIFICAR a UN efecto**: "tus supers cuestan 2 CP" (el único que habilita el combo nuevo Throw>S1 — el resto es letra chica) |
+| **Arc Shot (3 efectos + condición de la Y)** | alto | **8.9k procs**: omnipresente | **SIMPLIFICAR a UN efecto**: "si el rival abre con ataque, come 7". Cortar el chip al bloqueo y la cláusula de la Y — además EMPAREJA el 60/40 (es la fuente #1 de la ventaja de Jaina) |
+| **Self-damage de la Y + umbral 35** | medio: excepción con condición numérica | común | **SIMPLIFICAR**: self-damage fijo SIN umbral (una cláusula menos); o subirle 1 al costo y sacarlo |
+| **Imprudencia (innate Jaina)** | medio: trigger de fase que sorprende | 1.6k procs | **DEJAR** (es identidad y es opt-in: solo dispara si VOS vaciaste tus blocks) o cortar ambos innates juntos (simétrico) |
+| **Combo points + tipos de combo** | EL más alto del juego | 4+ combos/partida | **NO CORTAR, ASISTIR** (ver abajo) — es el payoff que hace que ganar el opener importe |
+| **Super dodge de Grave (S2)** | medio: única carta "dodge que no es dodge" | **90 usos en 4000 partidas (2.3%)** | **REEMPLAZAR**: peor ratio valor/complejidad del juego; una super ATTACK simple (mismo slot) elimina una categoría entera de carta |
+| **Wild swing** | bajo (la UI ya lo esconde) | 139 procs | dejar — es plomería invisible |
+| **Recurring / robo por bloqueo / exchange** | bajo y CENTRAL | constante | **NO TOCAR** — es la economía que hace respirar la mano |
+| **Alturas high/low/mid** | bajo (2 bloqueos, 3 alturas) | constante | **NO TOCAR** — es el alma de fighting game del mixup |
+| **Tabla attack/throw/block/dodge + speeds** | bajo | constante | **NO TOCAR** — es el juego |
+
+### Los combos: asistir, no amputar
+
+El sistema de combos es el 60% del costo cognitivo (tipos, letras, CP,
+meter por chain, "el KD se pierde si seguís"). Pero cortarlo cambia el
+juego de género (ya lo vivimos: la v1 sin combos es EXACTAMENTE eso, y
+está entera en la historia de git). Para casual, tres palancas que NO
+tocan el balance porque no cambian ninguna regla, solo la presentación:
+
+1. **Auto-combo sugerido**: al conectar, la UI ofrece UN botón "mejor
+   combo" (la secuencia que la IA ya sabe calcular) además de las cartas.
+   El que quiere optimizar a mano, puede; el casual apila daño con un click.
+2. **Cartel de consecuencia**: "si seguís, PERDÉS el derribo" ya se
+   muestra — subirlo a elección binaria explícita (DERRIBAR / +DAÑO) en
+   los agarres, que es donde el casual se equivoca.
+3. **Esconder la teoría**: no mostrar "STARTER/LINKER/ENDER" en las
+   cartas; la UI ya ilumina qué sigue — los nombres de los tipos son
+   jerga que solo paga en el rulebook impreso.
+
+### Presets propuestos (de menor a mayor cirugía)
+
+- **CASUAL SUAVE** (cortes simétricos, balance intacto por construcción):
+  sin Edge, sin pumps, sin lockdown, power up de una sola opción,
+  auto-combo sugerido, jerga de combos oculta. Se pierde: ~nada del yomi.
+  Nota: sin pumps, la S1 de Jaina pierde su +18 potencial — como Jaina va
+  60/40 arriba, este "des-balance" corrige en la dirección correcta.
+- **CASUAL MEDIO**: lo anterior + abilities de UN efecto + self-damage
+  sin umbral + S2 de Grave reemplazada por una super attack simple.
+  Asimétrico pero dirigido: cada corte le saca más al personaje que va
+  ganando (Jaina) o elimina la carta menos usada del juego (S2 Grave).
+  Re-medir con el lab (los flags de config ya existen como patrón en el
+  proyecto: SimConfig.*Enabled).
+- **CASUAL TOTAL**: la v1 sin combos/supers/meter/abilities (commit
+  54a3afc): HP 45, un golpe = su daño y listo. Ya está probada: 14
+  turnos/partida, KO 100%, parejo. Es, en la práctica, el "modo arcade"
+  gratis — recuperarla como toggle sería reactivar código, no diseñar.
+
+### Lo que NO se toca bajo ningún preset
+
+La tabla de counters (attack>throw>block/dodge>attack), las alturas, el
+speed con empate al activo, el agarre que derriba, bloquear-roba-carta,
+recurring, el exchange y el descarte público. Eso ES Yomi 2: cualquier
+corte ahí no da un Yomi casual, da otro juego (y para eso ya está el modo
+YOMI discreto, que es exactamente esa reducción bien hecha).
+
+### El orden si esto se implementara mañana
+
+1º Edge (borrar 3 líneas de manual), 2º pumps + lockdown + power up
+simple (una tarde, simétrico, sin lab), 3º auto-combo sugerido (el mayor
+salto de accesibilidad por hora invertida), 4º abilities de un efecto
+(con pasada de lab), 5º presets como toggle de menú. Todo lo demás,
+dejarlo quieto.
+
 ### Después (anotado, no ahora)
 
 - Combos con combo points (la razón de ser de las letras A-E).
