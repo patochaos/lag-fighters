@@ -183,6 +183,17 @@ namespace LagFighter
             ExchangesLeft = CardConfig.ExchangesPerTurn;
             int draws = Turn == 1 ? CardConfig.FirstTurnDraw : CardConfig.DrawPerTurn;
             for (int n = 0; n < draws && !Over; n++) DrawOne(Active, true);
+            SortHands();
+        }
+
+        // La mano ordenada como en un juego de cartas real (A→E, agarre,
+        // esquive, bloqueos, X/Y/Z): legibilidad pura. Solo se ordena en
+        // puntos sin selección pendiente — los índices que ven la UI y la IA
+        // siempre salen de la lista YA ordenada. Determinista.
+        void SortHands()
+        {
+            Hand[0].Sort();
+            Hand[1].Sort();
         }
 
         public bool CanExchange(int handIdx, int discardIdx)
@@ -204,6 +215,7 @@ namespace LagFighter
             Discard[Active].Add(outCard);
             Hand[Active].Add(inCard);
             ExchangesLeft--;
+            SortHands(); // la carta recuperada entra en su lugar
             return true;
         }
 
@@ -241,6 +253,7 @@ namespace LagFighter
             Fight(c0, c1);
 
             if (!AwaitingHitBack) FinishCombat();
+            else SortHands(); // el robo por bloqueo ya entró: el menú de castigo sale ordenado
             return _r;
         }
 
@@ -412,6 +425,7 @@ namespace LagFighter
                 Winner = Hp[0] == Hp[1] ? -1 : (Hp[0] > Hp[1] ? 0 : 1);
             }
 
+            SortHands(); // robos por bloqueo y recurring entran en su lugar
             Active = 1 - Active;
         }
 
