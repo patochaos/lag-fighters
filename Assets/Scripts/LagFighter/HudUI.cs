@@ -968,16 +968,25 @@ namespace LagFighter
             // mostrar ("? ? ?") — en su lugar RECAPITULA el turno anterior
             // (su plan ya revelado, congelado y legible: la acción pasa
             // rápido y esto es lo que queda para estudiarla).
-            for (int r = 0; r < 2; r++)
+            // en CARTAS no hay colas de frames: las timelines son ruido puro
+            // (la mano ES la interfaz) — se apagan enteras
+            bool rowsOn = !SimConfig.CardsEnabled;
+            if (_row0.AreaRt.gameObject.activeSelf != rowsOn)
             {
-                var row = r == 0 ? _row0 : _row1;
-                bool recap = flow == MatchController.Flow.Planning && !SimConfig.YomiEnabled &&
-                             r != _mc.Picker && _mc.Mode != GameMode.Practice &&
-                             _mc.LastTurnQueue(r) != null;
-                row.SetRecap(recap);
-                if (recap) row.UpdateRow(_mc.LastTurnQueue(r), true, -1f, 0, StunKind.None);
-                else row.UpdateRow(_mc.GetPlan(r), _mc.RowRevealed(r), playX, _mc.TimelineOffset(r), _mc.TurnStartStunKind[r]);
+                _row0.AreaRt.gameObject.SetActive(rowsOn);
+                _row1.AreaRt.gameObject.SetActive(rowsOn);
             }
+            if (rowsOn)
+                for (int r = 0; r < 2; r++)
+                {
+                    var row = r == 0 ? _row0 : _row1;
+                    bool recap = flow == MatchController.Flow.Planning && !SimConfig.YomiEnabled &&
+                                 r != _mc.Picker && _mc.Mode != GameMode.Practice &&
+                                 _mc.LastTurnQueue(r) != null;
+                    row.SetRecap(recap);
+                    if (recap) row.UpdateRow(_mc.LastTurnQueue(r), true, -1f, 0, StunKind.None);
+                    else row.UpdateRow(_mc.GetPlan(r), _mc.RowRevealed(r), playX, _mc.TimelineOffset(r), _mc.TurnStartStunKind[r]);
+                }
 
             UpdateTimelineInteraction(flow);
             UpdateConnStrip(sim);

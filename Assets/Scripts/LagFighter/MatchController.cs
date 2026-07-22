@@ -1097,7 +1097,8 @@ namespace LagFighter
 
         public void CardsPlayAbility(int handIdx)
         {
-            if (!CardsPlanningOpen() || !Cards.PlayAbility(handIdx)) return;
+            // solo en TU main phase: la sim opera sobre la mano del ACTIVO
+            if (!CardsPlanningOpen() || Cards.Active != 0 || !Cards.PlayAbility(handIdx)) return;
             _hud.Feedback(0, Cards.Chr[0].Cards[CardCatalog.Ability].Name.ToUpperInvariant() + " ACTIVA (2 combates)",
                 new Color(0.6f, 0.95f, 1f));
             SfxLib.Play(SfxLib.Kind.TurnStart, 0.5f);

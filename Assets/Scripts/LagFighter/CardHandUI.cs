@@ -38,6 +38,7 @@ namespace LagFighter
         int _pickCount;
         bool _pickIsPower; // false: descarte del exchange · true: beneficio del power up
         // panel de detalle a la derecha
+        Image _infoBg;
         Text _detailTitle, _detailStats, _detailTag, _detail, _status;
         Mode _mode = Mode.Opener;
         int _exGive = -1;   // ExchangeGive: carta elegida para soltar
@@ -253,8 +254,8 @@ namespace LagFighter
                         new Vector2(0f, 34f), new Vector2(CardW, 20f), 13, new Color(1f, 0.85f, 0.3f), TextAnchor.MiddleCenter);
 
                 // propiedades abajo (legibles al agrandarse)
-                MakeText(card.rectTransform, "Props", Props(d), new Vector2(0.5f, 0f), new Vector2(0f, 34f),
-                    new Vector2(CardW - 12f, 58f), 7, new Color(1f, 1f, 1f, 0.78f), TextAnchor.UpperCenter);
+                MakeText(card.rectTransform, "Props", Props(d), new Vector2(0.5f, 0f), new Vector2(0f, 44f),
+                    new Vector2(CardW - 12f, 56f), 7, new Color(1f, 1f, 1f, 0.78f), TextAnchor.UpperCenter);
 
                 // tecla
                 if (i < 10)
@@ -285,10 +286,11 @@ namespace LagFighter
             }
             _pickPanel.gameObject.SetActive(false);
 
-            // panel de detalle a la derecha
-            var infoBg = MakeImage(rootRt, "InfoBg", new Vector2(1f, 0f), new Vector2(-180f, 420f),
+            // panel de detalle a la derecha: solo aparece con hover (vacío
+            // era una caja negra muerta en la pantalla)
+            _infoBg = MakeImage(rootRt, "InfoBg", new Vector2(1f, 0f), new Vector2(-180f, 420f),
                 new Vector2(330f, 210f), new Color(0.04f, 0.05f, 0.07f, 0.94f));
-            var ibr = infoBg.rectTransform;
+            var ibr = _infoBg.rectTransform;
             _detailTitle = MakeText(ibr, "Title", "", new Vector2(0.5f, 1f), new Vector2(0f, -18f), new Vector2(306f, 22f), 12, Color.white, TextAnchor.MiddleLeft);
             _detailStats = MakeText(ibr, "Stats", "", new Vector2(0.5f, 1f), new Vector2(0f, -44f), new Vector2(306f, 20f), 10, new Color(0.95f, 0.88f, 0.55f), TextAnchor.MiddleLeft);
             _detailTag = MakeText(ibr, "Tag", "", new Vector2(0.5f, 1f), new Vector2(0f, -68f), new Vector2(306f, 30f), 8, Color.white, TextAnchor.UpperLeft);
@@ -298,6 +300,7 @@ namespace LagFighter
             _status = MakeText(rootRt, "Status", "", new Vector2(0.5f, 0f), new Vector2(0f, BaseY + CardH + 28f),
                 new Vector2(1400f, 22f), 11, new Color(0.5f, 1f, 0.6f), TextAnchor.MiddleCenter);
 
+            _infoBg.gameObject.SetActive(false); // aparece con el hover
             RefreshStates();
             _root.SetActive(_active);
         }
@@ -429,6 +432,7 @@ namespace LagFighter
             {
                 _hover = hover;
                 if (hover >= 0) { SfxLib.Play(SfxLib.Kind.UiTick, 0.25f); FillDetail(hover); }
+                if (_infoBg != null) _infoBg.gameObject.SetActive(hover >= 0);
                 LayoutHand();
             }
 
