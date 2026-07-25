@@ -180,7 +180,7 @@ class Program
         public readonly long[] GuardOkSide = new long[2], GuardMalSide = new long[2], WinsSide = new long[2];
         public long PrizeDmg, PrizeKd, Punishes, Kds, Empty;
         public long HandSum, HandSamples;
-        public readonly long[,] Uses = new long[2, DuelCatalog.CardsPerChar];
+        public readonly long[,] Uses = new long[DuelCatalog.Chars.Length, DuelCatalog.CardsPerChar];
 
         public void Turn(DuelSim d, DuelTurnResult r, int c0, int c1)
         {
@@ -213,26 +213,40 @@ class Program
 
     static void RunDueloLab(int matches)
     {
+        int nc = DuelCatalog.Chars.Length;
         var st = new DuelStats();
-        var wins = new long[2, 2];
-        var games = new long[2, 2];
+        var wins = new long[nc, nc];
+        var games = new long[nc, nc];
         for (int m = 0; m < matches; m++)
         {
-            int c0 = (m / 2) % 2, c1 = m % 2;
+            int c0 = (m / nc) % nc, c1 = m % nc;
             int w = PlayDuel(m + 1, c0, c1, DuelBot.Full, DuelBot.Full, st);
             games[c0, c1]++;
             if (w == 0) wins[c0, c1]++;
         }
-        string[] cn = { "Grave", "Jaina" };
+        var cn = new string[nc];
+        for (int i = 0; i < nc; i++) cn[i] = DuelCatalog.Chars[i].Name;
         Console.WriteLine($"partidas: {matches} · empates {st.Draws} · KO {100.0 * st.Kos / matches:0.0}% · time over {100.0 * st.TimeOvers / matches:0.0}%");
         Console.WriteLine($"turnos/partida: {(double)st.Turns / matches:0.0} · mano promedio {(double)st.HandSum / Math.Max(1, st.HandSamples):0.0}/{DuelConfig.HandLimit} · manos vacías {st.Empty}");
         Console.WriteLine($"guardias bien {st.GuardOk} · altura equivocada {st.GuardMal} ({100.0 * st.GuardOk / Math.Max(1, st.GuardOk + st.GuardMal):0}% acierto) · chips {st.Chips}");
         Console.WriteLine($"premio: +DAÑO {st.PrizeDmg} vs DERRIBO {st.PrizeKd} · derribos {st.Kds} · castigos {st.Punishes} · trades {st.Trades} · techs {st.Techs} · escapes {st.Escapes}");
-        for (int a = 0; a < 2; a++)
-            for (int b = 0; b < 2; b++)
+        Console.WriteLine("  winrate global por personaje (los dos lados juntos):");
+        for (int a = 0; a < nc; a++)
+        {
+            double w = 0, g = 0;
+            for (int b = 0; b < nc; b++)
+            {
+                if (a == b) continue;
+                w += wins[a, b]; g += games[a, b];
+                w += games[b, a] - wins[b, a]; g += games[b, a];
+            }
+            Console.WriteLine($"    {cn[a],-8}{100.0 * w / Math.Max(1, g):0.0}%");
+        }
+        for (int a = 0; a < nc; a++)
+            for (int b = 0; b < nc; b++)
                 if (games[a, b] > 0)
                     Console.WriteLine($"  {cn[a]} vs {cn[b]}: {100.0 * wins[a, b] / games[a, b]:0.0}% para {cn[a]} ({games[a, b]} partidas)");
-        for (int c = 0; c < 2; c++)
+        for (int c = 0; c < nc; c++)
         {
             Console.WriteLine($"  usos — {cn[c]}:");
             var chr = DuelCatalog.Chars[c];
@@ -283,8 +297,9 @@ class Program
                 DuelConfig.MaxHp = hp;
                 DuelConfig.GuardDraw = gd;
                 var st = new DuelStats();
+                int nc = DuelCatalog.Chars.Length;
                 for (int m = 0; m < matches; m++)
-                    PlayDuel(m + 1, (m / 2) % 2, m % 2, DuelBot.Full, DuelBot.Full, st);
+                    PlayDuel(m + 1, (m / nc) % nc, m % nc, DuelBot.Full, DuelBot.Full, st);
                 double gap = Duel1v1(matches, DuelBot.Full, DuelBot.Random);
                 double ctrl = Duel1v1(matches, DuelBot.Full, DuelBot.NoReads);
                 double con = Duel1v1(matches, DuelBot.Full, DuelBot.Predictable);
@@ -303,7 +318,8 @@ class Program
         double score = 0; int played = 0;
         for (int m = 0; m < matches; m++)
         {
-            int c0 = (m / 2) % 2, c1 = m % 2;
+            int nc = DuelCatalog.Chars.Length;
+            int c0 = (m / nc) % nc, c1 = m % nc;
             bool aFirst = (m & 1) == 0;
             int aSide = aFirst ? 0 : 1;
             var st = porLado?[aSide];
@@ -321,7 +337,8 @@ class Program
         double score = 0;
         for (int m = 0; m < matches; m++)
         {
-            int w = PlayDuel(m + 1, (m / 2) % 2, m % 2, bot, bot);
+            int nc = DuelCatalog.Chars.Length;
+            int w = PlayDuel(m + 1, (m / nc) % nc, m % nc, bot, bot);
             if (w == 0) score += 1; else if (w < 0) score += 0.5;
         }
         return score / Math.Max(1, matches);

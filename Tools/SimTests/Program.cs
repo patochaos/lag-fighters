@@ -132,6 +132,10 @@ class Tests
         DueloKoTerminaLaPartida();
         DueloSinCartasNoRompe();
         DueloMismaSeedMismaPartida();
+        DueloElGolemEsGrappler();
+        DueloAgarreVsAgarreDesempataLaVelocidad();
+        DueloAguanteComeElGolpeYAgarraIgual();
+        DueloAguanteNoAplicaSinLaCarta();
         if (SimConfig.LimbsEnabled)
         {
             TresJabsArrancanElBrazo();
@@ -1728,6 +1732,66 @@ class Tests
         if (d.AwaitingChoice) d.ChoosePrize(DuelPrize.Knockdown);
         Check(r.Card1 == -1 && r.Winner == 0 && d.Hp[1] == DuelConfig.MaxHp - 3,
             "duelo: sin cartas en mano se come el golpe, sin romperse", $"hp1 {d.Hp[1]}");
+    }
+
+    // El grappler de la Ley 11: ninguna regla nueva de sistema, solo pesos
+    // (cinco agarres en veinte cartas y más vida) + UNA línea de carta.
+    static void DueloElGolemEsGrappler()
+    {
+        var d = NewDuelo(DuelCatalog.GolemIdx, DuelCatalog.GraveIdx);
+        var g = DuelCatalog.Golem;
+        int agarres = g.DeckCounts[DuelCatalog.Throw] + g.DeckCounts[DuelCatalog.Sig1];
+        bool armor = g.Cards[DuelCatalog.Sig1].Armor && g.Cards[DuelCatalog.Sig1].Kind == DuelKind.Grab;
+        Check(agarres == 5 && armor && d.MaxHpOf(0) == DuelConfig.MaxHp + 8 &&
+              d.MaxHpOf(1) == DuelConfig.MaxHp,
+            "duelo: el Golem es grappler (5 agarres, Roca con aguante, +8 de vida)",
+            $"agarres {agarres}, aguante {armor}, hp {d.MaxHpOf(0)}");
+    }
+
+    // Dos agarres DISTINTOS: manda la velocidad. La Roca es la más lenta del
+    // juego (ese es el precio de su aguante), así que el agarre común le gana.
+    static void DueloAgarreVsAgarreDesempataLaVelocidad()
+    {
+        var d = NewDuelo(DuelCatalog.GolemIdx, DuelCatalog.GraveIdx);
+        Mano(d, 0, DuelCatalog.Sig1);    // Roca del Golem (la lenta)
+        Mano(d, 1, DuelCatalog.Throw);   // agarre común (más rápida)
+        var roca = DuelCatalog.Golem.Cards[DuelCatalog.Sig1];
+        var comun = DuelCatalog.Grave.Cards[DuelCatalog.Throw];
+        var r = d.Resolve(0, 0);
+        if (d.AwaitingChoice) d.ChoosePrize(DuelPrize.Knockdown);
+        Check(roca.Speed < comun.Speed && !r.Tech && r.Winner == 1 &&
+              d.Hp[0] == DuelConfig.MaxHp + DuelCatalog.Golem.HpBonus - comun.Damage,
+            "duelo: agarre vs agarre lo desempata la VELOCIDAD (tech solo si empatan)",
+            $"tech {r.Tech}, winner {r.Winner}, hp0 {d.Hp[0]}");
+    }
+
+    // Super armor: el golpe pega, pero el agarre entra igual. Es un CAMBIO,
+    // no una derrota — y por eso nadie cobra premio.
+    static void DueloAguanteComeElGolpeYAgarraIgual()
+    {
+        var d = NewDuelo(DuelCatalog.GolemIdx, DuelCatalog.GraveIdx);
+        Mano(d, 0, DuelCatalog.Sig1);     // Roca con AGUANTE (8)
+        Mano(d, 1, DuelCatalog.AttackD);  // Patada (7): normalmente le gana al agarre
+        int dmgRoca = DuelCatalog.Golem.Cards[DuelCatalog.Sig1].Damage;
+        int dmgPatada = DuelCatalog.Grave.Cards[DuelCatalog.AttackD].Damage;
+        var r = d.Resolve(0, 0);
+        Check(r.Armor && r.Trade && !d.AwaitingChoice &&
+              d.Hp[0] == DuelConfig.MaxHp + DuelCatalog.Golem.HpBonus - dmgPatada &&
+              d.Hp[1] == DuelConfig.MaxHp - dmgRoca,
+            "duelo: AGUANTE — el golpe pega pero el agarre entra igual (sin premio)",
+            $"armor {r.Armor}, hp {d.Hp[0]}/{d.Hp[1]}, premio pendiente {d.AwaitingChoice}");
+    }
+
+    static void DueloAguanteNoAplicaSinLaCarta()
+    {
+        var d = NewDuelo(DuelCatalog.GolemIdx, DuelCatalog.GraveIdx);
+        Mano(d, 0, DuelCatalog.Throw);    // agarre COMÚN: sin aguante
+        Mano(d, 1, DuelCatalog.AttackD);
+        var r = d.Resolve(0, 0);
+        if (d.AwaitingChoice) d.ChoosePrize(DuelPrize.Knockdown);
+        Check(!r.Armor && r.Winner == 1 && d.Hp[1] == DuelConfig.MaxHp,
+            "duelo: sin la carta de aguante, el golpe le gana al agarre como siempre",
+            $"armor {r.Armor}, winner {r.Winner}");
     }
 
     static void DueloMismaSeedMismaPartida()

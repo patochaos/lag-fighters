@@ -522,8 +522,21 @@ roba 2 y la guardia vuelve a la mano · robás 1 por turno, mano 8, remezcla
   de la información contra un bot random siempre da 50% (hace falta un rival
   competente con un tic); y el sesgo de lado que apareció era `System.Random`
   correlacionando seeds, no la sim.
-- **Falta**: UI (reuso del abanico de `CardHandUI`), teatro, menú con JUGAR
-  grande y onboarding guionado. Ver DUELO.md §8.
+- **UI (2026-07-25, tarde)**: `DuelHandUI.cs` (abanico de cartas grandes,
+  altura codificada por POSICIÓN de la barra, keywords en chips, detalle en
+  castellano) + `DuelHudUI.cs` (vida exacta, mano/mazo/descarte de ambos, el
+  strip "LE QUEDAN" con las guardias resaltadas, triángulo permanente y
+  revelación dockeable). El teatro actúa cada carta con la altura correcta y
+  el derribado **queda en el piso durante su planificación**. Trampa
+  evitada: la guardia usa `WalkB` (único move que `IsBlockingState` acepta) —
+  con `Parry` el defensor se comía el golpe contradiciendo a la tabla.
+- **Tercer personaje GOLEM** (grappler): 5 agarres en 20 cartas, +8 de vida
+  y **super armor** en la Roca Rodante — a pedido de Patricio, es el clásico
+  del grappler y entra como UNA línea en UNA carta, no como categoría del
+  sistema. Se paga con velocidad y daño (vel 3 / 5): con vel 7 / 8 el Golem
+  se iba a 65.8% en el lab; ahora Grave 49.8 · Jaina 48.1 · Golem 52.1.
+- **Falta**: verificación EN VIVO en el editor (no estaba abierto) y el
+  onboarding guionado. Ver DUELO.md §10.
 
 ## Historial de pivots
 

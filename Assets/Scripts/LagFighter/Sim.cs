@@ -36,7 +36,7 @@ namespace LagFighter
         // siguiente, que arranca con menos.
         public static bool ApEnabled = true;
         public const int FramesPerAp = 12;
-        public static bool ApActive => ApEnabled && !YomiEnabled && !CardsEnabled; // en YOMI/CARTAS los recursos son otros
+        public static bool ApActive => ApEnabled && !TableMode; // en YOMI/CARTAS los recursos son otros
 
         // OVERFLOW/PRÉSTAMO — DESACTIVADO a pedido (2026-07-20, mismo día que
         // nació): pasarse del presupuesto complejizaba entender si lo BÁSICO
@@ -67,6 +67,13 @@ namespace LagFighter
         // CardSim.cs (mazos, manos, combate por tabla con speeds y alturas).
         // Igual que en YOMI, la sim de frames es solo TEATRO del resultado.
         public static bool CardsEnabled = false;
+
+        // ---- Modo DUELO (2026-07-25): EL núcleo casual — la lógica vive en
+        // DuelSim.cs (7 reglas, mazo de 20, alturas y velocidad). La sim de
+        // frames es TEATRO puro: actúa la carta que la tabla ya resolvió.
+        public static bool DuelEnabled = false;
+        // Los modos "de mesa" comparten esto: la sim de frames no manda.
+        public static bool TableMode => YomiEnabled || CardsEnabled || DuelEnabled;
         // 20 turnos por round → TIME OVER y decide la vida. Calibrado con la
         // distribución natural del lab: mediana 13, p75 21; con 20 el 75% de
         // las peleas termina por KO y el juez solo corta la cola de stalls.

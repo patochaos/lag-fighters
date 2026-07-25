@@ -712,7 +712,7 @@ namespace LagFighter
             if (flow != _prevFlow)
             {
                 // en YOMI la transición la cuentan las cartas de revelación
-                if (flow == MatchController.Flow.Executing && _prevFlow == MatchController.Flow.Planning && !SimConfig.YomiEnabled)
+                if (flow == MatchController.Flow.Executing && _prevFlow == MatchController.Flow.Planning && !SimConfig.YomiEnabled && !SimConfig.DuelEnabled)
                     ShowBigMessage("¡EJECUTANDO!", new Color(0.5f, 0.95f, 1f), 0.8f);
                 _prevFlow = flow;
             }
@@ -822,7 +822,7 @@ namespace LagFighter
 
                 // en CARTAS no hay guard gauge: la barra vacía en vez de una
                 // llena eterna que no significa nada
-                float g = SimConfig.CardsEnabled ? 0f : sim.Fighters[i].Guard / SimConfig.GuardMax;
+                float g = SimConfig.CardsEnabled || SimConfig.DuelEnabled ? 0f : sim.Fighters[i].Guard / SimConfig.GuardMax;
                 _guardFill[i].rectTransform.sizeDelta = new Vector2(GuardBarW * g, 9f);
                 _guardFill[i].color = g <= 0.25f
                     ? Color.Lerp(Palette.Guard, new Color(1f, 0.2f, 0.15f), Mathf.PingPong(Time.time * 4f, 1f))
@@ -952,7 +952,7 @@ namespace LagFighter
                         default: badge = $"HIT {rem}F"; bc = Palette.Damage; break;
                     }
                 }
-                else if (!SimConfig.CardsEnabled && _mc.OverflowFrames(i) is int ovf && ovf > 0)
+                else if (!SimConfig.CardsEnabled && !SimConfig.DuelEnabled && _mc.OverflowFrames(i) is int ovf && ovf > 0)
                 {
                     // turno fluido: este move cruza el turno (o ya cruzó
                     // y arrancás comprometido)
@@ -974,7 +974,7 @@ namespace LagFighter
             // rápido y esto es lo que queda para estudiarla).
             // en CARTAS no hay colas de frames: las timelines son ruido puro
             // (la mano ES la interfaz) — se apagan enteras
-            bool rowsOn = !SimConfig.CardsEnabled;
+            bool rowsOn = !SimConfig.CardsEnabled && !SimConfig.DuelEnabled;
             if (_row0.AreaRt.gameObject.activeSelf != rowsOn)
             {
                 _row0.AreaRt.gameObject.SetActive(rowsOn);

@@ -603,6 +603,8 @@ namespace LagFighter
                         if (strong < 0 || d.Damage > s.Def(me, hand[strong]).Damage) strong = i;
                         if (d.Height == DuelHeight.High) high = i; else low = i;
                         break;
+                    // (los muy lentos se filtran abajo: pegan un montón pero
+                    // pierden TODA carrera de velocidad — medido con el Golem)
                     case DuelKind.Grab: grab = i; break;
                     case DuelKind.Guard:
                         if (d.Height == DuelHeight.High) gHigh = i; else gLow = i;
@@ -624,6 +626,12 @@ namespace LagFighter
                 return _rng.NextDouble() < 0.5 ? gHigh : gLow;
             }
             int AnyStrike() => fast >= 0 ? fast : strong;
+            // Un golpe muy lento es una LECTURA (le gana a agarres y a la
+            // guardia equivocada), no una jugada de default: si el más fuerte
+            // de la mano es lentísimo, la mitad de las veces se juega el
+            // rápido. Sin esto la IA regalaba las carreras con el Cabezazo.
+            if (strong >= 0 && fast >= 0 && s.Def(me, hand[strong]).Speed <= 4 &&
+                _rng.NextDouble() < 0.5) strong = fast;
             double r = _rng.NextDouble();
 
             // DERRIBADO: mi guardia no bloquea este turno. El escape es la

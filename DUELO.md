@@ -110,7 +110,22 @@ Los dos números en negrita salieron del lab: con Y a 8 de daño y K a vel 8
 **63/37**. Con el ajuste el matchup quedó **50/50**. Ley 11 en acción:
 se tocaron PESOS, no reglas.
 
-Ninguna de las cuatro agrega una categoría nueva ni una excepción a otra
+**GOLEM** — el grappler (agregado 2026-07-25, a pedido).
+- **R — Roca Rodante** ×2: **Agarre**, vel **3**, daño 5.
+  *"AGUANTE: te pegan y te agarra igual (cobran los dos)."*
+- **H — Cabezazo** ×2: Golpe, vel 3, daño **9**, ALTO.
+- Además: **+8 de vida**. Con 5 agarres en 20 cartas, defenderle sale
+  carísimo — hay que pelearle, y pelearle es lo que castiga el Cabezazo.
+
+El **super armor** es la única mecánica nueva desde la spec original, y entra
+como corresponde: **una línea en UNA carta**, no una categoría del sistema.
+En la tabla, golpe-vs-agarre deja de ser derrota limpia y pasa a ser un
+CAMBIO (cobran los dos, nadie cobra premio). Y se paga caro: la Roca es el
+agarre **más lento del juego** (pierde con el agarre común) y el que menos
+pega. Con vel 7 / 8 de daño no perdía con nada y el Golem se iba a **65.8%**
+en el lab; con vel 3 / 5 de daño quedó en 52.1%.
+
+Ninguna de las seis agrega una categoría nueva ni una excepción a otra
 regla: son números y una consecuencia de una línea.
 
 ## 3. Qué se corta de CARTAS v2 y por qué se puede
@@ -223,7 +238,7 @@ diales).
 | Turnos/partida | **13.5** | 8-14 |
 | Mano promedio | 5.2 / 8 | que respire sin desbordar |
 | Premio +DAÑO vs DERRIBO | **60 / 40** | que las dos ramas se usen |
-| Matchup Grave-Jaina | **50.6 / 49.4** | parejo |
+| Winrate por personaje | **Grave 49.8 · Jaina 48.1 · Golem 52.1** | parejo (±2) |
 | Brecha de habilidad (heurística vs random) | **77.5%** | ≥75% |
 | Valor de la información | **+1.9 pp** | >0 |
 | Control (leer vs no leer, ambos impredecibles) | **50.1%** | ~50% |
@@ -277,3 +292,43 @@ con tic, contra 50.6% sin lectura.
   Si con humanos se siente "todo suerte", el dial a probar es que acertar
   la guardia pague MÁS (castigo del defensor, como la Y de Jaina pero
   universal) antes que tocar la tabla.
+
+
+## 10. Segunda tanda (2026-07-25, tarde): la UI y el tercer personaje
+
+- **`DuelHandUI.cs`** — la mano en abanico. Regla de la pantalla: *la altura
+  y el verbo se leen SIN leer*. Cada carta lleva tres códigos redundantes:
+  la **barra de altura vive arriba si el golpe es alto y abajo si es bajo**
+  (posición = significado), el **color por verbo** (golpe naranja · agarre
+  violeta · guardia celeste · escape verde) y las **keywords en chips** con
+  fondo, nunca sueltas en un párrafo. Velocidad y daño en números enormes.
+  Hover: agranda 1.5×, trae al frente y llena el panel de detalle, que
+  explica la carta en castellano y sin jerga.
+- **`DuelHudUI.cs`** — todo lo público, de los dos lados y siempre visible:
+  vida exacta con barra y número, mano (como dorsos), mazo, descarte, y el
+  strip **"LE QUEDAN"** por tipo de carta, con las guardias resaltadas. Ese
+  strip es la Ley 5 hecha interfaz: *"ya gastó sus dos guardias altas →
+  pegale arriba"*. Arriba al centro, el triángulo permanente (todo el
+  reglamento en una línea) y la revelación de las dos cartas con el fallo
+  cantado, que después se dockean a los costados durante la acción.
+- **Teatro**: cada carta tiene su move y **la altura del golpe en pantalla
+  coincide con la altura de la carta** — el mixup se aprende mirando.
+  A→barrida · B→giro bajo · C→jab a la cabeza · D→golpe fuerte ·
+  X→hadouken · Z→patada aérea · Y→shoryuken · agarre→agarre.
+  El **derribo se ve**: el derribado queda en el piso durante TODA su
+  planificación (la sim del teatro no avanza ahí), que es exactamente el
+  turno en que su guardia no bloquea.
+- **Trampa evitada** (el pecado del "títere mudo" de YOMI): la guardia usa
+  `WalkB` para las dos alturas porque es el único move que `IsBlockingState`
+  cuenta como bloqueo. Con `Parry` el defensor se comía el golpe EN PANTALLA
+  contradiciendo a la tabla. Pendiente: reactivar `SimConfig.CrouchEnabled`
+  para que la guardia baja tenga su pose agachada de verdad.
+- **Menú**: DUELO es la primera tarjeta ("JUGAR — DUELO") con selector de
+  los tres personajes; el resto quedó rotulado EXPERTO.
+
+### Pendiente de verificación
+
+El editor de Unity no estaba abierto en esta sesión, así que **la UI está
+compile-checked y con los tests verdes, pero NO vista en vivo**. Falta la
+pasada de layout real (que los paneles no se pisen con el HUD clásico, los
+tamaños de fuente y el ritmo del teatro).

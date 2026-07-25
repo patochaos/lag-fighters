@@ -11,15 +11,19 @@ namespace LagFighter
         // StartMatch acepta lagMode/yomi, y los pasos 3-4 (perfil/dificultad)
         // quedan acá por si IA CUSTOM vuelve. 1v1 LOCAL y POR CÓDIGO ya habían
         // salido el 2026-07-18; TurnCode la usa ONLINE.
-        const int QuickAIIdx = 1;
+        // DUELO (2026-07-25) es EL juego: primera tarjeta, seleccionada por
+        // defecto. El resto queda detrás como modos EXPERTO.
+        const int DueloIdx = 0;
+        const int QuickAIIdx = 2;
         // CARTAS (2026-07-21): la copia de Yomi 2 — mazo, mano y combate por
         // tabla contra la IA. Usa GameMode.VsAI + el flag cards de StartMatch.
-        const int CardsIdx = 2;
+        const int CardsIdx = 3;
         static readonly (string label, string desc, GameMode mode)[] Modes =
         {
-            ("PRÁCTICA", "Solo vos y un dummy quieto. Probá comandos, distancias y framedata.", GameMode.Practice),
-            ("VS IA", "Directo a pelear: la IA adaptativa en dificultad normal planifica en secreto, igual que vos.", GameMode.VsAI),
-            ("CARTAS", "El combate como cartas (copia de Yomi 2): robá, cambiá con el descarte y jugá tu opener contra la IA.", GameMode.VsAI),
+            ("JUGAR — DUELO", "El juego: una carta secreta por turno. GOLPE gana a AGARRE, AGARRE gana a GUARDIA, GUARDIA gana a GOLPE — y cada golpe es ALTO o BAJO. Siete reglas, se aprende en una partida.", GameMode.VsAI),
+            ("PRÁCTICA", "EXPERTO · Solo vos y un dummy quieto. Probá comandos, distancias y framedata.", GameMode.Practice),
+            ("VS IA", "EXPERTO · Directo a pelear: la IA adaptativa en dificultad normal planifica en secreto, igual que vos.", GameMode.VsAI),
+            ("CARTAS", "EXPERTO · El combate como cartas (copia de Yomi 2): robá, cambiá con el descarte y jugá tu opener contra la IA.", GameMode.VsAI),
             ("ONLINE", "Sala con código de invitación: uno crea, el otro se une. Turnos con timer de 30s.", GameMode.Online),
         };
 
@@ -208,6 +212,13 @@ namespace LagFighter
 
         // CARTAS: elegir personaje (paso 8) — las cartas y los números salen
         // del catálogo real, así el menú nunca miente
+        static readonly (string label, string desc)[] DuelChars =
+        {
+            ("GRAVE", "Controla el espacio. Su Nube Eléctrica es el golpe más rápido del mazo y pega 2 aunque se la defiendan; su Torbellino es ALTO y rápido, para cazar al que se cubre abajo."),
+            ("JAINA", "La apuesta. Su Espada del Alba gana casi toda carrera de velocidad, pero si se la defienden te pegan gratis; su Patada Cruzada derriba sin pagar el premio."),
+            ("GOLEM", "El grappler. CINCO agarres en 20 cartas y más vida: defenderle sale carísimo, así que hay que pelearle — y su Cabezazo de 9 castiga al que se anima."),
+        };
+
         static readonly (string label, string desc)[] CardChars =
         {
             ("GRAVE", "HP 90 · combo 4 · DOS cambios por turno · la Espada s11 de reversal y la super esquive que devuelve 40."),
@@ -217,7 +228,8 @@ namespace LagFighter
         int OptionCount => _step == 1 ? Modes.Length :
             _step == 3 ? AIProfiles.Length :
             _step == 4 ? AIDifficulties.Length : _step == 5 ? OnlineOptions.Length :
-            _step == 8 ? CardChars.Length : 0;
+            _step == 8 ? CardChars.Length :
+            _step == 9 ? DuelChars.Length : 0;
 
         public void Open()
         {
@@ -228,6 +240,7 @@ namespace LagFighter
             _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_mode", 1), 0, Modes.Length - 1); // arranca donde quedaste
             SimConfig.YomiEnabled = false; // el modo YOMI lo prende StartMatch; acá se apaga al volver
             SimConfig.CardsEnabled = false; // ídem CARTAS
+            SimConfig.DuelEnabled = false;  // ídem DUELO
             // BUG FIX (2026-07-20): en modo AP el pref viejo del toggle C se
             // ignoraba en la UI pero se seguía CARGANDO — con el toggle
             // prendido de antes, los moves cruzaban el turno "gratis" (el
@@ -282,7 +295,8 @@ namespace LagFighter
                 _cardLabels[i].text = _step == 1 ? Modes[i].label :
                     _step == 3 ? AIProfiles[i].label :
                     _step == 5 ? OnlineOptions[i].label :
-                    _step == 8 ? CardChars[i].label : AIDifficulties[i].label;
+                    _step == 8 ? CardChars[i].label :
+                    _step == 9 ? DuelChars[i].label : AIDifficulties[i].label;
                 _cardLabels[i].fontSize = count >= 4 ? 16 : 24;
             }
             _desc.rectTransform.anchoredPosition = new Vector2(0f, count > 4 ? -145f : -86f);
@@ -301,7 +315,8 @@ namespace LagFighter
             _desc.text = _step == 1 ? Modes[_sel].desc :
                 _step == 3 ? AIProfiles[_sel].desc :
                 _step == 5 ? OnlineOptions[_sel].desc :
-                _step == 8 ? CardChars[_sel].desc : AIDifficulties[_sel].desc;
+                _step == 8 ? CardChars[_sel].desc :
+                _step == 9 ? DuelChars[_sel].desc : AIDifficulties[_sel].desc;
         }
 
         void Confirm(int idx)
@@ -310,6 +325,13 @@ namespace LagFighter
             if (_step == 1)
             {
                 PlayerPrefs.SetInt("lf_menu_mode", idx);
+                if (idx == DueloIdx) // DUELO: primero elegí tu personaje
+                {
+                    _step = 9;
+                    _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_duelchar", 0), 0, DuelChars.Length - 1);
+                    Layout();
+                    return;
+                }
                 if (idx == QuickAIIdx) // VS IA directo: adaptativa en normal, a pelear
                 {
                     _mc.StartMatch(GameMode.VsAI, _lagChoice, 0, AIProfile.Adaptive, AIDifficulty.Normal);
@@ -357,6 +379,13 @@ namespace LagFighter
                     _step = 6;
                     Layout();
                 }
+                return;
+            }
+            if (_step == 9) // DUELO: personaje elegido, a jugar
+            {
+                PlayerPrefs.SetInt("lf_menu_duelchar", idx);
+                _mc.StartMatch(GameMode.VsAI, false, 0, AIProfile.Adaptive, AIDifficulty.Normal,
+                    yomi: false, cards: false, cardsChar: 0, duel: true, duelChar: idx);
                 return;
             }
             if (_step == 8) // CARTAS: personaje elegido, a jugar

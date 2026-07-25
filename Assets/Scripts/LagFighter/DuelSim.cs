@@ -32,6 +32,10 @@ namespace LagFighter
         public int Chip;             // "aunque te la defiendan, pega N"
         public bool FreeKnockdown;   // conecta → derribo gratis, además del premio
         public bool PunishOnGuard;   // te la defienden → el rival pega un golpe de su mano
+        // AGUANTE (super armor, el clásico del grappler): el golpe rival te
+        // pega igual, pero vos EJECUTÁS lo tuyo. En la tabla: golpe vs agarre
+        // deja de ser una derrota limpia y pasa a ser un cambio de golpes.
+        public bool Armor;
 
         public bool IsAttack => Kind == DuelKind.Strike || Kind == DuelKind.Grab;
     }
@@ -42,6 +46,7 @@ namespace LagFighter
         public string Tag;           // una línea: la identidad, para la UI
         public DuelCard[] Cards;     // layout FIJO (ver DuelCatalog)
         public int[] DeckCounts;     // suma 20
+        public int HpBonus;          // Ley 11: el tanque aguanta más (0 = vida estándar)
     }
 
     public static class DuelCatalog
@@ -79,8 +84,9 @@ namespace LagFighter
 
         public static readonly DuelChar Grave = MakeGrave();
         public static readonly DuelChar Jaina = MakeJaina();
-        public static readonly DuelChar[] Chars = { Grave, Jaina };
-        public const int GraveIdx = 0, JainaIdx = 1;
+        public static readonly DuelChar Golem = MakeGolem();
+        public static readonly DuelChar[] Chars = { Grave, Jaina, Golem };
+        public const int GraveIdx = 0, JainaIdx = 1, GolemIdx = 2;
 
         static DuelCard EscapeCard() => new DuelCard
         {
@@ -124,6 +130,31 @@ namespace LagFighter
                 DeckCounts = Counts,
             };
         }
+
+        // El GRAPPLER, en estado puro de la Ley 11: no tiene ninguna regla
+        // nueva — tiene DOS cartas de agarre (5 agarres en 20 cartas) y más
+        // vida. Eso solo ya re-pesa todo el juego contra él: defender pasa a
+        // ser carísimo, así que hay que pelearle, y pelearle es lo que su
+        // Cabezazo castiga.
+        static DuelChar MakeGolem()
+        {
+            var cards = new DuelCard[CardsPerChar];
+            BaseCards().CopyTo(cards, 0);
+                        // La armadura se PAGA: es el agarre más lento del juego (pierde
+            // con el agarre común) y pega poco. Con vel 7 / 8 de daño no
+            // perdía con nada y el Golem se iba a 66% en el lab.
+            cards[Sig1] = new DuelCard { Name = "Roca Rodante (R)", Short = "R", Kind = DuelKind.Grab, Speed = 3, Damage = 5, Height = DuelHeight.None, Armor = true };
+            cards[Sig2] = new DuelCard { Name = "Cabezazo (H)", Short = "H", Kind = DuelKind.Strike, Speed = 3, Damage = 9, Height = DuelHeight.High };
+            cards[Escape] = EscapeCard();
+            return new DuelChar
+            {
+                Name = "GOLEM",
+                Tag = "Grappler: 5 agarres y su Roca AGUANTA el golpe y te agarra igual",
+                Cards = cards,
+                DeckCounts = Counts,
+                HpBonus = 8,
+            };
+        }
     }
 
     public static class DuelConfig
@@ -149,6 +180,7 @@ namespace LagFighter
         public bool WrongGuard0, WrongGuard1;// defendió la altura equivocada (o estaba derribado)
         public bool Escaped0, Escaped1;
         public bool Trade, Tech;
+        public bool Armor;                   // el aguante del grappler decidió el turno
         public int Winner = -1;              // ganó el intercambio limpio
         public int PrizeSide = -1, PrizeCard = -1;
         public DuelPrize Prize = DuelPrize.None;
@@ -202,6 +234,7 @@ namespace LagFighter
         public DuelTurnResult LastResult => _r;
 
         public DuelCard Def(int side, int card) => Chr[side].Cards[card];
+        public int MaxHpOf(int side) => DuelConfig.MaxHp + Chr[side].HpBonus;
 
         public DuelSim(int seed, int char0 = DuelCatalog.GraveIdx, int char1 = DuelCatalog.GraveIdx)
         {
@@ -210,7 +243,7 @@ namespace LagFighter
             for (int s = 0; s < 2; s++)
             {
                 Chr[s] = DuelCatalog.Chars[CharIdx[s]];
-                Hp[s] = DuelConfig.MaxHp;
+                Hp[s] = DuelConfig.MaxHp + Chr[s].HpBonus;
                 for (int c = 0; c < DuelCatalog.CardsPerChar; c++)
                     for (int n = 0; n < Chr[s].DeckCounts[c]; n++)
                         Deck[s].Add(c);
@@ -332,21 +365,41 @@ namespace LagFighter
                 Land(w, w == 0 ? c0 : c1);
                 return;
             }
-            // el golpe le gana al agarre SIN mirar velocidad
-            if (k0 == DuelKind.Strike && k1 == DuelKind.Grab) { Land(0, c0); return; }
-            if (k1 == DuelKind.Strike && k0 == DuelKind.Grab) { Land(1, c1); return; }
+            // el golpe le gana al agarre SIN mirar velocidad... salvo AGUANTE:
+            // el agarre con armor se come el golpe y conecta igual (trade).
+            if (k0 == DuelKind.Strike && k1 == DuelKind.Grab) { StrikeVsGrab(0, c0, c1); return; }
+            if (k1 == DuelKind.Strike && k0 == DuelKind.Grab) { StrikeVsGrab(1, c1, c0); return; }
 
             if (k0 == DuelKind.Strike && k1 == DuelKind.Guard) { StrikeVsGuard(0, c0); return; }
             if (k1 == DuelKind.Strike && k0 == DuelKind.Guard) { StrikeVsGuard(1, c1); return; }
 
-            // agarre vs agarre = TECH (los dos agarres del juego son la misma
-            // carta: la velocidad nunca desempata acá)
-            if (k0 == DuelKind.Grab && k1 == DuelKind.Grab) { _r.Tech = true; return; }
+            // agarre vs agarre: desempata la velocidad, empate = TECH. Con
+            // el mismo agarre de los dos lados siempre es TECH; el Golem, que
+            // tiene un SEGUNDO agarre más rápido, es quien usa esta rama.
+            if (k0 == DuelKind.Grab && k1 == DuelKind.Grab)
+            {
+                int g0 = Def(0, c0).Speed, g1 = Def(1, c1).Speed;
+                if (g0 == g1) { _r.Tech = true; return; }
+                int gw = g0 > g1 ? 0 : 1;
+                Land(gw, gw == 0 ? c0 : c1);
+                return;
+            }
 
             if (k0 == DuelKind.Grab) { Land(0, c0); return; }   // vs guardia
             if (k1 == DuelKind.Grab) { Land(1, c1); return; }
 
             // guardia vs guardia: no pasa nada (vuelven a la mano, sin robo)
+        }
+
+        void StrikeVsGrab(int strikeSide, int strikeCard, int grabCard)
+        {
+            int grabSide = 1 - strikeSide;
+            if (!Def(grabSide, grabCard).Armor) { Land(strikeSide, strikeCard); return; }
+            // aguante: los dos cobran, nadie cobra premio (es un cambio)
+            _r.Armor = true;
+            _r.Trade = true;
+            Damage(grabSide, Def(strikeSide, strikeCard).Damage, chip: false);
+            Damage(strikeSide, Def(grabSide, grabCard).Damage, chip: false);
         }
 
         // El rival no tenía cartas: si atacaste, conecta.
