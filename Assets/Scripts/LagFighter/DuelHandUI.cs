@@ -21,11 +21,13 @@ namespace LagFighter
 
         // El abanico vive ENTERO dentro de la pantalla: con BaseY 84 la carta
         // (232 de alto, pivote al medio) se cortaba 32px abajo y se comía los
-        // chips de keywords. BaseY = 142 deja 22px de aire.
-        const float CardW = 172f, CardH = 240f;
-        const float BaseY = 150f;
-        const float HoverY = 266f;
-        const float HoverScale = 1.45f;
+        // chips de keywords. BaseY = 150 deja aire.
+        // La carta creció (172→194) porque toda la escala de texto subió: la
+        // regla nueva es que NADA baja de 14px sobre 1920 (DUELO-LOOK §4).
+        const float CardW = 194f, CardH = 266f;
+        const float BaseY = 158f;
+        const float HoverY = 288f;
+        const float HoverScale = 1.42f;
 
         MatchController _mc;
         RectTransform _canvasRt;
@@ -39,18 +41,23 @@ namespace LagFighter
         Mode _mode = Mode.Pick;
         int _hover = -1;
         bool _active;
+        bool _dimmed;
 
         DuelSim S => _mc.Duel;
 
         // ---- paleta por verbo: el color ES el tipo de carta ----
+        // Ojo con la regla de DUELO-LOOK: estos cuatro NO pueden ser celeste ni
+        // naranja, porque esos dos son de LADO (vos / rival). Antes GOLPE era
+        // naranja y GUARDIA celeste, y en tu propia mano los golpes se veían
+        // del rival.
         public static Color VerbColor(in DuelCard d)
         {
             switch (d.Kind)
             {
-                case DuelKind.Grab: return new Color(0.72f, 0.42f, 0.95f);
-                case DuelKind.Guard: return new Color(0.35f, 0.75f, 1f);
-                case DuelKind.Escape: return new Color(0.45f, 0.95f, 0.6f);
-                default: return new Color(1f, 0.58f, 0.3f);
+                case DuelKind.Grab: return Duelo.Agarre;
+                case DuelKind.Guard: return Duelo.Guardia;
+                case DuelKind.Escape: return Duelo.Escape;
+                default: return Duelo.Golpe;
             }
         }
 
@@ -138,8 +145,15 @@ namespace LagFighter
             return img;
         }
 
+        // Los tres roles tipográficos de DUELO-LOOK §4. Data/Para son
+        // condensadas: entran al doble de tamaño y dibujan bien la Ñ.
+        public enum Face { Pixel, Data, Para }
+
+        static Font FaceFont(Face f) =>
+            f == Face.Pixel ? UIFonts.Pixel : f == Face.Data ? UIFonts.Data : UIFonts.Para;
+
         static Text MakeText(RectTransform parent, string name, string content, Vector2 anchor, Vector2 pos,
-            Vector2 size, int fontSize, Color color, TextAnchor align, bool pixel = true, bool wrap = false)
+            Vector2 size, int fontSize, Color color, TextAnchor align, Face face = Face.Pixel, bool wrap = false)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(Text));
             var rt = go.GetComponent<RectTransform>();
@@ -148,7 +162,7 @@ namespace LagFighter
             rt.anchoredPosition = pos;
             rt.sizeDelta = size;
             var t = go.GetComponent<Text>();
-            t.font = pixel ? UIFonts.Pixel : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            t.font = FaceFont(face);
             t.text = content;
             t.fontSize = fontSize;
             t.color = color;
@@ -161,12 +175,41 @@ namespace LagFighter
             return t;
         }
 
+        // Texto que NO puede desbordar su caja: se achica solo hasta entrar.
+        // Es el arreglo de "NUBE ELÉCTRICA" saliéndose de la carta y de los
+        // chips de keyword derramados: el layout deja de depender de que el
+        // contenido mida lo que esperábamos.
+        static Text Fit(Text t, int min, int max, bool wrap = true)
+        {
+            t.resizeTextForBestFit = true;
+            t.resizeTextMinSize = min;
+            t.resizeTextMaxSize = max;
+            t.horizontalOverflow = wrap ? HorizontalWrapMode.Wrap : HorizontalWrapMode.Overflow;
+            t.verticalOverflow = VerticalWrapMode.Truncate;
+            return t;
+        }
+
+        // Marco de 2px con brackets de esquina: el cromo de la transmisión.
+        // (DUELO-LOOK §6 — bordes rectos, nada de esquinas redondeadas.)
+        public static void Brackets(RectTransform parent, float w, float h, Color c, float len = 16f, float th = 2f)
+        {
+            for (int s = 0; s < 4; s++)
+            {
+                float sx = (s & 1) == 0 ? -1f : 1f;
+                float sy = (s & 2) == 0 ? 1f : -1f;
+                var a = new Vector2(sx < 0 ? 0f : 1f, sy > 0 ? 1f : 0f);
+                MakeImage(parent, "BrH" + s, a, new Vector2(sx * -len * 0.5f, sy * -th * 0.5f), new Vector2(len, th), c);
+                MakeImage(parent, "BrV" + s, a, new Vector2(sx * -th * 0.5f, sy * -len * 0.5f), new Vector2(th, len), c);
+            }
+        }
+
         static (Image bg, Text lbl) MakeButton(RectTransform parent, string name, Vector2 pos, Vector2 size, Color c)
         {
             var bg = MakeImage(parent, name, new Vector2(0.5f, 0f), pos, size, c);
+            Brackets(bg.rectTransform, size.x, size.y, Duelo.Alpha(Duelo.Paper, 0.5f));
             var lbl = MakeText(bg.rectTransform, "T", "", new Vector2(0.5f, 0.5f), Vector2.zero,
-                new Vector2(size.x - 14f, size.y - 8f), 13, Color.white, TextAnchor.MiddleCenter, wrap: true);
-            lbl.fontStyle = FontStyle.Bold;
+                new Vector2(size.x - 18f, size.y - 10f), 24, Duelo.Paper, TextAnchor.MiddleCenter,
+                Face.Data, wrap: true);
             return (bg, lbl);
         }
 
@@ -179,10 +222,10 @@ namespace LagFighter
         public static void PaintCard(RectTransform card, in DuelCard d, float w, float h, bool showKeywords = true)
         {
             var col = VerbColor(d);
-            MakeImage(card, "Frame", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(w, h),
-                new Color(col.r, col.g, col.b, 0.9f));
-            MakeImage(card, "Inner", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(w - 6f, h - 6f),
-                new Color(0.07f, 0.08f, 0.11f, 1f));
+            float k = w / 194f;   // todo escala con el ancho de la carta
+            MakeImage(card, "Frame", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(w, h), col);
+            MakeImage(card, "Inner", new Vector2(0.5f, 0.5f), Vector2.zero,
+                new Vector2(w - 5f, h - 5f), Duelo.Panel);
 
             // FRANJA DE ALTURA: arriba si el golpe es alto, abajo si es bajo.
             // Redundancia POSICIONAL — se ve de reojo, sin leer una palabra.
@@ -190,15 +233,16 @@ namespace LagFighter
             bool high = d.Height == DuelHeight.High;
             if (hasHeight)
                 MakeImage(card, "HeightBar", new Vector2(0.5f, high ? 1f : 0f),
-                    new Vector2(0f, high ? -6f : 6f), new Vector2(w - 14f, 9f), col);
+                    new Vector2(0f, high ? -11f : 11f), new Vector2(w - 14f, 11f), col);
 
-            // banda del VERBO, con la flecha adentro (no como elemento aparte:
-            // así no hay nada que pueda solaparse con la banda)
-            var band = MakeImage(card, "Band", new Vector2(0.5f, 1f), new Vector2(0f, -30f),
-                new Vector2(w - 14f, 26f), new Color(col.r * 0.4f, col.g * 0.4f, col.b * 0.4f, 1f));
+            // banda del VERBO: fondo SÓLIDO del color de la regla con texto
+            // oscuro encima. Es el elemento de mayor contraste de la carta
+            // porque el verbo es lo primero que hay que leer.
+            var band = MakeImage(card, "Band", new Vector2(0.5f, 1f), new Vector2(0f, -35f),
+                new Vector2(w - 14f, 30f), col);
             string verb = (hasHeight ? (high ? "▲ " : "▼ ") : "") + VerbLabel(d);
-            MakeText(band.rectTransform, "V", verb, new Vector2(0.5f, 0.5f), Vector2.zero,
-                new Vector2(w - 16f, 24f), 11, Color.white, TextAnchor.MiddleCenter);
+            Fit(MakeText(band.rectTransform, "V", verb, new Vector2(0.5f, 0.5f), Vector2.zero,
+                new Vector2(w - 22f, 26f), 18, Duelo.Void, TextAnchor.MiddleCenter, Face.Data), 11, 18, wrap: false);
 
             // nombre (la letra va aparte, chiquita en la esquina)
             string name = d.Name;
@@ -210,46 +254,63 @@ namespace LagFighter
                 name = name.Substring(0, par).Trim();
             }
             if (!string.Equals(name, VerbLabel(d), System.StringComparison.OrdinalIgnoreCase))
-                MakeText(card, "Name", name.ToUpperInvariant(), new Vector2(0.5f, 1f), new Vector2(0f, -58f),
-                    new Vector2(w - 14f, 22f), 12, Color.white, TextAnchor.MiddleCenter);
+                // En condensada y no en pixel: "NUBE ELÉCTRICA" salía
+                // "NUBE ELéCTRICA" (la pixel dibuja enanas las mayúsculas
+                // acentuadas) y encima no entraba. El ancla pixel de la carta
+                // son los NÚMEROS, que es donde de verdad hace falta.
+                Fit(MakeText(card, "Name", name.ToUpperInvariant(), new Vector2(0.5f, 1f), new Vector2(0f, -70f),
+                    new Vector2(w - 18f, 30f), 22, Duelo.Paper, TextAnchor.MiddleCenter, Face.Data), 12, 22);
             if (letter != "")
-                MakeText(card, "Letter", letter, new Vector2(0f, 1f), new Vector2(16f, -17f),
-                    new Vector2(24f, 18f), 11, new Color(1f, 1f, 1f, 0.4f), TextAnchor.MiddleCenter);
+                MakeText(card, "Letter", letter, new Vector2(0f, 1f), new Vector2(17f, -19f),
+                    new Vector2(26f, 20f), 11, Duelo.Alpha(Duelo.Paper, 0.42f), TextAnchor.MiddleCenter);
 
             // los DOS números que deciden todo, enormes
             if (d.IsAttack)
             {
-                MakeText(card, "Spd", d.Speed.ToString(), new Vector2(0f, 1f), new Vector2(w * 0.27f, -104f),
-                    new Vector2(w * 0.46f, 44f), 32, new Color(0.5f, 0.85f, 1f), TextAnchor.MiddleCenter);
-                MakeText(card, "SpdL", "VELOCIDAD", new Vector2(0f, 1f), new Vector2(w * 0.27f, -134f),
-                    new Vector2(w * 0.5f, 14f), 8, new Color(0.5f, 0.85f, 1f, 0.85f), TextAnchor.MiddleCenter);
-                MakeText(card, "Dmg", d.Damage.ToString(), new Vector2(1f, 1f), new Vector2(-w * 0.27f, -104f),
-                    new Vector2(w * 0.46f, 44f), 32, new Color(1f, 0.5f, 0.42f), TextAnchor.MiddleCenter);
-                MakeText(card, "DmgL", "DAÑO", new Vector2(1f, 1f), new Vector2(-w * 0.27f, -134f),
-                    new Vector2(w * 0.5f, 14f), 8, new Color(1f, 0.5f, 0.42f, 0.85f), TextAnchor.MiddleCenter);
+                MakeText(card, "Spd", d.Speed.ToString(), new Vector2(0f, 1f), new Vector2(w * 0.27f, -122f),
+                    new Vector2(w * 0.46f, 50f), Mathf.RoundToInt(40f * k), Duelo.Vel, TextAnchor.MiddleCenter);
+                MakeText(card, "SpdL", "VELOCIDAD", new Vector2(0f, 1f), new Vector2(w * 0.27f, -156f),
+                    new Vector2(w * 0.5f, 20f), 15, Duelo.Alpha(Duelo.Vel, 0.9f), TextAnchor.MiddleCenter, Face.Data);
+                MakeText(card, "Dmg", d.Damage.ToString(), new Vector2(1f, 1f), new Vector2(-w * 0.27f, -122f),
+                    new Vector2(w * 0.46f, 50f), Mathf.RoundToInt(40f * k), Duelo.Golpe, TextAnchor.MiddleCenter);
+                MakeText(card, "DmgL", "DAÑO", new Vector2(1f, 1f), new Vector2(-w * 0.27f, -156f),
+                    new Vector2(w * 0.5f, 20f), 15, Duelo.Alpha(Duelo.Golpe, 0.9f), TextAnchor.MiddleCenter, Face.Data);
             }
-            else
-            {
-                string big = d.Kind == DuelKind.Guard ? (high ? "▲" : "▼") : "✦";
-                MakeText(card, "Big", big, new Vector2(0.5f, 1f), new Vector2(0f, -110f),
-                    new Vector2(w - 16f, 52f), 38, col, TextAnchor.MiddleCenter);
-            }
+            // el PICTOGRAMA de la carta: es el mismo símbolo que el strip
+            // "LE QUEDAN" del HUD, así que la carta enseña el idioma sola.
+            // En los golpes va apagado, llenando el hueco entre los números y
+            // los chips; en guardia y escape ES el protagonista (no tienen
+            // números que mostrar) y va grande y a todo color.
+            bool hero = !d.IsAttack;
+            var wm = new GameObject("Glyph", typeof(RectTransform), typeof(Image));
+            var wrt = wm.GetComponent<RectTransform>();
+            wrt.SetParent(card, false);
+            wrt.anchorMin = wrt.anchorMax = new Vector2(0.5f, hero ? 1f : 0f);
+            // en la guardia el pictograma vive ARRIBA o ABAJO de la carta según
+            // qué mitad cubre: posición = significado, igual que la franja
+            wrt.anchoredPosition = new Vector2(0f,
+                hero ? (d.Kind == DuelKind.Guard ? (high ? -112f : -158f) : -132f) : 100f);
+            wrt.sizeDelta = hero ? new Vector2(96f, 82f) : new Vector2(56f, 50f);
+            var wimg = wm.GetComponent<Image>();
+            wimg.sprite = MoveIcons.Get(d);
+            wimg.preserveAspect = true;
+            wimg.color = hero ? col : Duelo.Alpha(col, 0.3f);
+            wimg.raycastTarget = false;
 
             if (!showKeywords) return;
             // keywords en CHIPS (con fondo): se ven, no se leen de corrido
             var kws = Keywords(d);
             int n = Mathf.Min(kws.Count, 2);
-            for (int k = 0; k < n; k++)
+            for (int i = 0; i < n; i++)
             {
-                float y = 38f + (n - 1 - k) * 34f;
-                var chip = MakeImage(card, "Kw" + k, new Vector2(0.5f, 0f), new Vector2(0f, y),
-                    new Vector2(w - 18f, 31f),
-                    new Color(kws[k].col.r * 0.22f, kws[k].col.g * 0.22f, kws[k].col.b * 0.22f, 1f));
-                // el chip SÍ envuelve: es una caja cerrada de dos renglones, y
-                // sin wrap el texto largo se salía de la carta y pisaba a la
-                // carta vecina del abanico.
-                MakeText(chip.rectTransform, "T", kws[k].txt, new Vector2(0.5f, 0.5f), Vector2.zero,
-                    new Vector2(w - 24f, 29f), 8, kws[k].col, TextAnchor.MiddleCenter, wrap: true);
+                float y = 12f + (n - 1 - i) * 40f;
+                var chip = MakeImage(card, "Kw" + i, new Vector2(0.5f, 0f), new Vector2(0f, y + 18f),
+                    new Vector2(w - 16f, 36f), Duelo.Wash(kws[i].col));
+                // el chip SÍ envuelve y ADEMÁS se achica solo: es una caja
+                // cerrada, y el texto largo no puede salirse a pisar la carta
+                // vecina del abanico.
+                Fit(MakeText(chip.rectTransform, "T", kws[i].txt, new Vector2(0.5f, 0.5f), Vector2.zero,
+                    new Vector2(w - 24f, 32f), 15, kws[i].col, TextAnchor.MiddleCenter, Face.Data, wrap: true), 9, 15);
             }
         }
 
@@ -281,34 +342,37 @@ namespace LagFighter
                 PaintCard(card.rectTransform, d, CardW, CardH);
                 if (i < 9)
                     MakeText(card.rectTransform, "Key", (i + 1).ToString(), new Vector2(1f, 1f),
-                        new Vector2(-15f, -16f), new Vector2(22f, 18f), 10,
-                        new Color(1f, 1f, 1f, 0.35f), TextAnchor.MiddleCenter);
+                        new Vector2(-16f, -19f), new Vector2(24f, 20f), 11,
+                        Duelo.Alpha(Duelo.Paper, 0.42f), TextAnchor.MiddleCenter);
                 _cardOverlay[i] = MakeImage(card.rectTransform, "Off", new Vector2(0.5f, 0.5f), Vector2.zero,
-                    new Vector2(CardW, CardH), new Color(0.02f, 0.02f, 0.03f, 0.78f));
+                    new Vector2(CardW, CardH), Duelo.Alpha(Duelo.Void, 0.8f));
                 _cardOverlay[i].gameObject.SetActive(false);
             }
 
             // los dos botones del premio (la única decisión extra del juego)
-            (_btnA, _lblA) = MakeButton(rootRt, "BtnA", new Vector2(-232f, 470f), new Vector2(430f, 88f),
-                new Color(0.5f, 0.2f, 0.16f, 0.97f));
-            (_btnB, _lblB) = MakeButton(rootRt, "BtnB", new Vector2(232f, 470f), new Vector2(430f, 88f),
-                new Color(0.18f, 0.34f, 0.55f, 0.97f));
+            (_btnA, _lblA) = MakeButton(rootRt, "BtnA", new Vector2(-244f, 500f), new Vector2(460f, 96f),
+                Duelo.Wash(Duelo.Golpe, 0.34f));
+            (_btnB, _lblB) = MakeButton(rootRt, "BtnB", new Vector2(244f, 500f), new Vector2(460f, 96f),
+                Duelo.Wash(Duelo.Guardia, 0.30f));
             _btnA.gameObject.SetActive(false);
             _btnB.gameObject.SetActive(false);
 
             // detalle de la carta hovereada
-            _infoBg = MakeImage(rootRt, "Info", new Vector2(1f, 0f), new Vector2(-222f, 596f),
-                new Vector2(408f, 258f), new Color(0.03f, 0.04f, 0.06f, 0.97f));
-            _detailTitle = MakeText(_infoBg.rectTransform, "T", "", new Vector2(0.5f, 1f), new Vector2(0f, -26f),
-                new Vector2(368f, 30f), 15, Color.white, TextAnchor.MiddleCenter);
-            _detailStats = MakeText(_infoBg.rectTransform, "S", "", new Vector2(0.5f, 1f), new Vector2(0f, -58f),
-                new Vector2(368f, 24f), 11, new Color(0.95f, 0.9f, 0.6f), TextAnchor.MiddleCenter);
-            _detailDesc = MakeText(_infoBg.rectTransform, "D", "", new Vector2(0.5f, 1f), new Vector2(0f, -150f),
-                new Vector2(364f, 160f), 16, new Color(1f, 1f, 1f, 0.93f), TextAnchor.UpperLeft, pixel: false, wrap: true);
+            _infoBg = MakeImage(rootRt, "Info", new Vector2(1f, 0f), new Vector2(-236f, 624f),
+                new Vector2(436f, 286f), Duelo.Panel);
+            MakeImage(_infoBg.rectTransform, "Line", new Vector2(0.5f, 1f), new Vector2(0f, -1f),
+                new Vector2(436f, 2f), Duelo.Line);
+            Brackets(_infoBg.rectTransform, 436f, 286f, Duelo.Line);
+            _detailTitle = MakeText(_infoBg.rectTransform, "T", "", new Vector2(0.5f, 1f), new Vector2(0f, -30f),
+                new Vector2(396f, 32f), 16, Duelo.Paper, TextAnchor.MiddleCenter);
+            _detailStats = MakeText(_infoBg.rectTransform, "S", "", new Vector2(0.5f, 1f), new Vector2(0f, -64f),
+                new Vector2(400f, 26f), 17, Duelo.Gold, TextAnchor.MiddleCenter, Face.Data);
+            _detailDesc = MakeText(_infoBg.rectTransform, "D", "", new Vector2(0.5f, 1f), new Vector2(0f, -172f),
+                new Vector2(396f, 180f), 20, Duelo.Alpha(Duelo.Paper, 0.94f), TextAnchor.UpperLeft, Face.Para, wrap: true);
             _infoBg.gameObject.SetActive(false);
 
-            _status = MakeText(rootRt, "Status", "", new Vector2(0.5f, 0f), new Vector2(0f, BaseY + CardH * 0.5f + 30f),
-                new Vector2(1600f, 26f), 14, new Color(0.55f, 1f, 0.65f), TextAnchor.MiddleCenter);
+            _status = MakeText(rootRt, "Status", "", new Vector2(0.5f, 0f), new Vector2(0f, BaseY + CardH * 0.5f + 34f),
+                new Vector2(1600f, 30f), 21, Duelo.Escape, TextAnchor.MiddleCenter, Face.Data);
 
             RefreshStates();
             LayoutHand();
@@ -318,13 +382,37 @@ namespace LagFighter
         public void Open(Mode mode)
         {
             _active = true;
+            _dimmed = false;
             Rebuild(mode);
+            ApplyDim();
         }
 
         public void Close()
         {
             _active = false;
             if (_root != null) _root.SetActive(false);
+        }
+
+        // UN FOCO POR FASE (DUELO-LOOK §7): mientras se revela y se resuelve,
+        // la mano no desaparece — se APAGA. Desaparecer dejaba un tercio de la
+        // pantalla en gris vacío y además cortaba la continuidad ("¿qué tenía
+        // yo?"). Apagada sigue ahí, sin competir con el veredicto.
+        public void SetDimmed(bool on)
+        {
+            if (_dimmed == on) return;
+            _dimmed = on;
+            _active = true;
+            if (_root != null) _root.SetActive(true);
+            ApplyDim();
+        }
+
+        void ApplyDim()
+        {
+            if (_root == null) return;
+            var cg = _root.GetComponent<CanvasGroup>();
+            if (cg == null) cg = _root.AddComponent<CanvasGroup>();
+            cg.alpha = _dimmed ? 0.34f : 1f;
+            cg.blocksRaycasts = !_dimmed;
         }
 
         // ---- estados ----
@@ -348,8 +436,8 @@ namespace LagFighter
                 _cardOverlay[i].gameObject.SetActive(!CardEnabled(i));
 
             bool prize = _mode == Mode.Prize;
-            SetBtn(_btnA, _lblA, prize, "+ DAÑO\n<size=11>quemá un golpe de tu mano y sumá su daño</size>");
-            SetBtn(_btnB, _lblB, prize, "DERRIBO\n<size=11>su guardia NO bloquea el próximo turno</size>");
+            SetBtn(_btnA, _lblA, prize, "+ DAÑO\n<size=17>quemá un golpe de tu mano y sumá su daño</size>");
+            SetBtn(_btnB, _lblB, prize, "DERRIBO\n<size=17>su guardia NO bloquea el próximo turno</size>");
             _status.text = StatusText();
         }
 
@@ -382,7 +470,7 @@ namespace LagFighter
 
         void Update()
         {
-            if (!_active || S == null || _root == null) return;
+            if (!_active || _dimmed || S == null || _root == null) return;
             var mp = GameInput.MousePos();
 
             int hover = -1;
@@ -400,8 +488,8 @@ namespace LagFighter
             bool overB = _btnB.gameObject.activeSelf && RectTransformUtility.RectangleContainsScreenPoint(_btnB.rectTransform, mp, null);
             if (_btnA.gameObject.activeSelf)
             {
-                _btnA.color = overA ? new Color(0.68f, 0.28f, 0.22f, 1f) : new Color(0.5f, 0.2f, 0.16f, 0.97f);
-                _btnB.color = overB ? new Color(0.26f, 0.48f, 0.72f, 1f) : new Color(0.18f, 0.34f, 0.55f, 0.97f);
+                _btnA.color = Duelo.Wash(Duelo.Golpe, overA ? 0.55f : 0.34f);
+                _btnB.color = Duelo.Wash(Duelo.Guardia, overB ? 0.48f : 0.30f);
             }
 
             if (GameInput.ClickPressed())
@@ -437,7 +525,10 @@ namespace LagFighter
         void LayoutHand()
         {
             int n = _cardRt.Length;
-            float spacing = n <= 1 ? 0f : Mathf.Min(CardW + 10f, 1160f / (n - 1));
+            // el abanico ocupa el ancho: antes vivía apretado en el centro con
+            // 1160 de tope y la mano se veía chiquita al lado de dos paneles
+            // de 452. Ahora respira hasta 1500.
+            float spacing = n <= 1 ? 0f : Mathf.Min(CardW + 14f, 1500f / (n - 1));
             float x0 = -spacing * (n - 1) * 0.5f;
             for (int i = 0; i < n; i++)
             {

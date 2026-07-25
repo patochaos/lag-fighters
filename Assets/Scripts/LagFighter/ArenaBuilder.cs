@@ -4,11 +4,19 @@ using UnityEngine.Rendering.Universal;
 
 namespace LagFighter
 {
-    // Referencias al escenario que la UI anima en vivo (glow de esquina).
+    // Referencias al escenario que la UI anima en vivo (glow de esquina) y que
+    // el modo DUELO reviste con su propio look.
     public static class ArenaRefs
     {
         public static readonly Renderer[] Walls = new Renderer[2]; // 0 = izquierda, 1 = derecha
         public static Color WallBase;
+
+        public static GameObject Root, Ground, Strip, Center, Backdrop;
+        public static readonly System.Collections.Generic.List<GameObject> Buildings = new System.Collections.Generic.List<GameObject>();
+        public static readonly System.Collections.Generic.List<GameObject> FloorLines = new System.Collections.Generic.List<GameObject>();
+        public static readonly System.Collections.Generic.List<Renderer> Crowd = new System.Collections.Generic.List<Renderer>();
+        public static readonly System.Collections.Generic.List<Color> CrowdBase = new System.Collections.Generic.List<Color>();
+        public static GameObject DuelLight;   // el cono/disco de luz, solo en DUELO
     }
 
     // Escenario 2D de vista lateral, estilo Footsies: una línea de piso,
@@ -43,12 +51,14 @@ namespace LagFighter
         public static void Build()
         {
             var root = new GameObject("LagFighter.Arena");
+            ArenaRefs.Root = root;
 
             var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
             ground.name = "Ground";
             ground.transform.SetParent(root.transform);
             ground.transform.localScale = new Vector3(1.4f, 1f, 0.8f);
             Tint(ground, new Color(0.10f, 0.11f, 0.14f));
+            ArenaRefs.Ground = ground;
 
             // franja de juego y marcas
             var strip = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -57,6 +67,7 @@ namespace LagFighter
             strip.transform.localPosition = new Vector3(0f, 0.012f, 0f);
             strip.transform.localScale = new Vector3(SimConfig.StageHalfWidth * 2f + 0.9f, 0.02f, 1.6f);
             Tint(strip, new Color(0.16f, 0.17f, 0.21f));
+            ArenaRefs.Strip = strip;
 
             var center = GameObject.CreatePrimitive(PrimitiveType.Cube);
             center.name = "CenterLine";
@@ -64,6 +75,7 @@ namespace LagFighter
             center.transform.localPosition = new Vector3(0f, 0.02f, 0f);
             center.transform.localScale = new Vector3(0.05f, 0.02f, 1.6f);
             Tint(center, new Color(0.35f, 0.37f, 0.44f));
+            ArenaRefs.Center = center;
 
             ArenaRefs.WallBase = new Color(0.35f, 0.16f, 0.16f);
             for (int s = -1; s <= 1; s += 2)
@@ -88,6 +100,7 @@ namespace LagFighter
                 line.transform.localPosition = new Vector3(x, 0.018f, 0f);
                 line.transform.localScale = new Vector3(0.025f, 0.02f, 1.6f);
                 Tint(line, new Color(0.24f, 0.25f, 0.30f));
+                ArenaRefs.FloorLines.Add(line);
             }
 
             // fondo para contraste
@@ -97,6 +110,7 @@ namespace LagFighter
             back.transform.localPosition = new Vector3(0f, 2.2f, 3.2f);
             back.transform.localScale = new Vector3(16f, 4.4f, 0.1f);
             Tint(back, new Color(0.07f, 0.08f, 0.11f));
+            ArenaRefs.Backdrop = back;
 
             // skyline de bloques (determinista) detrás del backdrop
             var skyRng = new System.Random(42);
@@ -111,6 +125,7 @@ namespace LagFighter
                 bld.transform.localScale = new Vector3(0.7f + (float)skyRng.NextDouble() * 0.5f, bh, 0.12f);
                 float shade = 0.10f + (float)skyRng.NextDouble() * 0.05f;
                 Tint(bld, new Color(shade, shade + 0.012f, shade + 0.035f));
+                ArenaRefs.Buildings.Add(bld);
             }
 
             // público de bloques que se mueve (adelante del backdrop, atrás de la pista)
@@ -124,7 +139,10 @@ namespace LagFighter
                 fan.transform.localPosition = new Vector3(fx, 0.55f, 2.35f);
                 fan.transform.localScale = new Vector3(0.26f, 0.55f, 0.2f);
                 var hue = 0.28f + (float)crowdRng.NextDouble() * 0.5f;
-                Tint(fan, Color.HSVToRGB(hue, 0.25f, 0.28f));
+                var fanCol = Color.HSVToRGB(hue, 0.25f, 0.28f);
+                Tint(fan, fanCol);
+                ArenaRefs.Crowd.Add(fan.GetComponent<Renderer>());
+                ArenaRefs.CrowdBase.Add(fanCol);
                 var bob = fan.AddComponent<CrowdBob>();
                 bob.Phase = (float)crowdRng.NextDouble() * Mathf.PI * 2f;
                 bob.Speed = 1.6f + (float)crowdRng.NextDouble() * 1.8f;
@@ -174,6 +192,92 @@ namespace LagFighter
         }
 
         public static void Tint(GameObject go, Color c) => MatLib.Apply(go, c);
+
+        // ---- EL FEED: el escenario de DUELO (DUELO-LOOK.md §2) ----
+        //
+        // En DUELO el escenario no es una arena, es un CUARTO OSCURO filmado:
+        // un cono de luz, dos siluetas, público en negro puro. Se van el
+        // skyline, las paredes rojas, las líneas de distancia (en DUELO no hay
+        // distancia) y el público de colores, que era lo que hacía que el 55%
+        // del alto de la pantalla compitiera contra las cartas sin decir nada.
+        //
+        // Es un REVESTIMIENTO, no una arena aparte: se pinta y se despinta con
+        // el mismo Build() de siempre, así los otros modos no se enteran.
+        static bool _duelLook;
+
+        public static void SetDuelStage(bool on)
+        {
+            if (ArenaRefs.Root == null || _duelLook == on) return;
+            _duelLook = on;
+
+            if (ArenaRefs.Ground != null)
+                Tint(ArenaRefs.Ground, on ? Duelo.Void : new Color(0.10f, 0.11f, 0.14f));
+            if (ArenaRefs.Strip != null)
+                Tint(ArenaRefs.Strip, on ? Duelo.Stage : new Color(0.16f, 0.17f, 0.21f));
+            if (ArenaRefs.Center != null)
+                Tint(ArenaRefs.Center, on ? Duelo.Line : new Color(0.35f, 0.37f, 0.44f));
+            if (ArenaRefs.Backdrop != null)
+                Tint(ArenaRefs.Backdrop, on ? Duelo.Void : new Color(0.07f, 0.08f, 0.11f));
+
+            // el skyline y las paredes se van: en un cuarto no hay ciudad
+            foreach (var b in ArenaRefs.Buildings) if (b != null) b.SetActive(!on);
+            foreach (var l in ArenaRefs.FloorLines) if (l != null) l.SetActive(!on);
+            for (int s = 0; s < 2; s++)
+                if (ArenaRefs.Walls[s] != null) ArenaRefs.Walls[s].gameObject.SetActive(!on);
+
+            // el público queda, pero en NEGRO PURO: sigue dando vida (salta con
+            // el KO) y no aporta un solo pixel de ruido cromático.
+            for (int c = 0; c < ArenaRefs.Crowd.Count; c++)
+                if (ArenaRefs.Crowd[c] != null)
+                    ArenaRefs.Crowd[c].material.color = on
+                        ? new Color(0.016f, 0.027f, 0.047f) : ArenaRefs.CrowdBase[c];
+
+            if (on && ArenaRefs.DuelLight == null) BuildDuelLight();
+            if (ArenaRefs.DuelLight != null) ArenaRefs.DuelLight.SetActive(on);
+
+            var cam = Camera.main;
+            if (cam != null)
+            {
+                // encuadre de DUELO: más cerca y más bajo, para que los cuerpos
+                // ocupen el centro de la franja libre entre el HUD y la mano.
+                cam.transform.position = on ? new Vector3(0f, 0.85f, -6.0f) : new Vector3(0f, 1.45f, -7.2f);
+                cam.transform.rotation = Quaternion.Euler(on ? 2f : 4f, 0f, 0f);
+                cam.backgroundColor = on ? Duelo.Void : new Color(0.05f, 0.06f, 0.09f);
+            }
+        }
+
+        // La luz, hecha de geometría (nada de post-proceso ni point lights: las
+        // dos cosas están rotas o strippeadas en WebGL).
+        //
+        // Se probó con láminas translúcidas subiendo hacia una lámpara y se
+        // descartó: a la vista lateral no se leen como un cono, se leen como
+        // tres cajas grises tapando a los peleadores. Dos discos concéntricos
+        // en el piso dicen "hay una luz colgando" mucho mejor y no ocupan
+        // ni un pixel del aire donde pasa la acción.
+        static void BuildDuelLight()
+        {
+            var go = new GameObject("DuelLight");
+            go.transform.SetParent(ArenaRefs.Root.transform, false);
+            ArenaRefs.DuelLight = go;
+
+            Disc(go.transform, "PoolOuter", 6.6f, 2.9f, 0.028f, Duelo.Alpha(Duelo.StageLit, 0.55f));
+            Disc(go.transform, "PoolInner", 4.4f, 2.0f, 0.034f,
+                new Color(Duelo.StageLit.r * 1.5f, Duelo.StageLit.g * 1.5f, Duelo.StageLit.b * 1.55f, 0.75f));
+        }
+
+        static void Disc(Transform parent, string name, float w, float d, float y, Color c)
+        {
+            var disc = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            disc.name = name;
+            disc.transform.SetParent(parent, false);
+            disc.transform.localPosition = new Vector3(0f, y, 0.05f);
+            disc.transform.localScale = new Vector3(w, 0.01f, d);
+            var col = disc.GetComponent<Collider>();
+            if (col != null) Object.Destroy(col);
+            var r = disc.GetComponent<Renderer>();
+            r.material = new Material(VizLib.BaseMat) { color = c };
+            r.shadowCastingMode = ShadowCastingMode.Off;
+        }
     }
 
     // Un bloque de público que salta en su lugar, cada uno a su ritmo.

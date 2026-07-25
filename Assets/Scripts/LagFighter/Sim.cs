@@ -72,12 +72,12 @@ namespace LagFighter
         // DuelSim.cs (7 reglas, mazo de 20, alturas y velocidad). La sim de
         // frames es TEATRO puro: actúa la carta que la tabla ya resolvió.
         public static bool DuelEnabled = false;
-        // El TEATRO de DUELO (los peleadores actuando la carta) quedo APAGADO
-        // el 2026-07-25 a pedido de Patricio: con las animaciones heredadas
-        // del modo clasico se leia como ruido (aparecen y hacen cualquier
-        // cosa). El codigo sigue entero detras del flag; la ceremonia del
-        // turno ahora es la REVELACION de las cartas (DuelHudUI).
-        public static bool DuelTheaterEnabled = false;
+        // El TEATRO de DUELO estuvo APAGADO un rato: con las animaciones
+        // heredadas del modo clasico se leia como ruido. Volvio prendido el
+        // 2026-07-25 con vocabulario PROPIO (FighterViewDuel.cs): seis poses,
+        // tres tiempos y la pose que PERSISTE hasta la proxima revelacion.
+        // Ahora los cuerpos no actuan una pelea: son el marcador de estado.
+        public static bool DuelTheaterEnabled = true;
         // Los modos "de mesa" comparten esto: la sim de frames no manda.
         public static bool TableMode => YomiEnabled || CardsEnabled || DuelEnabled;
         // 20 turnos por round → TIME OVER y decide la vida. Calibrado con la

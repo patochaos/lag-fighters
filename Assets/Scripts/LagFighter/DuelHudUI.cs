@@ -29,12 +29,14 @@ namespace LagFighter
         readonly Image[] _hpFill = new Image[2];
         readonly Text[] _piles = new Text[2];
         readonly Image[][] _leftChip = new Image[2][];
+        readonly Image[][] _leftIcon = new Image[2][];
         readonly Text[][] _leftLbl = new Text[2][];
+        readonly int[] _charShown = { -1, -1 };   // para repintar iconos al cambiar de personaje
         readonly Image[] _badge = new Image[2];
         readonly Text[] _badgeLbl = new Text[2];
         Text _header, _rules;
 
-        const float PanelW = 452f, PanelH = 252f;
+        const float PanelW = 476f, PanelH = 300f;
         const float HpW = PanelW - 28f;
         const int Cols = 5;   // el strip "LE QUEDAN" es 5×2 chips
 
@@ -53,8 +55,11 @@ namespace LagFighter
         string _verdictTxt = "", _detailTxt = "";
 
         const float DealT = 0.34f, SuspenseT = 0.30f, FlipT = 0.34f, JudgeT = 1.05f;
-        const float RevealW = 210f, RevealH = 290f;
-        const float SlotX = 235f;
+        const float RevealW = 232f, RevealH = 318f;
+        const float SlotX = 258f;
+        // dockeadas: pegadas al borde y POR DEBAJO del piso de los paneles
+        // (a ±700/y=40 se montaban justo encima del panel de cada lado).
+        const float DockX = 828f, DockY = 20f, DockScale = 0.62f;
 
         public bool RevealFinished => _phase == Phase.Docked || _phase == Phase.Off;
 
@@ -94,7 +99,7 @@ namespace LagFighter
         }
 
         static Text Txt(RectTransform parent, string name, string s, Vector2 anchor, Vector2 pos, Vector2 size,
-            int font, Color c, TextAnchor align, bool pixel = true)
+            int font, Color c, TextAnchor align, DuelHandUI.Face face = DuelHandUI.Face.Pixel)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(Text));
             var rt = go.GetComponent<RectTransform>();
@@ -104,7 +109,8 @@ namespace LagFighter
             rt.anchoredPosition = pos;
             rt.sizeDelta = size;
             var t = go.GetComponent<Text>();
-            t.font = pixel ? UIFonts.Pixel : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            t.font = face == DuelHandUI.Face.Pixel ? UIFonts.Pixel
+                : face == DuelHandUI.Face.Data ? UIFonts.Data : UIFonts.Para;
             t.text = s;
             t.fontSize = font;
             t.color = c;
@@ -128,76 +134,102 @@ namespace LagFighter
             rt.anchorMax = Vector2.one;
             rt.offsetMin = rt.offsetMax = Vector2.zero;
 
-            // encabezado: UNA sola línea de turno y UNA de reglas, centradas
-            var hdr = Img(rt, "Hdr", new Vector2(0.5f, 1f), new Vector2(0f, -38f), new Vector2(1060f, 64f),
-                new Color(0.03f, 0.04f, 0.06f, 0.85f));
-            _header = Txt(hdr.rectTransform, "Turn", "", new Vector2(0.5f, 1f), new Vector2(0f, -16f),
-                new Vector2(1020f, 24f), 16, new Color(1f, 0.95f, 0.72f), TextAnchor.MiddleCenter);
-            _rules = Txt(hdr.rectTransform, "Rules", "", new Vector2(0.5f, 1f), new Vector2(0f, -42f),
-                new Vector2(1020f, 22f), 11, new Color(1f, 1f, 1f, 0.62f), TextAnchor.MiddleCenter);
-            _rules.text = "<color=#ff9550>GOLPE</color> › <color=#b86bf2>AGARRE</color> › " +
-                          "<color=#5abfff>GUARDIA</color> › <color=#ff9550>GOLPE</color>    ·    " +
-                          "golpe vs golpe gana el más RÁPIDO    ·    cada golpe es ALTO o BAJO";
+            // encabezado: UNA sola línea de turno y UNA de reglas, centradas.
+            // Es la CINTA DE LA TRANSMISIÓN: barra opaca a todo el ancho, no un
+            // rectángulo translúcido flotando en el medio.
+            var hdr = Img(rt, "Hdr", new Vector2(0.5f, 1f), new Vector2(0f, -34f), new Vector2(4000f, 68f),
+                Duelo.Panel);
+            Img(hdr.rectTransform, "Rule", new Vector2(0.5f, 0f), new Vector2(0f, 1f), new Vector2(4000f, 2f), Duelo.Line);
+            _header = Txt(hdr.rectTransform, "Turn", "", new Vector2(0.5f, 1f), new Vector2(0f, -19f),
+                new Vector2(1020f, 26f), 18, Duelo.Gold, TextAnchor.MiddleCenter);
+            _rules = Txt(hdr.rectTransform, "Rules", "", new Vector2(0.5f, 1f), new Vector2(0f, -47f),
+                new Vector2(1400f, 26f), 19, Duelo.Mute, TextAnchor.MiddleCenter, DuelHandUI.Face.Data);
+            _rules.text = $"<color=#{Hex(Duelo.Golpe)}>GOLPE</color> › <color=#{Hex(Duelo.Agarre)}>AGARRE</color> › " +
+                          $"<color=#{Hex(Duelo.Guardia)}>GUARDIA</color> › <color=#{Hex(Duelo.Golpe)}>GOLPE</color>" +
+                          "    ·    golpe vs golpe gana el más RÁPIDO    ·    cada golpe es ALTO o BAJO";
 
             for (int i = 0; i < 2; i++) BuildPanel(rt, i);
         }
+
+        static string Hex(Color c) => ColorUtility.ToHtmlStringRGB(c);
 
         void BuildPanel(RectTransform rt, int i)
         {
             bool left = i == 0;
             var anchor = new Vector2(left ? 0f : 1f, 1f);
-            var panel = Img(rt, "Panel" + i, anchor, new Vector2((left ? 1f : -1f) * 26f, -104f),
-                new Vector2(PanelW, PanelH), new Color(0.04f, 0.05f, 0.07f, 0.95f));
+            var panel = Img(rt, "Panel" + i, anchor, new Vector2((left ? 1f : -1f) * 26f, -110f),
+                new Vector2(PanelW, PanelH), Duelo.Panel);
             panel.rectTransform.pivot = new Vector2(left ? 0f : 1f, 1f);
             var p = panel.rectTransform;
-            var accent = left ? new Color(0.35f, 0.7f, 1f) : new Color(1f, 0.55f, 0.35f);
+            var accent = Duelo.Side(i);
 
+            // el color de LADO vive acá y solo acá: barra de acento, nombre,
+            // brackets. Las reglas del juego usan su propia familia.
             Img(p, "Accent", new Vector2(0.5f, 1f), new Vector2(0f, -3f), new Vector2(PanelW, 6f), accent);
+            DuelHandUI.Brackets(p, PanelW, PanelH, Duelo.Alpha(accent, 0.55f));
 
-            _who[i] = Txt(p, "Who", "", new Vector2(0f, 1f), new Vector2(PanelW * 0.5f, -26f),
-                new Vector2(PanelW - 24f, 26f), 15, accent, TextAnchor.MiddleCenter);
+            _who[i] = Txt(p, "Who", "", new Vector2(0f, 1f), new Vector2(PanelW * 0.5f, -28f),
+                new Vector2(PanelW - 24f, 28f), 17, accent, TextAnchor.MiddleCenter);
 
-            var hpBg = Img(p, "HpBg", new Vector2(0f, 1f), new Vector2(PanelW * 0.5f, -60f),
-                new Vector2(HpW, 34f), new Color(0.13f, 0.05f, 0.05f, 1f));
+            // LA VIDA es el primer ciudadano: barra alta y número grande.
+            var hpBg = Img(p, "HpBg", new Vector2(0f, 1f), new Vector2(PanelW * 0.5f, -68f),
+                new Vector2(HpW, 40f), Duelo.Wash(Duelo.Golpe, 0.16f));
             _hpFill[i] = Img(hpBg.rectTransform, "Fill", new Vector2(0f, 0.5f), Vector2.zero,
-                new Vector2(HpW - 4f, 30f), new Color(0.35f, 0.8f, 0.35f, 1f));
+                new Vector2(HpW - 4f, 36f), Duelo.Escape);
             _hpFill[i].rectTransform.pivot = new Vector2(0f, 0.5f);
             _hpFill[i].rectTransform.anchoredPosition = new Vector2(2f, 0f);
             _hpNum[i] = Txt(hpBg.rectTransform, "Hp", "", new Vector2(0.5f, 0.5f), Vector2.zero,
-                new Vector2(HpW - 8f, 30f), 18, Color.white, TextAnchor.MiddleCenter);
+                new Vector2(HpW - 8f, 34f), 22, Duelo.Void, TextAnchor.MiddleCenter);
 
-            _piles[i] = Txt(p, "Piles", "", new Vector2(0f, 1f), new Vector2(PanelW * 0.5f, -94f),
-                new Vector2(PanelW - 24f, 22f), 12, new Color(1f, 1f, 1f, 0.85f), TextAnchor.MiddleCenter);
+            _piles[i] = Txt(p, "Piles", "", new Vector2(0f, 1f), new Vector2(PanelW * 0.5f, -106f),
+                new Vector2(PanelW - 24f, 24f), 18, Duelo.Mute, TextAnchor.MiddleCenter, DuelHandUI.Face.Data);
 
-            Txt(p, "LeftLbl", "LE QUEDAN", new Vector2(0f, 1f), new Vector2(PanelW * 0.5f, -118f),
-                new Vector2(PanelW - 24f, 16f), 9, new Color(1f, 1f, 1f, 0.4f), TextAnchor.MiddleCenter);
+            Txt(p, "LeftLbl", "LE QUEDAN", new Vector2(0f, 1f), new Vector2(PanelW * 0.5f, -132f),
+                new Vector2(PanelW - 24f, 18f), 14, Duelo.Alpha(Duelo.Mute, 0.75f), TextAnchor.MiddleCenter,
+                DuelHandUI.Face.Data);
 
-            // strip en GRILLA fija de 5×2: sin wrap, sin solapes posibles
+            // strip en GRILLA fija de 5×2: sin wrap, sin solapes posibles.
+            // Cada chip es PICTOGRAMA + número: `A·2` era críptico y encima
+            // ilegible a 11px. Es la Ley 5 hecha interfaz, así que tiene que
+            // escanearse de un vistazo o no sirve para nada.
             _leftChip[i] = new Image[DuelCatalog.CardsPerChar];
             _leftLbl[i] = new Text[DuelCatalog.CardsPerChar];
-            float cw = (PanelW - 32f) / Cols, ch = 26f;
+            _leftIcon[i] = new Image[DuelCatalog.CardsPerChar];
+            float cw = (PanelW - 28f) / Cols, ch = 38f;
             for (int c = 0; c < DuelCatalog.CardsPerChar; c++)
             {
                 int col = c % Cols, row = c / Cols;
-                float x = 16f + cw * (col + 0.5f);
-                float y = -140f - row * (ch + 4f);
+                float x = 14f + cw * (col + 0.5f);
+                float y = -158f - row * (ch + 5f);
                 _leftChip[i][c] = Img(p, "Chip" + c, new Vector2(0f, 1f), new Vector2(x, y),
-                    new Vector2(cw - 5f, ch), new Color(0.11f, 0.13f, 0.17f, 1f));
-                _leftLbl[i][c] = Txt(_leftChip[i][c].rectTransform, "T", "", new Vector2(0.5f, 0.5f), Vector2.zero,
-                    new Vector2(cw - 7f, ch - 4f), 11, Color.white, TextAnchor.MiddleCenter);
+                    new Vector2(cw - 5f, ch), Duelo.Stage);
+                var icon = Img(_leftChip[i][c].rectTransform, "I", new Vector2(0f, 0.5f),
+                    new Vector2(20f, 0f), new Vector2(24f, 22f), Color.white);
+                icon.sprite = MoveIcons.Get(S != null ? S.Chr[i].Cards[c] : default);
+                icon.preserveAspect = true;
+                _leftIcon[i][c] = icon;
+                _leftLbl[i][c] = Txt(_leftChip[i][c].rectTransform, "T", "", new Vector2(1f, 0.5f),
+                    new Vector2(-22f, 0f), new Vector2(30f, ch - 6f), 20, Duelo.Paper, TextAnchor.MiddleCenter);
             }
 
-            _badge[i] = Img(p, "Badge", new Vector2(0f, 1f), new Vector2(PanelW * 0.5f, -226f),
-                new Vector2(PanelW - 24f, 28f), new Color(0.6f, 0.22f, 0.1f, 0.98f));
+            // el badge vive PEGADO al piso del panel y su texto se achica solo:
+            // antes se salía por el borde derecho de la pantalla y se leía
+            // "...no bloquea este turn".
+            _badge[i] = Img(p, "Badge", new Vector2(0f, 0f), new Vector2(PanelW * 0.5f, 26f),
+                new Vector2(PanelW - 24f, 38f), Duelo.Wash(Duelo.Golpe, 0.5f));
             _badgeLbl[i] = Txt(_badge[i].rectTransform, "T", "", new Vector2(0.5f, 0.5f), Vector2.zero,
-                new Vector2(PanelW - 28f, 24f), 12, new Color(1f, 0.88f, 0.75f), TextAnchor.MiddleCenter);
+                new Vector2(PanelW - 34f, 34f), 20, Duelo.Paper, TextAnchor.MiddleCenter, DuelHandUI.Face.Data);
+            _badgeLbl[i].resizeTextForBestFit = true;
+            _badgeLbl[i].resizeTextMinSize = 11;
+            _badgeLbl[i].resizeTextMaxSize = 20;
+            _badgeLbl[i].horizontalOverflow = HorizontalWrapMode.Wrap;
             _badge[i].gameObject.SetActive(false);
         }
 
         public void SetVisible(bool on)
         {
             if (_root != null && _root.activeSelf != on) _root.SetActive(on);
-            if (!on) HideReveal();
+            if (!on) { HideReveal(); HideResults(); }
         }
 
         // ---- refresco ----
@@ -210,6 +242,7 @@ namespace LagFighter
             for (int i = 0; i < 2; i++) RefreshSide(i);
             _header.text = $"TURNO {_mc.TurnNumber}";
             if (_phase != Phase.Off && _phase != Phase.Docked) TickReveal();
+            if (_resultsRoot != null) TickResults();
         }
 
         void RefreshSide(int i)
@@ -219,13 +252,19 @@ namespace LagFighter
             _who[i].text = (i == 0 ? "VOS · " : "RIVAL · ") + chr.Name;
 
             float f = Mathf.Clamp01(S.Hp[i] / (float)max);
-            _hpFill[i].rectTransform.sizeDelta = new Vector2((HpW - 4f) * f, 30f);
-            _hpFill[i].color = f > 0.5f ? new Color(0.35f, 0.8f, 0.35f, 1f)
-                : f > 0.25f ? new Color(0.95f, 0.72f, 0.2f, 1f)
-                : new Color(0.95f, 0.28f, 0.24f, 1f);
+            _hpFill[i].rectTransform.sizeDelta = new Vector2((HpW - 4f) * f, 36f);
+            _hpFill[i].color = Duelo.Hp(f);
             _hpNum[i].text = $"{S.Hp[i]} / {max}";
 
             _piles[i].text = $"MANO {S.Hand[i].Count}   ·   MAZO {S.Deck[i].Count}   ·   DESCARTE {S.Discard[i].Count}";
+
+            // los iconos dependen del personaje: se repintan cuando cambia
+            if (_charShown[i] != S.CharIdx[i])
+            {
+                _charShown[i] = S.CharIdx[i];
+                for (int c = 0; c < DuelCatalog.CardsPerChar; c++)
+                    _leftIcon[i][c].sprite = MoveIcons.Get(chr.Cards[c]);
+            }
 
             var used = new int[DuelCatalog.CardsPerChar];
             foreach (int c in S.Discard[i]) used[c]++;
@@ -233,21 +272,34 @@ namespace LagFighter
             for (int c = 0; c < DuelCatalog.CardsPerChar; c++)
             {
                 int leftN = Mathf.Max(0, chr.DeckCounts[c] - used[c]);
-                bool guard = c == DuelCatalog.GuardHigh || c == DuelCatalog.GuardLow;
-                _leftLbl[i][c].text = $"{chr.Cards[c].Short}·{leftN}";
-                _leftLbl[i][c].color = leftN == 0 ? new Color(1f, 1f, 1f, 0.22f)
-                    : guard ? new Color(0.45f, 0.82f, 1f) : new Color(1f, 1f, 1f, 0.92f);
-                _leftChip[i][c].color = leftN == 0 ? new Color(0.08f, 0.08f, 0.1f, 1f)
-                    : guard ? new Color(0.1f, 0.19f, 0.28f, 1f) : new Color(0.13f, 0.14f, 0.18f, 1f);
+                bool guard = chr.Cards[c].Kind == DuelKind.Guard;
+                var verb = DuelHandUI.VerbColor(chr.Cards[c]);
+                _leftLbl[i][c].text = leftN.ToString();
+
+                if (leftN == 0)
+                {
+                    // agotada: se APAGA. Y si era una guardia, el chip se
+                    // prende en dorado — "ya no le queda guardia alta" es LA
+                    // lectura del juego y tiene que ser imposible de no ver.
+                    _leftChip[i][c].color = guard ? Duelo.Wash(Duelo.Gold, 0.34f) : Duelo.Alpha(Duelo.Void, 0.85f);
+                    _leftIcon[i][c].color = guard ? Duelo.Gold : Duelo.Alpha(Duelo.Mute, 0.28f);
+                    _leftLbl[i][c].color = guard ? Duelo.Gold : Duelo.Alpha(Duelo.Mute, 0.28f);
+                }
+                else
+                {
+                    _leftChip[i][c].color = Duelo.Stage;
+                    _leftIcon[i][c].color = verb;
+                    _leftLbl[i][c].color = Duelo.Paper;
+                }
             }
 
             bool kd = S.KnockedDown[i], esc = S.Spent[i].Count > 0;
             bool on = kd || esc;
             if (_badge[i].gameObject.activeSelf != on) _badge[i].gameObject.SetActive(on);
             if (!on) return;
-            _badge[i].color = kd ? new Color(0.62f, 0.2f, 0.09f, 0.98f) : new Color(0.14f, 0.16f, 0.2f, 0.95f);
-            _badgeLbl[i].text = kd ? "¡DERRIBADO! sin guardia este turno" : "escape ya gastado";
-            _badgeLbl[i].color = kd ? new Color(1f, 0.88f, 0.75f) : new Color(1f, 1f, 1f, 0.45f);
+            _badge[i].color = kd ? Duelo.Wash(Duelo.Golpe, 0.5f) : Duelo.Stage;
+            _badgeLbl[i].text = kd ? "¡DERRIBADO! LA GUARDIA NO BLOQUEA ESTE TURNO" : "escape ya gastado";
+            _badgeLbl[i].color = kd ? Duelo.Paper : Duelo.Alpha(Duelo.Mute, 0.7f);
         }
 
         // ================= REVELACIÓN =================
@@ -273,7 +325,7 @@ namespace LagFighter
 
                 // resplandor del ganador (detrás de todo)
                 _rcGlow[i] = Img(holder.rectTransform, "Glow", new Vector2(0.5f, 0.5f), Vector2.zero,
-                    new Vector2(RevealW + 26f, RevealH + 26f), new Color(1f, 0.9f, 0.4f, 0f));
+                    new Vector2(RevealW + 28f, RevealH + 28f), Duelo.Alpha(Duelo.Gold, 0f));
 
                 // FRENTE
                 var front = new GameObject("Front", typeof(RectTransform));
@@ -283,7 +335,7 @@ namespace LagFighter
                 frt.sizeDelta = new Vector2(RevealW, RevealH);
                 if (card >= 0) DuelHandUI.PaintCard(frt, S.Def(i, card), RevealW, RevealH);
                 else Txt(frt, "None", "SIN CARTAS", new Vector2(0.5f, 0.5f), Vector2.zero,
-                    new Vector2(RevealW, 40f), 14, new Color(1f, 0.6f, 0.5f), TextAnchor.MiddleCenter);
+                    new Vector2(RevealW, 40f), 16, Duelo.Golpe, TextAnchor.MiddleCenter);
                 _rcFront[i] = front;
                 front.SetActive(false);
 
@@ -298,19 +350,21 @@ namespace LagFighter
 
                 // velo para apagar a la perdedora
                 _rcDim[i] = Img(holder.rectTransform, "Dim", new Vector2(0.5f, 0.5f), Vector2.zero,
-                    new Vector2(RevealW, RevealH), new Color(0.02f, 0.02f, 0.04f, 0f));
+                    new Vector2(RevealW, RevealH), Duelo.Alpha(Duelo.Void, 0f));
 
                 Txt(holder.rectTransform, "Owner", i == 0 ? "VOS" : "RIVAL", new Vector2(0.5f, 1f),
-                    new Vector2(0f, 26f), new Vector2(RevealW, 24f), 13,
-                    i == 0 ? new Color(0.6f, 0.85f, 1f) : new Color(1f, 0.78f, 0.62f), TextAnchor.MiddleCenter);
+                    new Vector2(0f, 28f), new Vector2(RevealW, 26f), 15,
+                    Duelo.Side(i), TextAnchor.MiddleCenter);
             }
 
             _vs = Txt(rt, "VS", "VS", new Vector2(0.5f, 0.5f), new Vector2(0f, 10f), new Vector2(160f, 70f), 34,
-                new Color(1f, 0.9f, 0.5f), TextAnchor.MiddleCenter);
-            _verdict = Txt(rt, "Verdict", "", new Vector2(0.5f, 0.5f), new Vector2(0f, -196f),
-                new Vector2(1400f, 46f), 26, new Color(1f, 0.97f, 0.75f), TextAnchor.MiddleCenter);
-            _detail = Txt(rt, "Detail", "", new Vector2(0.5f, 0.5f), new Vector2(0f, -238f),
-                new Vector2(1500f, 34f), 17, new Color(1f, 1f, 1f, 0.85f), TextAnchor.MiddleCenter, pixel: false);
+                Duelo.Gold, TextAnchor.MiddleCenter);
+            // el veredicto es la clase de teoría que el juego da solo: grande.
+            _verdict = Txt(rt, "Verdict", "", new Vector2(0.5f, 0.5f), new Vector2(0f, -214f),
+                new Vector2(1500f, 56f), 40, Duelo.Gold, TextAnchor.MiddleCenter);
+            _detail = Txt(rt, "Detail", "", new Vector2(0.5f, 0.5f), new Vector2(0f, -264f),
+                new Vector2(1500f, 40f), 25, Duelo.Alpha(Duelo.Paper, 0.9f), TextAnchor.MiddleCenter,
+                DuelHandUI.Face.Para);
             _verdict.gameObject.SetActive(false);
             _detail.gameObject.SetActive(false);
 
@@ -322,16 +376,17 @@ namespace LagFighter
         // Dorso: no hace falta arte, hace falta que se lea "esto está oculto".
         static void PaintBack(RectTransform parent, int side)
         {
-            var baseCol = side == 0 ? new Color(0.13f, 0.2f, 0.34f) : new Color(0.3f, 0.16f, 0.12f);
-            Img(parent, "Frame", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(RevealW, RevealH),
-                new Color(baseCol.r * 1.8f, baseCol.g * 1.8f, baseCol.b * 1.8f, 1f));
-            Img(parent, "Bg", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(RevealW - 8f, RevealH - 8f), baseCol);
+            // el dorso es del LADO: acá el celeste/naranja sí significa "de
+            // quién es esta carta", que es exactamente su trabajo.
+            var acc = Duelo.Side(side);
+            Img(parent, "Frame", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(RevealW, RevealH), acc);
+            Img(parent, "Bg", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(RevealW - 8f, RevealH - 8f),
+                Duelo.Wash(acc, 0.22f));
             for (int k = 0; k < 5; k++)
-                Img(parent, "Stripe" + k, new Vector2(0.5f, 0.5f), new Vector2(0f, -90f + k * 45f),
-                    new Vector2(RevealW - 40f, 10f),
-                    new Color(baseCol.r * 2.4f, baseCol.g * 2.4f, baseCol.b * 2.4f, 0.55f));
+                Img(parent, "Stripe" + k, new Vector2(0.5f, 0.5f), new Vector2(0f, -96f + k * 48f),
+                    new Vector2(RevealW - 44f, 10f), Duelo.Alpha(acc, 0.35f));
             Txt(parent, "Q", "?", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(RevealW, 90f), 56,
-                new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleCenter);
+                Duelo.Alpha(Duelo.Paper, 0.8f), TextAnchor.MiddleCenter);
         }
 
         // El POR QUÉ, corto y grande. Es la clase de teoría que enseña sola.
@@ -365,7 +420,8 @@ namespace LagFighter
                 int g = r.Guarded0 ? 0 : 1;
                 _winner = g;
                 var atk = g == 0 ? d1 : d0;
-                string alt = atk.Height == DuelHeight.High ? "ALTO" : "BAJO";
+                // la guardia es femenina: "GUARDIA BAJA", no "GUARDIA BAJO"
+                string alt = atk.Height == DuelHeight.High ? "ALTA" : "BAJA";
                 _verdictTxt = $"GUARDIA {alt} · ¡ACERTADA!";
                 _detailTxt = $"para el golpe entero, roba {r.Drew(g)} cartas y la guardia vuelve a la mano" +
                              (r.Chip(g) > 0 ? $" · igual pega {r.Chip(g)} de chip" : "") +
@@ -523,16 +579,16 @@ namespace LagFighter
             for (int i = 0; i < 2; i++)
             {
                 float sign = i == 0 ? -1f : 1f;
-                _rc[i].anchoredPosition = new Vector2(sign * 700f, 40f);
-                _rc[i].localScale = Vector3.one * 0.60f;
+                _rc[i].anchoredPosition = new Vector2(sign * DockX, DockY);
+                _rc[i].localScale = Vector3.one * DockScale;
                 _rc[i].localRotation = Quaternion.identity;
             }
             if (_verdict != null)
             {
-                _verdict.rectTransform.anchoredPosition = new Vector2(0f, 252f);
-                _verdict.transform.localScale = Vector3.one * 0.8f;
+                _verdict.rectTransform.anchoredPosition = new Vector2(0f, 250f);
+                _verdict.transform.localScale = Vector3.one * 0.72f;
             }
-            if (_detail != null) _detail.rectTransform.anchoredPosition = new Vector2(0f, 212f);
+            if (_detail != null) _detail.rectTransform.anchoredPosition = new Vector2(0f, 206f);
         }
 
         // El jugador puede apurar la ceremonia (clic o espacio).
@@ -559,6 +615,115 @@ namespace LagFighter
             _revealRoot = null;
             _phase = Phase.Off;
             _t = 0f;
+        }
+
+        // ================= RESULTADOS =================
+        //
+        // Hasta ahora DUELO cerraba con un cartel de "K.O." y nada más: quién
+        // ganó, y a otra cosa. Acá se ve CÓMO peleaste — que es lo que hace que
+        // la próxima partida la juegues distinto — y las dos salidas dejan de
+        // ser teclas invisibles.
+
+        GameObject _resultsRoot;
+        Image _btnRematch, _btnMenu;
+
+        public bool ResultsVisible => _resultsRoot != null;
+
+        public void ShowResults(int winner, int turns, int[] dmg, int[] guards, int[] kds, bool timeOver = false)
+        {
+            HideResults();
+            var rt = _root.GetComponent<RectTransform>();
+            _resultsRoot = new GameObject("Results", typeof(RectTransform));
+            var rr = _resultsRoot.GetComponent<RectTransform>();
+            rr.SetParent(rt, false);
+            rr.anchorMin = Vector2.zero;
+            rr.anchorMax = Vector2.one;
+            rr.offsetMin = rr.offsetMax = Vector2.zero;
+            // canvas propio por ARRIBA de todo: el velo tiene que tapar también
+            // los paneles y la mano, que viven en otros canvas. Si no, "apagar
+            // el resto" apaga solo el 3D y la pantalla sigue siendo una sopa.
+            var rc = _resultsRoot.AddComponent<Canvas>();
+            rc.overrideSorting = true;
+            rc.sortingOrder = 40;
+            _resultsRoot.AddComponent<GraphicRaycaster>();
+
+            // el velo: todo lo demás baja a fondo, esto es lo único que importa
+            Img(rr, "Veil", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(4000f, 2400f),
+                Duelo.Alpha(Duelo.Void, 0.88f));
+
+            var panel = Img(rr, "Panel", new Vector2(0.5f, 0.5f), new Vector2(0f, 20f),
+                new Vector2(880f, 560f), Duelo.Panel);
+            var p = panel.rectTransform;
+            var accent = winner < 0 ? Duelo.Gold : Duelo.Side(winner);
+            Img(p, "Accent", new Vector2(0.5f, 1f), new Vector2(0f, -4f), new Vector2(880f, 8f), accent);
+            DuelHandUI.Brackets(p, 880f, 560f, Duelo.Alpha(accent, 0.7f));
+
+            string big = winner < 0 ? "EMPATE" : winner == 0 ? "¡GANASTE!" : "PERDISTE";
+            Txt(p, "Big", big, new Vector2(0.5f, 1f), new Vector2(0f, -66f), new Vector2(840f, 60f),
+                44, accent, TextAnchor.MiddleCenter);
+            Txt(p, "How", timeOver ? "TIME OVER · decidió la vida" : "K.O.",
+                new Vector2(0.5f, 1f), new Vector2(0f, -114f), new Vector2(840f, 28f),
+                22, Duelo.Mute, TextAnchor.MiddleCenter, DuelHandUI.Face.Data);
+
+            // la tabla: una fila por métrica, las dos columnas enfrentadas
+            string[] rows = { "DAÑO HECHO", "GUARDIAS ACERTADAS", "DERRIBOS" };
+            int[][] vals = { dmg, guards, kds };
+            Txt(p, "ColL", "VOS", new Vector2(0.5f, 1f), new Vector2(-286f, -168f), new Vector2(200f, 26f),
+                17, Duelo.P1, TextAnchor.MiddleCenter);
+            Txt(p, "ColR", "RIVAL", new Vector2(0.5f, 1f), new Vector2(286f, -168f), new Vector2(200f, 26f),
+                17, Duelo.P2, TextAnchor.MiddleCenter);
+            for (int i = 0; i < rows.Length; i++)
+            {
+                float y = -214f - i * 54f;
+                Img(p, "Row" + i, new Vector2(0.5f, 1f), new Vector2(0f, y), new Vector2(820f, 44f),
+                    i % 2 == 0 ? Duelo.Stage : Duelo.Alpha(Duelo.Stage, 0.45f));
+                Txt(p, "Lbl" + i, rows[i], new Vector2(0.5f, 1f), new Vector2(0f, y), new Vector2(420f, 26f),
+                    19, Duelo.Mute, TextAnchor.MiddleCenter, DuelHandUI.Face.Data);
+                Txt(p, "V0" + i, vals[i][0].ToString(), new Vector2(0.5f, 1f), new Vector2(-286f, y),
+                    new Vector2(160f, 34f), 26, Duelo.Paper, TextAnchor.MiddleCenter);
+                Txt(p, "V1" + i, vals[i][1].ToString(), new Vector2(0.5f, 1f), new Vector2(286f, y),
+                    new Vector2(160f, 34f), 26, Duelo.Paper, TextAnchor.MiddleCenter);
+            }
+            Txt(p, "Turns", $"{turns} TURNOS", new Vector2(0.5f, 1f), new Vector2(0f, -388f),
+                new Vector2(820f, 26f), 19, Duelo.Alpha(Duelo.Mute, 0.8f), TextAnchor.MiddleCenter,
+                DuelHandUI.Face.Data);
+
+            _btnRematch = ResultBtn(p, "Rematch", -212f, "REVANCHA", "R", Duelo.Gold);
+            // "SALIR" y no "MENÚ": la pixel font dibuja las mayúsculas
+            // acentuadas enanas y quedaba "MENú"
+            _btnMenu = ResultBtn(p, "Menu", 212f, "SALIR", "M", Duelo.Mute);
+        }
+
+        Image ResultBtn(RectTransform p, string name, float x, string label, string key, Color c)
+        {
+            var bg = Img(p, name, new Vector2(0.5f, 0f), new Vector2(x, 60f), new Vector2(360f, 78f),
+                Duelo.Wash(c, 0.26f));
+            DuelHandUI.Brackets(bg.rectTransform, 360f, 78f, Duelo.Alpha(c, 0.8f));
+            Txt(bg.rectTransform, "T", label, new Vector2(0.5f, 0.5f), new Vector2(0f, 6f),
+                new Vector2(340f, 32f), 22, c, TextAnchor.MiddleCenter);
+            Txt(bg.rectTransform, "K", $"[{key}]", new Vector2(0.5f, 0.5f), new Vector2(0f, -22f),
+                new Vector2(340f, 22f), 16, Duelo.Alpha(c, 0.55f), TextAnchor.MiddleCenter,
+                DuelHandUI.Face.Data);
+            return bg;
+        }
+
+        public void HideResults()
+        {
+            if (_resultsRoot != null) Destroy(_resultsRoot);
+            _resultsRoot = null;
+            _btnRematch = _btnMenu = null;
+        }
+
+        void TickResults()
+        {
+            var mp = GameInput.MousePos();
+            bool overR = _btnRematch != null && RectTransformUtility.RectangleContainsScreenPoint(_btnRematch.rectTransform, mp, null);
+            bool overM = _btnMenu != null && RectTransformUtility.RectangleContainsScreenPoint(_btnMenu.rectTransform, mp, null);
+            if (_btnRematch != null) _btnRematch.color = Duelo.Wash(Duelo.Gold, overR ? 0.46f : 0.26f);
+            if (_btnMenu != null) _btnMenu.color = Duelo.Wash(Duelo.Mute, overM ? 0.46f : 0.26f);
+            if (!GameInput.ClickPressed()) return;
+            if (overR) { SfxLib.Play(SfxLib.Kind.UiClick, 0.9f); _mc.DuelRematch(); }
+            else if (overM) { SfxLib.Play(SfxLib.Kind.UiClick, 0.9f); _mc.DuelToMenu(); }
         }
     }
 }

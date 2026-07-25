@@ -21,11 +21,89 @@ namespace LagFighter
         public static Color Side(int i) => i == 0 ? P1 : P2;
     }
 
-    // Fuentes: pixel (Press Start 2P, solo mayúsculas, para títulos/labels
-    // cortos) y cuerpo (Liberation) para descripciones y símbolos (←» etc.).
+    // Paleta de DUELO — "SALA DE ESPERA" (DUELO-LOOK.md).
+    //
+    // LA regla, la que arregla el malentendido más caro de esa pantalla:
+    // **el color de LADO y el color de REGLA son dos idiomas separados y no se
+    // pisan.** Antes VOS era celeste y GUARDIA también; RIVAL era naranja y
+    // GOLPE también — o sea que en tu propia mano las cartas de golpe se veían
+    // del rival. Ahora celeste/naranja significan UNA cosa (de quién es) y las
+    // reglas viven en su propia familia (rojo · violeta · ámbar · verde).
+    public static class Duelo
+    {
+        // cromo (el 90% de los pixeles)
+        public static readonly Color Void = new Color32(0x07, 0x0A, 0x10, 0xFF);
+        public static readonly Color Panel = new Color32(0x0A, 0x0F, 0x19, 0xFF);
+        public static readonly Color Stage = new Color32(0x10, 0x17, 0x25, 0xFF);
+        public static readonly Color StageLit = new Color32(0x1C, 0x27, 0x40, 0xFF);
+        public static readonly Color Line = new Color32(0x2B, 0x3A, 0x55, 0xFF);
+        public static readonly Color Paper = new Color32(0xEA, 0xF0, 0xFA, 0xFF);  // nunca blanco puro
+        public static readonly Color Mute = new Color32(0x84, 0x94, 0xAD, 0xFF);
+
+        // identidad de lado — SOLO cromo (nombre, vida, borde, luz)
+        public static readonly Color P1 = new Color32(0x3F, 0xB6, 0xF5, 0xFF);
+        public static readonly Color P2 = new Color32(0xFF, 0x7A, 0x3C, 0xFF);
+        public static Color Side(int i) => i == 0 ? P1 : P2;
+
+        // reglas del juego — estos mandan
+        public static readonly Color Golpe = new Color32(0xFF, 0x3B, 0x30, 0xFF);
+        public static readonly Color Agarre = new Color32(0xB1, 0x5C, 0xFF, 0xFF);
+        public static readonly Color Guardia = new Color32(0xFF, 0xC5, 0x3D, 0xFF);
+        public static readonly Color Escape = new Color32(0x4B, 0xE0, 0x8A, 0xFF);
+        public static readonly Color Vel = new Color32(0x5A, 0xC8, 0xFA, 0xFF);   // solo el numeral
+        public static readonly Color Gold = new Color32(0xFF, 0xE4, 0x5C, 0xFF);  // ceremonia: ganador, premio, KO
+
+        // vida: verde → ámbar → rojo, con los mismos hues de la familia
+        public static Color Hp(float frac) =>
+            frac > 0.5f ? Escape : frac > 0.25f ? Guardia : Golpe;
+
+        public static Color Alpha(Color c, float a) => new Color(c.r, c.g, c.b, a);
+        // fondo tenue de un color de regla (chips, franjas): el color pero apagado
+        public static Color Wash(Color c, float k = 0.22f) => new Color(c.r * k, c.g * k, c.b * k, 1f);
+    }
+
+    // Fuentes. Tres roles, sin superposición (DUELO-LOOK.md §4):
+    //
+    //   Pixel  — Press Start 2P: display puro (nombres de carta, veredicto,
+    //            VS, KO, los numerales de velocidad/daño).
+    //   Data   — Barlow Condensed SemiBold: etiquetas, chips y prompts. Es
+    //            CONDENSADA, así que entra el doble de texto al doble de
+    //            tamaño — que es exactamente lo que le faltaba a esta UI.
+    //   Body   — Barlow Condensed Medium: párrafos del panel de detalle.
+    //
+    // Además arregla un bug real: Press Start 2P dibuja las MAYÚSCULAS
+    // ACENTUADAS enanas (no le entra el diacrítico arriba de la caja de 5px),
+    // así que "DAÑO" se leía "DAñO" y "ELÉCTRICA" salía "ELéCTRICA". Todo lo
+    // que lleve Ñ o acento va en Data/Body, que las dibuja bien.
     public static class UIFonts
     {
-        static Font _pixel, _body;
+        static Font _pixel, _body, _data, _para;
+
+        public static Font Data
+        {
+            get
+            {
+                if (_data == null)
+                {
+                    _data = Resources.Load<Font>("LagFighter/BarlowCondensed-SemiBold");
+                    if (_data == null) _data = Body;
+                }
+                return _data;
+            }
+        }
+
+        public static Font Para
+        {
+            get
+            {
+                if (_para == null)
+                {
+                    _para = Resources.Load<Font>("LagFighter/BarlowCondensed-Medium");
+                    if (_para == null) _para = Data;
+                }
+                return _para;
+            }
+        }
 
         public static Font Pixel
         {
@@ -245,6 +323,122 @@ namespace LagFighter
 
         public static Sprite ShieldSprite() => Make("shield", Shield, flip: false);
         public static Sprite StarSprite() => Make("star", Star, flip: false);
+
+        // ---- el idioma de DUELO: ocho símbolos y nada más ----
+        // El strip "LE QUEDAN" era `A·2 B·2 C·2` a 11px: críptico y además
+        // ilegible. Con pictograma + número se escanea de un vistazo, que es
+        // lo único que hace que la información pública SIRVA (Ley 5).
+        // La ALTURA se dice por POSICIÓN dentro del cuadrito: arriba = alto,
+        // abajo = bajo. Igual que la franja de las cartas.
+        public enum Duel { StrikeHigh, StrikeLow, Grab, GuardHigh, GuardLow, Escape, Knockdown, Draw }
+
+        static readonly string[] FistHigh =
+        {
+            "..XXXXXXX..",
+            ".XXXXXXXXX.",
+            "XXXXXXXXXXX",
+            "XXXXXXXXXXX",
+            ".XXXXXXXXX.",
+            "..XXXXXXX..",
+            "...........",
+            "...........",
+            "...........",
+            "...........",
+        };
+        static readonly string[] SweepLow =
+        {
+            "...........",
+            "...........",
+            "...........",
+            "...........",
+            "XX.........",
+            "XXXX.......",
+            "XXXXXXX....",
+            "XXXXXXXXXX.",
+            "XXXXXXXXXXX",
+            "XXXXXXXXXXX",
+        };
+        static readonly string[] ShieldHigh =
+        {
+            "XXXXXXXXXXX",
+            "XXXXXXXXXXX",
+            ".XXXXXXXXX.",
+            "..XXXXXXX..",
+            "...XXXXX...",
+            ".....X.....",
+            "...........",
+            "...........",
+            "...........",
+            "...........",
+        };
+        static readonly string[] ShieldLow =
+        {
+            "...........",
+            "...........",
+            "...........",
+            "...........",
+            "XXXXXXXXXXX",
+            "XXXXXXXXXXX",
+            ".XXXXXXXXX.",
+            "..XXXXXXX..",
+            "...XXXXX...",
+            ".....X.....",
+        };
+        static readonly string[] Fallen = // cuerpo tirado en el piso
+        {
+            "...........",
+            "...........",
+            "...........",
+            "...........",
+            "..XX.......",
+            ".XXXXXXXXX.",
+            "..XXXXXXXX.",
+            "...........",
+            "XXXXXXXXXXX",
+            "...........",
+        };
+        static readonly string[] Cards2 = // robar: dos cartas
+        {
+            "..XXXXXXX..",
+            "..X.....X..",
+            "XXXXXXX.X..",
+            "X.....X.X..",
+            "X.....X.X..",
+            "X.....XXX..",
+            "X.....X....",
+            "X.....X....",
+            "XXXXXXX....",
+            "...........",
+        };
+
+        public static Sprite Get(Duel d)
+        {
+            switch (d)
+            {
+                case Duel.StrikeHigh: return Make("dHi", FistHigh, flip: false);
+                case Duel.StrikeLow: return Make("dLo", SweepLow, flip: false);
+                case Duel.Grab: return Make("claw", Claw, flip: false);
+                case Duel.GuardHigh: return Make("dGH", ShieldHigh, flip: false);
+                case Duel.GuardLow: return Make("dGL", ShieldLow, flip: false);
+                case Duel.Escape: return Make("star", Star, flip: false);
+                case Duel.Knockdown: return Make("dKD", Fallen, flip: false);
+                default: return Make("dDraw", Cards2, flip: false);
+            }
+        }
+
+        // El pictograma que le corresponde a una carta de DUELO.
+        public static Sprite Get(in DuelCard c)
+        {
+            switch (c.Kind)
+            {
+                case DuelKind.Grab: return Get(Duel.Grab);
+                case DuelKind.Escape: return Get(Duel.Escape);
+                case DuelKind.Guard:
+                    return Get(c.Height == DuelHeight.High ? Duel.GuardHigh : Duel.GuardLow);
+                default:
+                    return Get(c.Height == DuelHeight.High ? Duel.StrikeHigh : Duel.StrikeLow);
+            }
+        }
 
         static Sprite Make(string key, string[] rows, bool flip)
         {

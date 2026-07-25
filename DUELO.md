@@ -311,6 +311,12 @@ con tic, contra 50.6% sin lectura.
   pegale arriba"*. Arriba al centro, el triángulo permanente (todo el
   reglamento en una línea) y la revelación de las dos cartas con el fallo
   cantado, que después se dockean a los costados durante la acción.
+> **Actualizado el 2026-07-25 (noche):** el teatro de esta sección se rehízo
+> entero con vocabulario propio — ver [DUELO-LOOK.md](DUELO-LOOK.md) §5 y
+> `FighterViewDuel.cs`. Ya no se actúan moves del catálogo clásico: son 12
+> poses de DUELO en tres tiempos, y **la consecuencia queda en pantalla**
+> hasta la revelación siguiente. Lo que sigue es el registro de cómo era.
+
 - **Teatro**: cada carta tiene su move y **la altura del golpe en pantalla
   coincide con la altura de la carta** — el mixup se aprende mirando.
   A→barrida · B→giro bajo · C→jab a la cabeza · D→golpe fuerte ·

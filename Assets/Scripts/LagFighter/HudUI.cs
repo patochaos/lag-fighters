@@ -958,7 +958,15 @@ namespace LagFighter
                 }
 
                 // badge de estado sobre la cabeza (world-space): el lugar
-                // único de status effects — stun, guard crush y overflow
+                // único de status effects — stun, guard crush y overflow.
+                //
+                // En DUELO no: el estado lo dice DuelHudUI (y lo va a decir el
+                // cuerpo). Estos badges hablan en frames, que es un idioma que
+                // en DUELO no existe — y encima el derribo del teatro dura
+                // 100000 ticks, así que se leía literalmente "KD 100000F"
+                // flotando en el medio del escenario.
+                if (SimConfig.DuelEnabled) { WorldFX.SetBadge(i, 0f, 0f, "", Color.white); continue; }
+
                 string badge = "";
                 Color bc = Color.white;
                 if (sim.IsStunned(i))

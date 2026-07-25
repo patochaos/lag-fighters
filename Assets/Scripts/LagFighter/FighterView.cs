@@ -5,7 +5,11 @@ namespace LagFighter
 {
     // Stickman de bloques 3D: legible, barato, y calza con los hurt/hitboxes
     // rectangulares. Animación 100% procedural desde el estado de la sim.
-    public class FighterView : MonoBehaviour
+    //
+    // En modo DUELO NO se anima desde la sim de frames: el cuerpo es un
+    // MARCADOR DE ESTADO con un vocabulario de poses propio. Esa mitad vive en
+    // FighterViewDuel.cs (ver DUELO-LOOK.md §5).
+    public partial class FighterView : MonoBehaviour
     {
         MatchController _mc;
         int _index;
@@ -184,6 +188,7 @@ namespace LagFighter
         void Update()
         {
             if (_ghostMode) return; // al ghost lo posa GhostViz con su propia sim
+            if (SimConfig.DuelEnabled) { TickDuel(Time.deltaTime); return; }
             if (_mc == null || _mc.Sim == null) return;
             bool showBlock = _mc.State == MatchController.Flow.Executing || _mc.State == MatchController.Flow.Replay;
             ApplyPose(_mc.Sim, _mc.TickFloat, Time.deltaTime, showBlock);
@@ -212,8 +217,14 @@ namespace LagFighter
             float phase = m != null ? Mathf.Clamp(tf - f.MoveStartTick, 0f, m.Total) : 0f;
 
             // cartel con el nombre del ataque al arrancar: se entiende QUÉ tiró
-            // cada uno sin tener que leer las fichas de la timeline
-            if (!_ghostMode && showBlockPose && m != null && m.IsAttack
+            // cada uno sin tener que leer las fichas de la timeline.
+            //
+            // En DUELO no: el nombre lo dice la CARTA. Estos carteles usan los
+            // nombres del catálogo clásico ("BARRIDA", "GOLPE FUERTE") mientras
+            // el veredicto dice "JAB (A) conecta por 3" — dos vocabularios para
+            // la misma acción. Y con los peleadores a un metro se pisaban entre
+            // sí en el centro de la pantalla.
+            if (!_ghostMode && !SimConfig.DuelEnabled && showBlockPose && m != null && m.IsAttack
                 && (m != _calloutMove || f.MoveStartTick != _calloutStart))
             {
                 _calloutMove = m;
