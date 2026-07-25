@@ -13,6 +13,7 @@
     <Compile Include="..\..\Assets\Scripts\LagFighter\Sim.cs" />
     <Compile Include="..\..\Assets\Scripts\LagFighter\YomiSim.cs" />
     <Compile Include="..\..\Assets\Scripts\LagFighter\CardSim.cs" />
+    <Compile Include="..\..\Assets\Scripts\LagFighter\DuelSim.cs" />
     <Compile Include="..\..\Assets\Scripts\LagFighter\SimpleAI.cs" />
   </ItemGroup>
 </Project>

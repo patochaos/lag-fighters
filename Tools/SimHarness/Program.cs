@@ -35,6 +35,21 @@ class Program
             RunCardsTrace(args.Length > 1 ? int.Parse(args[1]) : 1);
             return;
         }
+        if (args.Length > 0 && args[0] == "duelo")
+        {
+            RunDueloLab(args.Length > 1 ? int.Parse(args[1]) : 5000);
+            return;
+        }
+        if (args.Length > 0 && args[0] == "duelogap")
+        {
+            RunDueloGap(args.Length > 1 ? int.Parse(args[1]) : 4000);
+            return;
+        }
+        if (args.Length > 0 && args[0] == "duelotune")
+        {
+            RunDueloTune(args.Length > 1 ? int.Parse(args[1]) : 3000);
+            return;
+        }
         int matches = args.Length > 0 ? int.Parse(args[0]) : 3000;
         RunLab(matches, carryover: false);
         Console.WriteLine();
@@ -46,6 +61,284 @@ class Program
         Console.WriteLine();
         Console.WriteLine("=== MODO CARTAS (copia de Yomi 2) ===");
         RunCardsLab(matches);
+        Console.WriteLine();
+        Console.WriteLine("=== MODO DUELO (el núcleo casual) ===");
+        RunDueloLab(matches);
+        Console.WriteLine();
+        RunDueloGap(matches);
+    }
+
+    // ---- MODO DUELO ----------------------------------------------------
+    // El lab mide dos cosas distintas: RunDueloLab el ritmo y el balance
+    // (¿alguna carta domina? ¿cierra en KO? ¿los personajes están parejos?)
+    // y RunDueloGap la PROFUNDIDAD (ver DUELO.md §6): cuánto le gana la IA
+    // que juega bien a la que juega al azar, y cuánto vale leer al rival.
+
+    // Full = la IA completa · NoReads = la misma sin leer al rival ·
+    // Random = juega cualquier carta · Predecible = la MISMA IA competente
+    // (sin lectura) pero con UN tic legible: cuando ataca, prefiere pegar
+    // abajo. Es el sparring que hace falta para medir si la información
+    // sirve — contra un random no hay nada que leer, y contra un bot tonto
+    // el resultado se lo come el techo.
+    enum DuelBot { Full, NoReads, Random, Predictable }
+
+    class DuelPlayer
+    {
+        readonly SimpleAI _ai;
+        readonly System.Random _rand;
+        readonly bool _tellBajo;
+
+        public DuelPlayer(int seed, DuelBot kind)
+        {
+            if (kind == DuelBot.Random) { _rand = new System.Random(seed); return; }
+            _ai = new SimpleAI(seed);
+            _ai.ReadsHabits = kind == DuelBot.Full;
+            _tellBajo = kind == DuelBot.Predictable;
+        }
+
+        public int Pick(DuelSim d, int me)
+        {
+            if (_ai == null) return d.Hand[me].Count == 0 ? -1 : _rand.Next(d.Hand[me].Count);
+            int pick = _ai.PickDuelCard(d, me);
+            if (!_tellBajo || pick < 0) return pick;
+            // el tic: si eligió pegar ALTO y tiene un golpe bajo, pega abajo
+            var c = d.Def(me, d.Hand[me][pick]);
+            if (c.Kind != DuelKind.Strike || c.Height != DuelHeight.High) return pick;
+            for (int i = 0; i < d.Hand[me].Count; i++)
+            {
+                var alt = d.Def(me, d.Hand[me][i]);
+                if (alt.Kind == DuelKind.Strike && alt.Height == DuelHeight.Low) return i;
+            }
+            return pick;
+        }
+
+        // Cierra la decisión pendiente. El bot random elige a ciegas pero
+        // SIEMPRE cierra (el derribo es el fallback legal).
+        public void Choice(DuelSim d)
+        {
+            if (_ai != null) { _ai.DoDuelChoice(d); return; }
+            int me = d.PendingSide;
+            if (me < 0) return;
+            if (d.PendingIsPunish)
+            {
+                var opts = new List<int>();
+                for (int i = 0; i < d.Hand[me].Count; i++)
+                    if (d.Def(me, d.Hand[me][i]).IsAttack) opts.Add(i);
+                d.Punish(opts.Count > 0 ? opts[_rand.Next(opts.Count)] : -1);
+                return;
+            }
+            var fuel = d.PrizeFuel(me);
+            if (fuel.Count > 0 && _rand.NextDouble() < 0.5)
+            {
+                if (d.ChoosePrize(DuelPrize.Damage, fuel[_rand.Next(fuel.Count)])) return;
+            }
+            d.ChoosePrize(DuelPrize.Knockdown);
+        }
+
+        public void Observe(DuelCard card) => _ai?.ObserveDuel(card);
+    }
+
+    // Juega una partida entera. Devuelve el ganador (−1 empate).
+    static int PlayDuel(int seed, int c0, int c1, DuelBot b0, DuelBot b1, DuelStats st = null)
+    {
+        // Seeds HASHEADAS por lado: System.Random correlaciona seeds que
+        // difieren en un offset constante, y eso sesga el head-to-head sin
+        // que la sim tenga nada raro (la trampa que ya mordió el lab de
+        // cartas; acá se veía como "P0 gana 52% con bots random").
+        var p0 = new DuelPlayer(HashSeed(seed, 0), b0);
+        var p1 = new DuelPlayer(HashSeed(seed, 1), b1);
+        var d = new DuelSim(seed, c0, c1);
+        int guard = 0;
+        while (!d.Over && guard++ < 80)
+        {
+            d.StartTurn();
+            if (d.Over) break;
+            int h0 = p0.Pick(d, 0), h1 = p1.Pick(d, 1);
+            var r = d.Resolve(h0, h1);
+            if (d.AwaitingChoice) (d.PendingSide == 0 ? p0 : p1).Choice(d);
+            if (r.Card1 >= 0) p0.Observe(d.Def(1, r.Card1));
+            if (r.Card0 >= 0) p1.Observe(d.Def(0, r.Card0));
+            st?.Turn(d, r, c0, c1);
+        }
+        st?.Match(d);
+        return d.Winner;
+    }
+
+    static int HashSeed(int seed, int side)
+    {
+        uint x = (uint)seed * 0x9E3779B9u + (uint)(side + 1) * 0x85EBCA6Bu;
+        x ^= x >> 16; x *= 0x7feb352du;
+        x ^= x >> 15; x *= 0x846ca68bu;
+        x ^= x >> 16;
+        return (int)(x & 0x7FFFFFFF);
+    }
+
+    class DuelStats
+    {
+        public long Turns, Kos, Draws, TimeOvers, Matches;
+        public long GuardOk, GuardMal, Trades, Techs, Escapes, Chips;
+        public readonly long[] GuardOkSide = new long[2], GuardMalSide = new long[2], WinsSide = new long[2];
+        public long PrizeDmg, PrizeKd, Punishes, Kds, Empty;
+        public long HandSum, HandSamples;
+        public readonly long[,] Uses = new long[2, DuelCatalog.CardsPerChar];
+
+        public void Turn(DuelSim d, DuelTurnResult r, int c0, int c1)
+        {
+            if (r.Card0 >= 0) Uses[c0, r.Card0]++; else Empty++;
+            if (r.Card1 >= 0) Uses[c1, r.Card1]++; else Empty++;
+            if (r.Guarded0) { GuardOk++; GuardOkSide[0]++; }
+            if (r.Guarded1) { GuardOk++; GuardOkSide[1]++; }
+            if (r.WrongGuard0) { GuardMal++; GuardMalSide[0]++; }
+            if (r.WrongGuard1) { GuardMal++; GuardMalSide[1]++; }
+            if (r.Winner >= 0) WinsSide[r.Winner]++;
+            if (r.Trade) Trades++;
+            if (r.Tech) Techs++;
+            if (r.Escaped0) Escapes++; if (r.Escaped1) Escapes++;
+            if (r.Chip0 > 0) Chips++; if (r.Chip1 > 0) Chips++;
+            if (r.Prize == DuelPrize.Damage) PrizeDmg++;
+            if (r.Prize == DuelPrize.Knockdown) PrizeKd++;
+            if (r.PunishSide >= 0) Punishes++;
+            if (r.KdNext0) Kds++; if (r.KdNext1) Kds++;
+            HandSum += d.Hand[0].Count + d.Hand[1].Count; HandSamples += 2;
+        }
+
+        public void Match(DuelSim d)
+        {
+            Matches++;
+            Turns += d.Turn;
+            if (d.Hp[0] <= 0 || d.Hp[1] <= 0) Kos++; else TimeOvers++;
+            if (d.Winner < 0) Draws++;
+        }
+    }
+
+    static void RunDueloLab(int matches)
+    {
+        var st = new DuelStats();
+        var wins = new long[2, 2];
+        var games = new long[2, 2];
+        for (int m = 0; m < matches; m++)
+        {
+            int c0 = (m / 2) % 2, c1 = m % 2;
+            int w = PlayDuel(m + 1, c0, c1, DuelBot.Full, DuelBot.Full, st);
+            games[c0, c1]++;
+            if (w == 0) wins[c0, c1]++;
+        }
+        string[] cn = { "Grave", "Jaina" };
+        Console.WriteLine($"partidas: {matches} · empates {st.Draws} · KO {100.0 * st.Kos / matches:0.0}% · time over {100.0 * st.TimeOvers / matches:0.0}%");
+        Console.WriteLine($"turnos/partida: {(double)st.Turns / matches:0.0} · mano promedio {(double)st.HandSum / Math.Max(1, st.HandSamples):0.0}/{DuelConfig.HandLimit} · manos vacías {st.Empty}");
+        Console.WriteLine($"guardias bien {st.GuardOk} · altura equivocada {st.GuardMal} ({100.0 * st.GuardOk / Math.Max(1, st.GuardOk + st.GuardMal):0}% acierto) · chips {st.Chips}");
+        Console.WriteLine($"premio: +DAÑO {st.PrizeDmg} vs DERRIBO {st.PrizeKd} · derribos {st.Kds} · castigos {st.Punishes} · trades {st.Trades} · techs {st.Techs} · escapes {st.Escapes}");
+        for (int a = 0; a < 2; a++)
+            for (int b = 0; b < 2; b++)
+                if (games[a, b] > 0)
+                    Console.WriteLine($"  {cn[a]} vs {cn[b]}: {100.0 * wins[a, b] / games[a, b]:0.0}% para {cn[a]} ({games[a, b]} partidas)");
+        for (int c = 0; c < 2; c++)
+        {
+            Console.WriteLine($"  usos — {cn[c]}:");
+            var chr = DuelCatalog.Chars[c];
+            long total = 0;
+            for (int i = 0; i < DuelCatalog.CardsPerChar; i++) total += st.Uses[c, i];
+            for (int i = 0; i < DuelCatalog.CardsPerChar; i++)
+                if (st.Uses[c, i] > 0)
+                    Console.WriteLine($"    {chr.Cards[i].Name,-22}{st.Uses[c, i],8}  ({100.0 * st.Uses[c, i] / Math.Max(1, total):0.0}%)");
+        }
+    }
+
+    // Las dos métricas de PROFUNDIDAD de DUELO.md §6. Cada enfrentamiento se
+    // juega en los dos lados (mismo seed) para que el sesgo de lado no
+    // contamine el resultado.
+    static void RunDueloGap(int matches)
+    {
+        Console.WriteLine($"=== DUELO: métricas de profundidad ({matches} partidas por test) ===");
+        double gap = Duel1v1(matches, DuelBot.Full, DuelBot.Random);
+        double espejo = Duel1v1(matches, DuelBot.Full, DuelBot.NoReads);
+        double conLectura = Duel1v1(matches, DuelBot.Full, DuelBot.Predictable);
+        double sinLectura = Duel1v1(matches, DuelBot.NoReads, DuelBot.Predictable);
+        Console.WriteLine($"brecha de habilidad (heurística vs random): {gap * 100:0.0}%   [objetivo ≥75%]");
+        Console.WriteLine($"contra un rival CON HÁBITO — leyendo: {conLectura * 100:0.0}% · sin leer: {sinLectura * 100:0.0}%");
+        Console.WriteLine($"valor de la información: +{(conLectura - sinLectura) * 100:0.0} pp   [0 = la info pública es decorativa]");
+        Console.WriteLine($"(control: leyendo vs sin leer, ambos impredecibles: {espejo * 100:0.0}% — debe dar ~50%)");
+        // Invariante: con reveal SIMULTÁNEO ningún lado tiene prioridad, así
+        // que dos bots iguales sin alternar lados deben dar 50/50. Si no da,
+        // hay una asimetría escondida (en la sim o en la IA).
+        Console.WriteLine($"  simetría de lados (sin alternar, debe dar ~50%): " +
+                          $"random {SidedP0(matches, DuelBot.Random) * 100:0.0}% · " +
+                          $"heurística {SidedP0(matches, DuelBot.Full) * 100:0.0}%");
+        Console.WriteLine("  diagnóstico contra el rival con hábito:");
+        DueloDiagnostico(matches, DuelBot.Full, "leyendo");
+        DueloDiagnostico(matches, DuelBot.NoReads, "sin leer");
+    }
+
+    // Barrido de los dos diales que deciden el RITMO (vida y robo por turno)
+    // contra las métricas que importan: largo de partida, KO% y —la clave—
+    // cuánto empieza a pagar la lectura cuando la partida da tiempo a leer.
+    static void RunDueloTune(int matches)
+    {
+        int hp0 = DuelConfig.MaxHp, gd0 = DuelConfig.GuardDraw;
+        Console.WriteLine($"=== DUELO: barrido ({matches} partidas por celda) ===");
+        Console.WriteLine("  vida  robo-def | turnos   KO%   mano  premio+D%  brecha  control  info");
+        foreach (int hp in new[] { 40, 46 })
+            foreach (int gd in new[] { 1, 2 })
+            {
+                DuelConfig.MaxHp = hp;
+                DuelConfig.GuardDraw = gd;
+                var st = new DuelStats();
+                for (int m = 0; m < matches; m++)
+                    PlayDuel(m + 1, (m / 2) % 2, m % 2, DuelBot.Full, DuelBot.Full, st);
+                double gap = Duel1v1(matches, DuelBot.Full, DuelBot.Random);
+                double ctrl = Duel1v1(matches, DuelBot.Full, DuelBot.NoReads);
+                double con = Duel1v1(matches, DuelBot.Full, DuelBot.Predictable);
+                double sin = Duel1v1(matches, DuelBot.NoReads, DuelBot.Predictable);
+                Console.WriteLine($"  {hp,4}  {gd,8} | {(double)st.Turns / matches,6:0.0} {100.0 * st.Kos / matches,5:0.0} " +
+                                  $"{(double)st.HandSum / Math.Max(1, st.HandSamples),6:0.0} " +
+                                  $"{100.0 * st.PrizeDmg / Math.Max(1, st.PrizeDmg + st.PrizeKd),9:0} " +
+                                  $"{gap * 100,7:0.0} {ctrl * 100,8:0.0} {(con - sin) * 100,6:+0.0;-0.0}");
+            }
+        DuelConfig.MaxHp = hp0;
+        DuelConfig.GuardDraw = gd0;
+    }
+
+    static double Duel1v1(int matches, DuelBot a, DuelBot b, DuelStats[] porLado = null)
+    {
+        double score = 0; int played = 0;
+        for (int m = 0; m < matches; m++)
+        {
+            int c0 = (m / 2) % 2, c1 = m % 2;
+            bool aFirst = (m & 1) == 0;
+            int aSide = aFirst ? 0 : 1;
+            var st = porLado?[aSide];
+            int w = aFirst ? PlayDuel(m + 1, c0, c1, a, b, st) : PlayDuel(m + 1, c0, c1, b, a, st);
+            if (w == aSide) score += 1;
+            else if (w < 0) score += 0.5;
+            played++;
+        }
+        return score / Math.Max(1, played);
+    }
+
+    // Winrate de P0 con el MISMO bot de los dos lados y sin alternar.
+    static double SidedP0(int matches, DuelBot bot)
+    {
+        double score = 0;
+        for (int m = 0; m < matches; m++)
+        {
+            int w = PlayDuel(m + 1, (m / 2) % 2, m % 2, bot, bot);
+            if (w == 0) score += 1; else if (w < 0) score += 0.5;
+        }
+        return score / Math.Max(1, matches);
+    }
+
+    // Diagnóstico: ¿la lectura mejora el ACIERTO de altura al defender, y ese
+    // acierto se convierte en intercambios ganados?
+    static void DueloDiagnostico(int matches, DuelBot lector, string nombre)
+    {
+        var st = new[] { new DuelStats(), new DuelStats() };
+        Duel1v1(matches, lector, DuelBot.Predictable, st);
+        long ok = st[0].GuardOkSide[0] + st[1].GuardOkSide[1];
+        long mal = st[0].GuardMalSide[0] + st[1].GuardMalSide[1];
+        long gan = st[0].WinsSide[0] + st[1].WinsSide[1];
+        long perd = st[0].WinsSide[1] + st[1].WinsSide[0];
+        Console.WriteLine($"    {nombre,-10} acierto de altura {100.0 * ok / Math.Max(1, ok + mal):0.0}% ({ok}/{ok + mal})" +
+                          $" · intercambios ganados {gan} vs {perd}");
     }
 
     // Traza LEGIBLE de una partida completa de cartas v2, turno a turno:

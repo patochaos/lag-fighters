@@ -567,6 +567,199 @@ namespace LagFighter
             return dodges > 0 ? firstDodge : -1;
         }
 
+        // ---- MODO DUELO (el núcleo casual): una carta secreta por turno,
+        // premio del ganador y castigo del defensor. Ver DUELO.md ----
+
+        readonly int[] _seenDuelKind = new int[4];    // strike/grab/guard/escape del rival
+        readonly int[] _seenDuelHeight = new int[2];  // alto/bajo de sus golpes
+
+        // Apagable para medir el VALOR DE LA INFORMACIÓN en el lab: con esto
+        // en false la IA juega el mismo mix pero sin leer al rival.
+        public bool ReadsHabits = true;
+
+        public void ObserveDuel(in DuelCard card)
+        {
+            _seenDuelKind[(int)card.Kind]++;
+            if (card.Kind == DuelKind.Strike && card.Height != DuelHeight.None)
+                _seenDuelHeight[(int)card.Height]++;
+        }
+
+        // Elige la carta (índice de MANO). Lee lo público como un jugador:
+        // derribos, vida, tamaño de mano y el hábito revelado del rival.
+        public int PickDuelCard(DuelSim s, int me)
+        {
+            var hand = s.Hand[me];
+            if (hand.Count == 0) return -1;
+            int opp = 1 - me;
+            int fast = -1, strong = -1, high = -1, low = -1, grab = -1,
+                gHigh = -1, gLow = -1, escape = -1;
+            for (int i = 0; i < hand.Count; i++)
+            {
+                var d = s.Def(me, hand[i]);
+                switch (d.Kind)
+                {
+                    case DuelKind.Strike:
+                        if (fast < 0 || d.Speed > s.Def(me, hand[fast]).Speed) fast = i;
+                        if (strong < 0 || d.Damage > s.Def(me, hand[strong]).Damage) strong = i;
+                        if (d.Height == DuelHeight.High) high = i; else low = i;
+                        break;
+                    case DuelKind.Grab: grab = i; break;
+                    case DuelKind.Guard:
+                        if (d.Height == DuelHeight.High) gHigh = i; else gLow = i;
+                        break;
+                    case DuelKind.Escape: escape = i; break;
+                }
+            }
+
+            // ¿qué altura defiendo? Solo vale leer si el rival tiene un SESGO
+            // real: saber que ataca mucho no dice nada (la altura es la
+            // adivinanza); saber que ataca ABAJO, sí.
+            int Guard()
+            {
+                if (gHigh < 0) return gLow;
+                if (gLow < 0) return gHigh;
+                int skew = HeightSkew();
+                if (skew > 0) return gHigh;
+                if (skew < 0) return gLow;
+                return _rng.NextDouble() < 0.5 ? gHigh : gLow;
+            }
+            int AnyStrike() => fast >= 0 ? fast : strong;
+            double r = _rng.NextDouble();
+
+            // DERRIBADO: mi guardia no bloquea este turno. El escape es la
+            // válvula; si no está, hay que pelear (el golpe le gana al agarre).
+            if (s.KnockedDown[me])
+            {
+                if (escape >= 0 && (s.Hp[me] <= DuelConfig.MaxHp / 3 || r < 0.55)) return escape;
+                if (r < 0.65 && fast >= 0) return fast;
+                if (r < 0.85 && strong >= 0) return strong;
+                if (grab >= 0) return grab;
+                return AnyStrike() >= 0 ? AnyStrike() : 0;
+            }
+
+            // RIVAL DERRIBADO: no puede defender → el agarre pierde valor y el
+            // golpe rápido gana casi toda carrera. Es el momento del daño.
+            if (s.KnockedDown[opp])
+            {
+                if (r < 0.55 && fast >= 0) return fast;
+                if (strong >= 0) return strong;
+                if (grab >= 0) return grab;
+            }
+
+            // LECTURA DEL DESCARTE (público, Ley 5): las guardias que están en
+            // su descarte NO están en su mano. Si se le fueron todas las
+            // altas, pegar ALTO es gratis; si se le fueron las dos alturas,
+            // no puede defender y el golpe rápido es el rey.
+            if (ReadsHabits)
+            {
+                int cupo = s.Chr[opp].DeckCounts[DuelCatalog.GuardHigh];
+                bool sinAlta = GuardiasEnDescarte(s, opp, DuelCatalog.GuardHigh) >= cupo;
+                bool sinBaja = GuardiasEnDescarte(s, opp, DuelCatalog.GuardLow) >= cupo;
+                if (sinAlta && sinBaja)
+                {
+                    if (r < 0.70 && fast >= 0) return fast;
+                    if (strong >= 0) return strong;
+                }
+                else if (sinAlta && high >= 0 && _rng.NextDouble() < 0.75) return high;
+                else if (sinBaja && low >= 0 && _rng.NextDouble() < 0.75) return low;
+            }
+
+            // lectura del hábito (Hard lee más seguido)
+            double counterChance = Difficulty == AIDifficulty.Hard ? 0.45 :
+                                   Difficulty == AIDifficulty.Easy ? 0.0 : 0.25;
+            if (ReadsHabits && _rng.NextDouble() < counterChance)
+            {
+                int habit = DuelHabit();
+                if (habit == (int)DuelKind.Guard && grab >= 0) return grab;
+                if (habit == (int)DuelKind.Grab && fast >= 0) return fast;
+                // "ataca mucho" NO es accionable: medido en el lab, defender
+                // MÁS seguido por esa lectura es una jugada perdedora (el
+                // agarre castiga al que se queda). La lectura de altura vale
+                // para elegir QUÉ guardia, no para guardar más veces — eso ya
+                // lo hace Guard() en la mezcla base.
+            }
+
+            // rematar: si el rival está a tiro, el golpe fuerte paga más
+            if (strong >= 0 && s.Hp[opp] <= s.Def(me, hand[strong]).Damage) return strong;
+
+            // mezcla base: pega rápido, pega fuerte, agarra, defiende
+            if (r < 0.20 && fast >= 0) return fast;
+            if (r < 0.34 && strong >= 0) return strong;
+            if (r < 0.44) { int alt = _rng.NextDouble() < 0.5 ? high : low; if (alt >= 0) return alt; }
+            if (r < 0.62 && grab >= 0) return grab;
+            if (r < 0.90) { int g = Guard(); if (g >= 0) return g; }
+            if (fast >= 0) return fast;
+            if (grab >= 0) return grab;
+            int guardFallback = Guard();
+            return guardFallback >= 0 ? guardFallback : 0;
+        }
+
+        // +1 = le pega ALTO seguido · −1 = ABAJO · 0 = no hay sesgo legible.
+        // Pide muestra Y mayoría clara: media docena de golpes 60/40 no es
+        // un hábito, es ruido.
+        int HeightSkew()
+        {
+            if (!ReadsHabits) return 0;
+            int hi = _seenDuelHeight[(int)DuelHeight.High], lo = _seenDuelHeight[(int)DuelHeight.Low];
+            int n = hi + lo;
+            if (n < 3) return 0;
+            if (hi * 100 >= n * 65) return 1;
+            if (lo * 100 >= n * 65) return -1;
+            return 0;
+        }
+
+        static int GuardiasEnDescarte(DuelSim s, int side, int card)
+        {
+            int n = 0;
+            foreach (int c in s.Discard[side]) if (c == card) n++;
+            return n;
+        }
+
+        int DuelHabit()
+        {
+            int best = -1, bestN = 0;
+            for (int i = 0; i < _seenDuelKind.Length; i++)
+                if (_seenDuelKind[i] > bestN) { bestN = _seenDuelKind[i]; best = i; }
+            return bestN >= 3 ? best : -1;
+        }
+
+        // Cierra la decisión pendiente: el premio del ganador (+DAÑO vs
+        // DERRIBO — el tradeoff de la Ley 12) o el castigo del defensor.
+        public void DoDuelChoice(DuelSim s)
+        {
+            int me = s.PendingSide;
+            if (me < 0) return;
+            if (s.PendingIsPunish) { s.Punish(BestAttack(s, me)); return; }
+
+            var fuel = s.PrizeFuel(me);
+            if (fuel.Count == 0) { s.ChoosePrize(DuelPrize.Knockdown); return; }
+            int best = -1, bestDmg = -1;
+            foreach (int i in fuel)
+            {
+                int dmg = s.Def(me, s.Hand[me][i]).Damage;
+                if (dmg > bestDmg) { bestDmg = dmg; best = i; }
+            }
+            int opp = 1 - me;
+            // el daño cierra la partida → sin dudarlo; si no, quemar carta solo
+            // vale con mano gorda y combustible que pague
+            bool lethal = s.Hp[opp] <= bestDmg;
+            bool worth = s.Hand[me].Count >= 5 && bestDmg >= 5;
+            if (lethal || worth) s.ChoosePrize(DuelPrize.Damage, best);
+            else s.ChoosePrize(DuelPrize.Knockdown);
+        }
+
+        static int BestAttack(DuelSim s, int me)
+        {
+            int best = -1, bestDmg = -1;
+            for (int i = 0; i < s.Hand[me].Count; i++)
+            {
+                var d = s.Def(me, s.Hand[me][i]);
+                if (!d.IsAttack) continue;
+                if (d.Damage > bestDmg) { bestDmg = d.Damage; best = i; }
+            }
+            return best;
+        }
+
         int PickUnfocused(float dist)
         {
             double r = _rng.NextDouble();

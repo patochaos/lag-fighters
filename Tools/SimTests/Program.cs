@@ -105,6 +105,33 @@ class Tests
         CartasSuperDodgeContragolpea();
         CartasNivelesDeProyectil();
         CartasMismaSeedMismaPartida();
+        DueloMazoDeVeinteYManoGarantizada();
+        DueloVelocidadesDelCatalogo();
+        DueloGolpeLeGanaAlAgarre();
+        DueloAgarreLeGanaALaGuardia();
+        DueloGuardiaAltaParaElGolpeAlto();
+        DueloGuardiaBajaNoParaElGolpeAlto();
+        DueloGuardiaBajaParaElGolpeBajo();
+        DueloGolpeVsGolpeGanaElRapido();
+        DueloEmpateDeVelocidadEsTrade();
+        DueloAgarreVsAgarreEsTech();
+        DueloGuardiaVsGuardiaNoPasaNada();
+        DueloPremioDanioQuemaUnaCarta();
+        DueloPremioSinCombustibleEsDerribo();
+        DueloDerriboApagaLaGuardiaRival();
+        DueloElDerriboDuraUnSoloTurno();
+        DueloEscapeCongelaElTurno();
+        DueloEscapeSeGastaParaSiempre();
+        DueloChipPegaAunqueDefiendas();
+        DueloEspadaDefendidaSeCastiga();
+        DueloEspadaGanaLaCarrera();
+        DueloPatadaCruzadaDerribaGratis();
+        DueloLaGuardiaVuelveSoloSiNoTePegaron();
+        DueloLimiteDeMano();
+        DueloRemezclaUnicaYDespuesTimeOver();
+        DueloKoTerminaLaPartida();
+        DueloSinCartasNoRompe();
+        DueloMismaSeedMismaPartida();
         if (SimConfig.LimbsEnabled)
         {
             TresJabsArrancanElBrazo();
@@ -1359,5 +1386,371 @@ class Tests
                 (!d.IsSuper || s.Meter[side] >= d.SuperCost)) return i;
         }
         return -1;
+    }
+
+    // ================= MODO DUELO (el núcleo casual, ver DUELO.md) =========
+    // Una regla por test: la tabla completa, las alturas, el premio, el
+    // derribo, el escape y la economía de mazo.
+
+    static DuelSim NewDuelo(int c0 = DuelCatalog.GraveIdx, int c1 = DuelCatalog.GraveIdx, int seed = 7)
+    {
+        var d = new DuelSim(seed, c0, c1);
+        d.StartTurn();
+        return d;
+    }
+
+    static void Mano(DuelSim d, int side, params int[] cards)
+    {
+        d.Hand[side].Clear();
+        d.Hand[side].AddRange(cards);
+    }
+
+    static void DueloMazoDeVeinteYManoGarantizada()
+    {
+        var d = new DuelSim(3);
+        int total = 0;
+        foreach (int n in DuelCatalog.Grave.DeckCounts) total += n;
+        bool mano = d.Hand[0].Contains(DuelCatalog.GuardHigh) &&
+                    d.Hand[0].Contains(DuelCatalog.GuardLow) &&
+                    d.Hand[0].Contains(DuelCatalog.Throw) &&
+                    d.Hand[0].Contains(DuelCatalog.Escape);
+        Check(total == 20 && d.Hand[0].Count == 6 && d.Deck[0].Count == 14 && mano,
+            "duelo: mazo de 20 y mano inicial garantizada (6)",
+            $"mazo {total}, mano {d.Hand[0].Count}, deck {d.Deck[0].Count}, garantizadas {mano}");
+    }
+
+    // La correlación rápido=BAJO / lento=ALTO es el corazón del mixup: si
+    // alguien toca estos números sin querer, el juego cambia de personalidad.
+    static void DueloVelocidadesDelCatalogo()
+    {
+        var g = DuelCatalog.Grave.Cards; var j = DuelCatalog.Jaina.Cards;
+        bool baseOk =
+            g[DuelCatalog.AttackA].Speed == 8 && g[DuelCatalog.AttackA].Height == DuelHeight.Low &&
+            g[DuelCatalog.AttackB].Speed == 7 && g[DuelCatalog.AttackB].Height == DuelHeight.Low &&
+            g[DuelCatalog.AttackC].Speed == 6 && g[DuelCatalog.AttackC].Height == DuelHeight.High &&
+            g[DuelCatalog.AttackD].Speed == 4 && g[DuelCatalog.AttackD].Height == DuelHeight.High &&
+            g[DuelCatalog.Throw].Speed == 5;
+        bool firmas = g[DuelCatalog.Sig1].Speed == 10 && g[DuelCatalog.Sig1].Chip == 2 &&
+                      g[DuelCatalog.Sig2].Height == DuelHeight.High && g[DuelCatalog.Sig2].Speed == 7 &&
+                      j[DuelCatalog.Sig1].Speed == 11 && j[DuelCatalog.Sig1].PunishOnGuard &&
+                      j[DuelCatalog.Sig2].FreeKnockdown;
+        Check(baseOk && firmas, "duelo: velocidades y alturas del catálogo", $"base {baseOk}, firmas {firmas}");
+    }
+
+    static void DueloGolpeLeGanaAlAgarre()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackD);   // vel 4, el MÁS LENTO
+        Mano(d, 1, DuelCatalog.Throw);     // vel 5
+        var r = d.Resolve(0, 0);
+        d.ChoosePrize(DuelPrize.Knockdown);
+        Check(r.Winner == 0 && d.Hp[1] == DuelConfig.MaxHp - 7 && d.Hp[0] == DuelConfig.MaxHp,
+            "duelo: el golpe le gana al agarre sin mirar velocidad", $"hp {d.Hp[0]}/{d.Hp[1]}");
+    }
+
+    static void DueloAgarreLeGanaALaGuardia()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.Throw);
+        Mano(d, 1, DuelCatalog.GuardHigh);
+        var r = d.Resolve(0, 0);
+        d.ChoosePrize(DuelPrize.Knockdown);
+        Check(r.Winner == 0 && d.Hp[1] == DuelConfig.MaxHp - 6 && d.KnockedDown[1],
+            "duelo: el agarre le gana a la guardia (y el premio derriba)", $"hp1 {d.Hp[1]}, kd {d.KnockedDown[1]}");
+    }
+
+    static void DueloGuardiaAltaParaElGolpeAlto()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackC);   // ALTO
+        Mano(d, 1, DuelCatalog.GuardHigh);
+        var r = d.Resolve(0, 0);
+        Check(r.Guarded1 && d.Hp[1] == DuelConfig.MaxHp && r.Drew1 == DuelConfig.GuardDraw && r.Returned1 &&
+              d.Hand[1].Contains(DuelCatalog.GuardHigh) && !d.AwaitingChoice,
+            "duelo: guardia alta para el golpe alto (roba 1 y vuelve a la mano)",
+            $"guard {r.Guarded1}, robo {r.Drew1}, vuelve {r.Returned1}");
+    }
+
+    static void DueloGuardiaBajaNoParaElGolpeAlto()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackC);   // ALTO, 5 dmg
+        Mano(d, 1, DuelCatalog.GuardLow);
+        var r = d.Resolve(0, 0);
+        d.ChoosePrize(DuelPrize.Knockdown);
+        Check(r.WrongGuard1 && d.Hp[1] == DuelConfig.MaxHp - 5 && r.Winner == 0,
+            "duelo: la altura equivocada come el golpe ENTERO", $"hp1 {d.Hp[1]}");
+    }
+
+    static void DueloGuardiaBajaParaElGolpeBajo()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackA);   // BAJO
+        Mano(d, 1, DuelCatalog.GuardLow);
+        var r = d.Resolve(0, 0);
+        Check(r.Guarded1 && d.Hp[1] == DuelConfig.MaxHp, "duelo: guardia baja para el golpe bajo", $"hp1 {d.Hp[1]}");
+    }
+
+    static void DueloGolpeVsGolpeGanaElRapido()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackA);   // vel 8, 3 dmg
+        Mano(d, 1, DuelCatalog.AttackD);   // vel 4, 7 dmg
+        var r = d.Resolve(0, 0);
+        d.ChoosePrize(DuelPrize.Knockdown);
+        Check(r.Winner == 0 && d.Hp[1] == DuelConfig.MaxHp - 3 && d.Hp[0] == DuelConfig.MaxHp,
+            "duelo: golpe vs golpe gana el más rápido", $"hp {d.Hp[0]}/{d.Hp[1]}");
+    }
+
+    static void DueloEmpateDeVelocidadEsTrade()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackB);
+        Mano(d, 1, DuelCatalog.AttackB);   // misma velocidad
+        var r = d.Resolve(0, 0);
+        Check(r.Trade && d.Hp[0] == DuelConfig.MaxHp - 4 && d.Hp[1] == DuelConfig.MaxHp - 4 &&
+              r.Winner < 0 && !d.AwaitingChoice && r.Prize == DuelPrize.None,
+            "duelo: empate de velocidad = trade sin premio", $"hp {d.Hp[0]}/{d.Hp[1]}, winner {r.Winner}");
+    }
+
+    static void DueloAgarreVsAgarreEsTech()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.Throw);
+        Mano(d, 1, DuelCatalog.Throw);
+        var r = d.Resolve(0, 0);
+        Check(r.Tech && d.Hp[0] == DuelConfig.MaxHp && d.Hp[1] == DuelConfig.MaxHp && !d.AwaitingChoice,
+            "duelo: agarre vs agarre = TECH", $"hp {d.Hp[0]}/{d.Hp[1]}");
+    }
+
+    static void DueloGuardiaVsGuardiaNoPasaNada()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.GuardHigh);
+        Mano(d, 1, DuelCatalog.GuardLow);
+        var r = d.Resolve(0, 0);
+        Check(r.Returned0 && r.Returned1 && r.Drew0 == 0 && r.Drew1 == 0 &&
+              d.Hp[0] == DuelConfig.MaxHp && d.Hp[1] == DuelConfig.MaxHp,
+            "duelo: guardia vs guardia no pasa nada (vuelven, NO roban)", $"robos {r.Drew0}/{r.Drew1}");
+    }
+
+    static void DueloPremioDanioQuemaUnaCarta()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackA, DuelCatalog.AttackD); // pega con A, quema la D
+        Mano(d, 1, DuelCatalog.Throw);
+        d.Resolve(0, 0);
+        var fuel = d.PrizeFuel(0);
+        bool ok = d.AwaitingChoice && fuel.Count == 1;
+        d.ChoosePrize(DuelPrize.Damage, fuel.Count > 0 ? fuel[0] : -1);
+        Check(ok && d.Hp[1] == DuelConfig.MaxHp - 3 - 7 && d.Hand[0].Count == 0 &&
+              d.Discard[0].Contains(DuelCatalog.AttackD) && !d.KnockedDown[1],
+            "duelo: +DAÑO quema un golpe de la mano y suma su daño",
+            $"hp1 {d.Hp[1]}, mano {d.Hand[0].Count}");
+    }
+
+    static void DueloPremioSinCombustibleEsDerribo()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackA);   // sin nada más que quemar
+        Mano(d, 1, DuelCatalog.Throw);
+        var r = d.Resolve(0, 0);
+        Check(!d.AwaitingChoice && r.Prize == DuelPrize.Knockdown && d.KnockedDown[1],
+            "duelo: sin combustible el premio se cierra solo en DERRIBO", $"premio {r.Prize}");
+    }
+
+    static void DueloDerriboApagaLaGuardiaRival()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackA);
+        Mano(d, 1, DuelCatalog.Throw);
+        d.Resolve(0, 0);
+        d.ChoosePrize(DuelPrize.Knockdown);
+        d.StartTurn();
+        Mano(d, 0, DuelCatalog.AttackC);    // ALTO
+        Mano(d, 1, DuelCatalog.GuardHigh);  // la altura CORRECTA... pero derribado
+        var r = d.Resolve(0, 0);
+        d.ChoosePrize(DuelPrize.Knockdown);
+        Check(r.WrongGuard1 && !r.Guarded1 && d.Hp[1] == DuelConfig.MaxHp - 3 - 5,
+            "duelo: derribado, la guardia NO bloquea (aunque acierte la altura)",
+            $"guard {r.Guarded1}, hp1 {d.Hp[1]}");
+    }
+
+    static void DueloElDerriboDuraUnSoloTurno()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackA);
+        Mano(d, 1, DuelCatalog.Throw);
+        d.Resolve(0, 0);
+        d.ChoosePrize(DuelPrize.Knockdown);
+        bool kdOn = d.KnockedDown[1];
+        d.StartTurn();
+        Mano(d, 0, DuelCatalog.GuardHigh);
+        Mano(d, 1, DuelCatalog.GuardLow);
+        d.Resolve(0, 0);
+        Check(kdOn && !d.KnockedDown[1], "duelo: el derribo dura UN turno", $"antes {kdOn}, después {d.KnockedDown[1]}");
+    }
+
+    static void DueloEscapeCongelaElTurno()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackD);
+        Mano(d, 1, DuelCatalog.Escape);
+        var r = d.Resolve(0, 0);
+        Check(r.Escaped1 && d.Hp[1] == DuelConfig.MaxHp && r.Winner < 0 && !d.AwaitingChoice,
+            "duelo: el ESCAPE congela el turno (la válvula anti-vortex)", $"hp1 {d.Hp[1]}");
+    }
+
+    static void DueloEscapeSeGastaParaSiempre()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.GuardHigh);
+        Mano(d, 1, DuelCatalog.Escape);
+        d.Resolve(0, 0);
+        bool fuera = d.Spent[1].Contains(DuelCatalog.Escape) &&
+                     !d.Hand[1].Contains(DuelCatalog.Escape) &&
+                     !d.Discard[1].Contains(DuelCatalog.Escape) &&
+                     !d.Deck[1].Contains(DuelCatalog.Escape);
+        Check(fuera, "duelo: el escape gastado no vuelve nunca (ni por remezcla)");
+    }
+
+    static void DueloChipPegaAunqueDefiendas()
+    {
+        var d = NewDuelo();                 // Grave: X es BAJO, chip 2
+        Mano(d, 0, DuelCatalog.Sig1);
+        Mano(d, 1, DuelCatalog.GuardLow);
+        var r = d.Resolve(0, 0);
+        Check(r.Guarded1 && r.Chip1 == 2 && d.Hp[1] == DuelConfig.MaxHp - 2 && r.Returned1 && !r.Hit1,
+            "duelo: la X de Grave pega 2 aunque la defiendas (y el chip no rompe el recurring)",
+            $"chip {r.Chip1}, vuelve {r.Returned1}");
+    }
+
+    static void DueloEspadaDefendidaSeCastiga()
+    {
+        var d = NewDuelo(DuelCatalog.JainaIdx, DuelCatalog.GraveIdx);
+        Mano(d, 0, DuelCatalog.Sig1);       // Y de Jaina: ALTA, unsafe
+        Mano(d, 1, DuelCatalog.GuardHigh, DuelCatalog.AttackD);
+        var r = d.Resolve(0, 0);
+        bool pendiente = d.AwaitingChoice && d.PendingIsPunish && d.PendingSide == 1;
+        // ojo: el robo por defender ya movió la mano — buscar la patada
+        d.Punish(d.Hand[1].IndexOf(DuelCatalog.AttackD));  // castiga con 7
+        Check(pendiente && r.Guarded1 && d.Hp[0] == DuelConfig.MaxHp - 7 && d.Hp[1] == DuelConfig.MaxHp,
+            "duelo: la Y de Jaina defendida te cuesta un golpe gratis",
+            $"pendiente {pendiente}, hp0 {d.Hp[0]}");
+    }
+
+    static void DueloEspadaGanaLaCarrera()
+    {
+        var d = NewDuelo(DuelCatalog.JainaIdx, DuelCatalog.GraveIdx);
+        Mano(d, 0, DuelCatalog.Sig1);       // Y vel 11
+        Mano(d, 1, DuelCatalog.Sig1);       // X de Grave vel 10
+        var r = d.Resolve(0, 0);
+        d.ChoosePrize(DuelPrize.Knockdown);
+        int dmgY = DuelCatalog.Jaina.Cards[DuelCatalog.Sig1].Damage;
+        Check(r.Winner == 0 && d.Hp[1] == DuelConfig.MaxHp - dmgY && d.Hp[0] == DuelConfig.MaxHp,
+            "duelo: la Y (vel 11) le gana a la X (vel 10)", $"hp {d.Hp[0]}/{d.Hp[1]}");
+    }
+
+    static void DueloPatadaCruzadaDerribaGratis()
+    {
+        var d = NewDuelo(DuelCatalog.JainaIdx, DuelCatalog.GraveIdx);
+        Mano(d, 0, DuelCatalog.Sig2, DuelCatalog.AttackD);  // K: 5 dmg, derribo GRATIS
+        Mano(d, 1, DuelCatalog.Throw);
+        d.Resolve(0, 0);
+        var fuel = d.PrizeFuel(0);
+        d.ChoosePrize(DuelPrize.Damage, fuel[0]);
+        Check(d.Hp[1] == DuelConfig.MaxHp - 5 - 7 && d.KnockedDown[1],
+            "duelo: la K derriba gratis Y admite el premio de daño",
+            $"hp1 {d.Hp[1]}, kd {d.KnockedDown[1]}");
+    }
+
+    static void DueloLaGuardiaVuelveSoloSiNoTePegaron()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackC);    // ALTO
+        Mano(d, 1, DuelCatalog.GuardLow);   // altura equivocada: te pegan
+        d.Resolve(0, 0);
+        d.ChoosePrize(DuelPrize.Knockdown);
+        Check(!d.Hand[1].Contains(DuelCatalog.GuardLow) && d.Discard[1].Contains(DuelCatalog.GuardLow),
+            "duelo: la guardia que comió el golpe se va al descarte");
+    }
+
+    static void DueloLimiteDeMano()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackA);    // BAJO
+        Mano(d, 1, DuelCatalog.GuardLow, DuelCatalog.AttackA, DuelCatalog.AttackA,
+                   DuelCatalog.AttackB, DuelCatalog.AttackB, DuelCatalog.AttackC,
+                   DuelCatalog.AttackC, DuelCatalog.AttackD);  // 8 = tope
+        var r = d.Resolve(0, 0);
+        Check(r.Guarded1 && d.Hand[1].Count == DuelConfig.HandLimit &&
+              d.Discard[1].Contains(DuelCatalog.GuardLow),
+            "duelo: con la mano llena, lo que sobra va al descarte",
+            $"mano {d.Hand[1].Count}, descarte {d.Discard[1].Count}");
+    }
+
+    static void DueloRemezclaUnicaYDespuesTimeOver()
+    {
+        var d = NewDuelo();
+        d.Hp[0] = 20; d.Hp[1] = 10;
+        // 1ª vez sin mazo: remezcla el descarte
+        d.Deck[0].Clear();
+        d.Discard[0].Add(DuelCatalog.AttackA);
+        d.Discard[0].Add(DuelCatalog.AttackB);
+        d.StartTurn();
+        bool remezclo = d.DeckOuts[0] == 1 && !d.Over;
+        // 2ª vez: TIME OVER por vida
+        d.Deck[0].Clear();
+        d.Discard[0].Clear();
+        d.StartTurn();
+        Check(remezclo && d.Over && d.Winner == 0,
+            "duelo: remezcla ÚNICA y después TIME OVER por vida",
+            $"remezcló {remezclo}, over {d.Over}, winner {d.Winner}");
+    }
+
+    static void DueloKoTerminaLaPartida()
+    {
+        var d = NewDuelo();
+        d.Hp[1] = 2;
+        Mano(d, 0, DuelCatalog.AttackA);
+        Mano(d, 1, DuelCatalog.Throw);
+        d.Resolve(0, 0);
+        if (d.AwaitingChoice) d.ChoosePrize(DuelPrize.Knockdown);
+        Check(d.Over && d.Winner == 0 && d.Hp[1] == 0, "duelo: KO termina la partida", $"hp1 {d.Hp[1]}, winner {d.Winner}");
+    }
+
+    static void DueloSinCartasNoRompe()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackA);
+        d.Hand[1].Clear();
+        var r = d.Resolve(0, -1);
+        if (d.AwaitingChoice) d.ChoosePrize(DuelPrize.Knockdown);
+        Check(r.Card1 == -1 && r.Winner == 0 && d.Hp[1] == DuelConfig.MaxHp - 3,
+            "duelo: sin cartas en mano se come el golpe, sin romperse", $"hp1 {d.Hp[1]}");
+    }
+
+    static void DueloMismaSeedMismaPartida()
+    {
+        Check(DueloFirma(99) == DueloFirma(99) && DueloFirma(99) != DueloFirma(100),
+            "duelo: misma seed = misma partida", DueloFirma(99));
+    }
+
+    static string DueloFirma(int seed)
+    {
+        var ai0 = new SimpleAI(seed * 7919 + 13);
+        var ai1 = new SimpleAI(seed * 104729 + 57);
+        var d = new DuelSim(seed, DuelCatalog.GraveIdx, DuelCatalog.JainaIdx);
+        int guard = 0;
+        while (!d.Over && guard++ < 60)
+        {
+            d.StartTurn();
+            if (d.Over) break;
+            var r = d.Resolve(ai0.PickDuelCard(d, 0), ai1.PickDuelCard(d, 1));
+            if (d.AwaitingChoice) (d.PendingSide == 0 ? ai0 : ai1).DoDuelChoice(d);
+            if (r.Card1 >= 0) ai0.ObserveDuel(d.Def(1, r.Card1));
+            if (r.Card0 >= 0) ai1.ObserveDuel(d.Def(0, r.Card0));
+        }
+        return $"{d.Turn}|{d.Winner}|{d.Hp[0]}|{d.Hp[1]}|{d.Hand[0].Count}|{d.Hand[1].Count}";
     }
 }

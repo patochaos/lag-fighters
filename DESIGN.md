@@ -474,6 +474,57 @@ actúa el combo entero en secuencia con el move más parecido por carta.
 Único corte: GEMS. Lab: KO 100%, 17 turnos, espejos 50/50, Jaina 60/40
 sobre Grave (matchup real — vigilar con humanos). 119 tests.
 
+## Modo DUELO — el núcleo casual (2026-07-25)
+
+> Ver **[DUELO.md](DUELO.md)**: la spec completa, el análisis comparativo
+> que la originó y los resultados del lab.
+
+Decisión de Patricio tras el análisis del 2026-07-25: **DUELO pasa a ser EL
+juego**; clásico, YOMI discreto y CARTAS v2 quedan como modos EXPERTO. El
+diagnóstico: Yomi 2 (y nuestra copia fiel) no es confuso por profundo sino
+por **dónde vive su complejidad** — en el reglamento (~30 keywords), cuando
+debería vivir en el contenido (cartas de una línea + personajes que re-pesan
+números). Eje de adivinanza elegido: **alturas**, sin distancias.
+
+**El juego entero, 7 reglas**: carta secreta simultánea (sin turno activo,
+sin main phase) · GOLPE > AGARRE > GUARDIA > GOLPE · la velocidad desempata
+golpes, empate = trade · cada golpe es ALTO o BAJO y cada guardia cubre UNA
+altura · el que gana elige **+DAÑO** (quema un golpe de la mano) o
+**DERRIBO** (la guardia rival no bloquea el turno siguiente) · defender bien
+roba 2 y la guardia vuelve a la mano · robás 1 por turno, mano 8, remezcla
+única y después TIME OVER por vida.
+
+- Mazo de **20** por personaje (A 8/3 bajo · B 7/4 bajo · C 6/5 alto ·
+  D 4/7 alto · 3 agarres 5/6 · 2+2 guardias · 4 cartas firma · 1 ESCAPE),
+  **HP 46**, mano inicial 6 con ambas guardias + agarre + escape.
+  La correlación **rápido = BAJO / lento = ALTO** es lo que se aprende en dos
+  turnos; las firmas existen para romperla.
+- **ESCAPE** (válvula, Ley 13): una por partida, no vuelve nunca — congela
+  el turno. Es la respuesta al derribo.
+- **Sin wild swing**: el derribo no PROHÍBE la guardia, la APAGA → toda
+  carta es siempre jugable y desaparece toda esa plomería.
+- Personajes por PESOS (Ley 11): Grave (X vel 10, chip 2 = "proyectil" sin
+  inventar la palabra; Z alto y rápido) · Jaina (Y vel 11 unsafe; K derribo
+  gratis).
+- **`DuelSim.cs`**: sim pura determinista, 27 tests (146 en total).
+  Lab: `duelo N` (balance), `duelogap N` (profundidad), `duelotune N`
+  (barrido de diales).
+- **Medido (8000 partidas)**: KO 99.8% · 13.5 turnos · premio 60/40 (las dos
+  ramas vivas) · matchup 50.6/49.4 · **brecha de habilidad 77.5%** ·
+  valor de la información +1.9 pp con control en 50.1%.
+- Cuatro diales los movió el lab: robo 2→1 (con mano gorda el premio se
+  resolvía 95% daño: la decisión de la Ley 12 moría), vida 30→46 (a 8.5
+  turnos no da tiempo a leer), defender roba 1→2 (sin eso la guardia no
+  llega a ser el default barato de la Ley 3) y los nerfs de Jaina (63/37 →
+  50/50).
+- Aprendizajes de método anotados en DUELO.md §9: una lectura mal diseñada
+  PIERDE (defender más porque "va a atacar" baja el winrate); medir el valor
+  de la información contra un bot random siempre da 50% (hace falta un rival
+  competente con un tic); y el sesgo de lado que apareció era `System.Random`
+  correlacionando seeds, no la sim.
+- **Falta**: UI (reuso del abanico de `CardHandUI`), teatro, menú con JUGAR
+  grande y onboarding guionado. Ver DUELO.md §8.
+
 ## Historial de pivots
 
 1. **Delay queue continuo** (4s de delay, timeline deslizante) — descartado.
