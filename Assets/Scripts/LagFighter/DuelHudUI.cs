@@ -379,8 +379,7 @@ namespace LagFighter
                 var atk = g == 0 ? d1 : d0;
                 var grd = g == 0 ? d0 : d1;
                 string alt = atk.Height == DuelHeight.High ? "ALTO" : "BAJO";
-                bool down = g == 0 ? r.KdNext0 : r.KdNext1;
-                if (S.KnockedDown[g] || down)
+                if (r.GuardWasDown(g))
                 {
                     _verdictTxt = "DERRIBADO · LA GUARDIA NO BLOQUEA";
                     _detailTxt = $"el golpe {alt} entra entero";
@@ -449,9 +448,13 @@ namespace LagFighter
                     {
                         float delay = i * 0.09f;                       // escalonado: primero la tuya
                         float t = Mathf.Clamp01((_t - delay) / FlipT);
-                        float ang = t * 180f;
-                        _rc[i].localRotation = Quaternion.Euler(0f, ang, 0f);
-                        _rc[i].localScale = Vector3.one * (1f + Mathf.Sin(t * Mathf.PI) * 0.10f);
+                        // El giro va por ESCALA en X (1 → 0 → 1), no por
+                        // rotación en Y: rotando, la cara pasa los 90° y el
+                        // texto se ve ESPEJADO. Con escala el efecto es el
+                        // mismo y no hay nada que des-espejar.
+                        float sx = Mathf.Abs(Mathf.Cos(t * Mathf.PI));
+                        float pop = 1f + Mathf.Sin(t * Mathf.PI) * 0.10f;
+                        _rc[i].localScale = new Vector3(Mathf.Max(0.01f, sx) * pop, pop, 1f);
                         bool front = t >= 0.5f;
                         if (_rcFront[i].activeSelf != front)
                         {
@@ -464,7 +467,11 @@ namespace LagFighter
                     {
                         _phase = Phase.Judge;
                         _t = 0f;
-                        for (int i = 0; i < 2; i++) _rc[i].localRotation = Quaternion.identity;
+                        for (int i = 0; i < 2; i++)
+                        {
+                            _rc[i].localRotation = Quaternion.identity;
+                            _rc[i].localScale = Vector3.one;
+                        }
                         _verdict.text = _verdictTxt;
                         _detail.text = _detailTxt;
                         _verdict.gameObject.SetActive(true);

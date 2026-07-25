@@ -1482,8 +1482,9 @@ class Tests
         Mano(d, 1, DuelCatalog.GuardLow);
         var r = d.Resolve(0, 0);
         d.ChoosePrize(DuelPrize.Knockdown);
-        Check(r.WrongGuard1 && d.Hp[1] == DuelConfig.MaxHp - 5 && r.Winner == 0,
-            "duelo: la altura equivocada come el golpe ENTERO", $"hp1 {d.Hp[1]}");
+        Check(r.WrongGuard1 && !r.GuardWasDown(1) && d.Hp[1] == DuelConfig.MaxHp - 5 && r.Winner == 0,
+            "duelo: la altura equivocada come el golpe ENTERO (y NO es por derribo)",
+            $"hp1 {d.Hp[1]}, derribado {r.GuardWasDown(1)}");
     }
 
     static void DueloGuardiaBajaParaElGolpeBajo()
@@ -1575,9 +1576,9 @@ class Tests
         Mano(d, 1, DuelCatalog.GuardHigh);  // la altura CORRECTA... pero derribado
         var r = d.Resolve(0, 0);
         d.ChoosePrize(DuelPrize.Knockdown);
-        Check(r.WrongGuard1 && !r.Guarded1 && d.Hp[1] == DuelConfig.MaxHp - 3 - 5,
+        Check(r.WrongGuard1 && !r.Guarded1 && r.GuardWasDown(1) && d.Hp[1] == DuelConfig.MaxHp - 3 - 5,
             "duelo: derribado, la guardia NO bloquea (aunque acierte la altura)",
-            $"guard {r.Guarded1}, hp1 {d.Hp[1]}");
+            $"guard {r.Guarded1}, derribado {r.GuardWasDown(1)}, hp1 {d.Hp[1]}");
     }
 
     static void DueloElDerriboDuraUnSoloTurno()

@@ -178,6 +178,10 @@ namespace LagFighter
         public bool Hit0, Hit1;              // recibió un golpe REAL (el chip no cuenta)
         public bool Guarded0, Guarded1;      // defendió bien
         public bool WrongGuard0, WrongGuard1;// defendió la altura equivocada (o estaba derribado)
+        // Por QUÉ falló la guardia: derribado (no bloquea) vs altura errada.
+        // Sin esto la UI confundía la CONSECUENCIA (el premio derribo de este
+        // turno) con la CAUSA, y cantaba "derribado" en el turno 1.
+        public bool GuardWasDown0, GuardWasDown1;
         public bool Escaped0, Escaped1;
         public bool Trade, Tech;
         public bool Armor;                   // el aguante del grappler decidió el turno
@@ -198,6 +202,7 @@ namespace LagFighter
         public bool Hit(int i) => i == 0 ? Hit0 : Hit1;
         public bool Guarded(int i) => i == 0 ? Guarded0 : Guarded1;
         public bool WrongGuard(int i) => i == 0 ? WrongGuard0 : WrongGuard1;
+        public bool GuardWasDown(int i) => i == 0 ? GuardWasDown0 : GuardWasDown1;
         public bool KdNext(int i) => i == 0 ? KdNext0 : KdNext1;
         public bool Returned(int i) => i == 0 ? Returned0 : Returned1;
         public int Drew(int i) => i == 0 ? Drew0 : Drew1;
@@ -422,10 +427,12 @@ namespace LagFighter
             int def = 1 - atkSide;
             var guard = Def(def, _r.Card(def));
             // derribado: la guardia NO bloquea (dura un solo turno)
-            bool blocks = !KnockedDown[def] && guard.Height == atk.Height;
+            bool down = KnockedDown[def];
+            bool blocks = !down && guard.Height == atk.Height;
             if (!blocks)
             {
-                if (def == 0) _r.WrongGuard0 = true; else _r.WrongGuard1 = true;
+                if (def == 0) { _r.WrongGuard0 = true; _r.GuardWasDown0 = down; }
+                else { _r.WrongGuard1 = true; _r.GuardWasDown1 = down; }
                 Land(atkSide, card);
                 return;
             }
