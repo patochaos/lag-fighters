@@ -69,6 +69,9 @@ namespace LagFighter
         // tira de conexión
         Text _connText;
         readonly Image[] _wifiBars = new Image[4];
+        // chrome del modo clásico que DUELO reemplaza por completo
+        readonly Image[] _sidePanel = new Image[2];
+        Image _connStrip;
 
         // ajustes [OPC]
         Image _optBtn, _optPanel;
@@ -179,6 +182,7 @@ namespace LagFighter
 
             // tira de conexión (dist + ping + wifi), estética overlay de stream
             var strip = MakePanel(_canvasRt, "ConnStrip", new Vector2(0.5f, 1f), new Vector2(0f, -28f), new Vector2(430f, 34f), Palette.Neutral);
+            _connStrip = strip;
             _connText = MakeTextP(strip.rectTransform, "Conn", "", new Vector2(0.5f, 0.5f), new Vector2(-24f, 0f), new Vector2(360f, 22f),
                 8, new Color(1f, 1f, 1f, 0.8f), TextAnchor.MiddleCenter);
             for (int b = 0; b < 4; b++)
@@ -452,6 +456,21 @@ namespace LagFighter
 
         public void SetTip(string s) => _tip.text = s ?? "";
 
+        // En DUELO el chrome clásico (pips, barra de guardia, dist/ping) está
+        // de más: DuelHudUI muestra la MISMA información con números exactos.
+        // Dos fuentes para el mismo dato es exactamente lo que hacía que la
+        // pantalla se sintiera sucia.
+        public void SetDuelChrome(bool duel)
+        {
+            for (int i = 0; i < 2; i++)
+                if (_sidePanel[i] != null && _sidePanel[i].gameObject.activeSelf == duel)
+                    _sidePanel[i].gameObject.SetActive(!duel);
+            if (_connStrip != null && _connStrip.gameObject.activeSelf == duel)
+                _connStrip.gameObject.SetActive(!duel);
+            if (_prompt != null) _prompt.gameObject.SetActive(!duel); // DUELO tiene su propio encabezado
+            if (_turnSummary != null) _turnSummary.gameObject.SetActive(!duel); // ídem el resumen
+        }
+
         void BuildSide(int i, bool left, string label)
         {
             float sign = left ? 1f : -1f;
@@ -461,6 +480,7 @@ namespace LagFighter
             // panel contenedor del bloque de jugador
             var panel = MakePanel(_canvasRt, label + "Panel", anchor, new Vector2(sign * 24f, -22f), new Vector2(GuardBarW + 32f, 124f), color);
             panel.rectTransform.pivot = anchor;
+            _sidePanel[i] = panel;
             var pr = panel.rectTransform;
 
             var nm = MakeTextP(pr, "Name", label, new Vector2(left ? 0f : 1f, 1f), new Vector2(sign * 14f, -8f), new Vector2(200f, 20f),

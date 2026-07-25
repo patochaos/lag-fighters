@@ -82,6 +82,8 @@ namespace LagFighter
         DuelHudUI _duelHud;
         bool _duelCombatOn;
         int _duelTheaterFrames = 90;
+        float _duelPostReveal;
+        bool _duelAwaitChoice;   // la ceremonia termina abriendo una decisión
         const float DuelSlot = 0.62f;
 
         public float TickFloat => Sim == null ? 0f : Sim.Tick + _acc / SimConfig.TickDuration;
@@ -288,6 +290,12 @@ namespace LagFighter
             _duelPlayerChar = Mathf.Clamp(duelChar, 0, DuelCatalog.Chars.Length - 1);
             _duelAiChar = Random.Range(0, DuelCatalog.Chars.Length);
             _duelHud.SetVisible(duel);
+            _hud.SetDuelChrome(duel);
+            // Sin teatro los peleadores no tienen nada que actuar: se ocultan
+            // y el escenario queda de fondo. La ceremonia son las cartas.
+            for (int i = 0; i < 2; i++)
+                if (_views[i] != null)
+                    _views[i].gameObject.SetActive(!duel || SimConfig.DuelTheaterEnabled);
             _cardsRound = 0;
             _cardsPlayerChar = cardsChar;
             _cardsAiChar = Random.Range(0, CardCatalog.Chars.Length);
@@ -382,7 +390,9 @@ namespace LagFighter
             _views[0].OnMatchReset();
             _views[1].OnMatchReset();
             _hud.OnMatchReset();
-            if (Mode != GameMode.Practice)
+            // En DUELO no hay rounds (una partida ES el match) y el cartel
+            // tapaba justo el centro, que es donde vive la revelación.
+            if (Mode != GameMode.Practice && !SimConfig.DuelEnabled)
                 _hud.ShowBigMessage($"ROUND {_wins[0] + _wins[1] + 1}\n<size=18>¡PELEA!</size>", new Color(1f, 0.9f, 0.4f));
             StartPlanning();
         }
@@ -1088,6 +1098,21 @@ namespace LagFighter
 
         // ---------- modo DUELO (el núcleo casual) ----------
 
+        // Con el teatro apagado el escenario tiene que quedar LIMPIO: sin
+        // peleadores y sin fantasma. Se refuerza por frame a propósito —
+        // apagarlos una sola vez al entrar al modo dejaba pasar cualquier
+        // camino que los vuelva a encender, y un blockman suelto detrás de
+        // las cartas es exactamente el ruido que había que sacar.
+        void EnforceDuelStage()
+        {
+            if (!SimConfig.DuelEnabled || SimConfig.DuelTheaterEnabled) return;
+            for (int i = 0; i < 2; i++)
+                if (_views[i] != null && _views[i].gameObject.activeSelf)
+                    _views[i].gameObject.SetActive(false);
+            if (_ghost != null) _ghost.Clear();
+        }
+
+
         // Los pips del HUD son 6 y acá la vida es 46-54: proporcionales.
         // Los números exactos viven en el panel de DuelHudUI.
         float DuelTheaterHp(int i) => Duel.Hp[i] * (float)SimConfig.MaxHp / Duel.MaxHpOf(i);
@@ -1108,7 +1133,7 @@ namespace LagFighter
             Picker = 0;
             State = Flow.Planning;
             _duelHud.HideReveal();
-            PoseDuelPlanning();
+            if (SimConfig.DuelTheaterEnabled) PoseDuelPlanning();
             _duelHand.Open(DuelHandUI.Mode.Pick);
             UpdateDuelPrompt();
         }
@@ -1163,13 +1188,9 @@ namespace LagFighter
             if (Duel.AwaitingChoice && Duel.PendingSide == 1) _ai.DoDuelChoice(Duel);
             if (Duel.AwaitingChoice && Duel.PendingSide == 0)
             {
-                // decisión del humano con las dos cartas ya a la vista
-                var pend = Duel.LastResult;
-                _duelHud.ShowReveal(pend.Card0, pend.Card1, Duel.PendingIsPunish
-                    ? "se la DEFENDISTE: te toca un golpe gratis"
-                    : "ganaste el intercambio: elegí tu premio");
-                _duelHud.DockReveal();
-                _duelHand.Open(Duel.PendingIsPunish ? DuelHandUI.Mode.Punish : DuelHandUI.Mode.Prize);
+                // La ceremonia va IGUAL: primero ves por qué ganaste, después
+                // elegís el premio. Saltearla acá era regalarse el momento.
+                StartDuelReveal(Duel.LastResult, awaitChoice: true);
                 return;
             }
             _duelResult = Duel.LastResult;
@@ -1242,12 +1263,30 @@ namespace LagFighter
             return 0;                                  // guardias, escapes
         }
 
-        void BeginDuelTheater()
+        // Arranca la ceremonia de revelación. awaitChoice: al terminar no se
+        // cierra el turno — se abre la decisión del premio o del castigo.
+        void StartDuelReveal(DuelTurnResult r, bool awaitChoice)
         {
-            var r = _duelResult;
             _duelHand.Close();
             _menu.Close();
             _ghost.Clear();
+            TurnStartTick = Sim.Tick;
+            _acc = 0f;
+            _turnDmg[0] = _turnDmg[1] = 0f;
+            _turnHitCount[0] = _turnHitCount[1] = 0;
+            State = Flow.Executing;
+            _duelPostReveal = 0f;
+            _duelAwaitChoice = awaitChoice;
+            _duelHud.ShowReveal(r);
+            SfxLib.Play(SfxLib.Kind.TurnStart, 0.6f);
+        }
+
+        void BeginDuelTheater()
+        {
+            var r = _duelResult;
+            StartDuelReveal(r, awaitChoice: false);
+            if (!SimConfig.DuelTheaterEnabled) return;
+
             Sim = new MatchSim();
             int extras = (r.Prize == DuelPrize.Damage ? 1 : 0) + (r.PunishSide >= 0 ? 1 : 0);
             _duelTheaterFrames = 88 + 34 * extras;
@@ -1281,72 +1320,36 @@ namespace LagFighter
             }
             TurnStartTick = Sim.Tick;
             _acc = 0f;
-            _turnDmg[0] = _turnDmg[1] = 0f;
-            _turnHitCount[0] = _turnHitCount[1] = 0;
-            State = Flow.Executing;
-            _yomiRevealTimer = YomiRevealSeconds;
-            _duelHud.ShowReveal(r.Card0, r.Card1, DuelRuling(r));
-            _hud.SetPrompt($"TURNO {TurnNumber} — {DuelName(0, r.Card0)} vs {DuelName(1, r.Card1)}");
-            SfxLib.Play(SfxLib.Kind.TurnStart, 0.6f);
         }
 
         string DuelName(int side, int card) =>
             card < 0 ? "SIN CARTAS" : Duel.Def(side, card).Name.ToUpperInvariant();
 
-        // El fallo del turno en una frase: la regla que decidió, con nombre.
-        string DuelRuling(DuelTurnResult r)
-        {
-            if (r.Escaped0 || r.Escaped1)
-                return (r.Escaped0 && r.Escaped1) ? "los dos ESCAPAN: no pasa nada"
-                     : ((r.Escaped0 ? "ESCAPÁS" : "ESCAPA") + ": este turno no pasa nada");
-            if (r.Tech) return "AGARRE contra AGARRE: se sueltan (TECH)";
-            if (r.Armor) return "¡AGUANTE! come el golpe y te agarra igual: cobran los DOS";
-            if (r.Trade) return "MISMA VELOCIDAD: se pegan los DOS";
-            if (r.Guarded0 || r.Guarded1)
-            {
-                int g = r.Guarded0 ? 0 : 1;
-                var atk = Duel.Def(1 - g, r.Card(1 - g));
-                string who = g == 0 ? "DEFENDÉS" : "DEFIENDE";
-                string alt = atk.Height == DuelHeight.High ? "ALTO" : "BAJO";
-                string extra = r.Chip(g) > 0 ? $" · igual pega {r.Chip(g)} de chip" : "";
-                if (r.PunishSide == g && r.PunishCard >= 0)
-                    extra += $" · ¡CASTIGO GRATIS con {DuelName(g, r.PunishCard)}!";
-                return $"{who} bien el {alt}: roba {r.Drew(g)} y la guardia vuelve{extra}";
-            }
-            if (r.WrongGuard0 || r.WrongGuard1)
-            {
-                int g = r.WrongGuard0 ? 0 : 1;
-                var atk = Duel.Def(1 - g, r.Card(1 - g));
-                string alt = atk.Height == DuelHeight.High ? "ALTO" : "BAJO";
-                return Duel.KnockedDown[g] || (g == 0 ? r.KdNext0 : r.KdNext1)
-                    ? $"¡DERRIBADO: la guardia NO bloquea! entra el {alt} entero"
-                    : $"¡ALTURA EQUIVOCADA! el golpe era {alt}: entra entero";
-            }
-            if (r.Winner >= 0)
-            {
-                var w = Duel.Def(r.Winner, r.Card(r.Winner));
-                var l = Duel.Def(1 - r.Winner, r.Card(1 - r.Winner));
-                string who = r.Winner == 0 ? "GANÁS" : "GANA";
-                string why = w.Kind == DuelKind.Strike && l.Kind == DuelKind.Grab ? "el GOLPE le gana al AGARRE"
-                    : w.Kind == DuelKind.Grab && l.Kind == DuelKind.Guard ? "el AGARRE rompe la GUARDIA"
-                    : $"más RÁPIDO ({w.Speed} contra {l.Speed})";
-                string prize = r.Prize == DuelPrize.Damage
-                    ? $" · premio +DAÑO: {DuelName(r.Winner, r.PrizeCard)} suma {r.PrizeDamage}"
-                    : r.Prize == DuelPrize.Knockdown ? " · premio DERRIBO" : "";
-                return $"{who}: {why}{prize}";
-            }
-            return "nadie conecta";
-        }
-
         void TickDuelTheater()
         {
-            if (_yomiRevealTimer > 0f)
+            // La ceremonia de las cartas ES el turno. Se puede apurar.
+            if (!_duelHud.RevealFinished)
             {
-                _yomiRevealTimer -= Time.deltaTime;
-                if (_yomiRevealTimer < YomiRevealSeconds - 0.35f &&
-                    (GameInput.EndTurnPressed() || GameInput.ClickPressed()))
-                    _yomiRevealTimer = 0f;
-                if (_yomiRevealTimer <= 0f) _duelHud.DockReveal();
+                if (GameInput.EndTurnPressed() || GameInput.ClickPressed()) _duelHud.SkipReveal();
+                return;
+            }
+            if (_duelAwaitChoice)
+            {
+                // ya viste el fallo: ahora sí, elegí
+                _duelAwaitChoice = false;
+                State = Flow.Planning;
+                _duelHand.Open(Duel.PendingIsPunish ? DuelHandUI.Mode.Punish : DuelHandUI.Mode.Prize);
+                return;
+            }
+            if (!SimConfig.DuelTheaterEnabled)
+            {
+                // un respiro para leer el veredicto y al turno siguiente
+                _duelPostReveal += Time.deltaTime;
+                if (_duelPostReveal >= 0.7f || GameInput.EndTurnPressed() || GameInput.ClickPressed())
+                {
+                    _duelPostReveal = 0f;
+                    EndDuelTurn();
+                }
                 return;
             }
             if (_hitstop > 0f) { _hitstop -= Time.deltaTime * PlaybackSpeed; return; }
@@ -1369,8 +1372,11 @@ namespace LagFighter
         void EndDuelTurn()
         {
             var r = _duelResult;
-            for (int i = 0; i < 2; i++) Sim.Fighters[i].Hp = DuelTheaterHp(i);
-            if (!Duel.Over) { Sim.Over = false; Sim.Winner = -1; }
+            if (SimConfig.DuelTheaterEnabled)
+            {
+                for (int i = 0; i < 2; i++) Sim.Fighters[i].Hp = DuelTheaterHp(i);
+                if (!Duel.Over) { Sim.Over = false; Sim.Winner = -1; }
+            }
 
             for (int i = 0; i < 2; i++)
             {
@@ -1391,12 +1397,13 @@ namespace LagFighter
                 _hud.Feedback(r.PunishSide, $"CASTIGO: {DuelName(r.PunishSide, r.PunishCard)}", new Color(1f, 0.55f, 0.9f));
 
             // el derribo queda EN PANTALLA hasta que el derribado juegue
-            for (int i = 0; i < 2; i++)
-                if (r.KdNext(i))
-                {
-                    Sim.Fighters[i].Stun = StunKind.Knockdown;
-                    Sim.Fighters[i].StunEndTick = Sim.Tick + 100000;
-                }
+            if (SimConfig.DuelTheaterEnabled)
+                for (int i = 0; i < 2; i++)
+                    if (r.KdNext(i))
+                    {
+                        Sim.Fighters[i].Stun = StunKind.Knockdown;
+                        Sim.Fighters[i].StunEndTick = Sim.Tick + 100000;
+                    }
 
             string s0 = r.Card0 >= 0 ? Duel.Def(0, r.Card0).Short : "—";
             string s1 = r.Card1 >= 0 ? Duel.Def(1, r.Card1).Short : "—";
@@ -1997,6 +2004,7 @@ namespace LagFighter
                 AudioListener.volume = 1f;
 
             if (State == Flow.ModeSelect) return;
+            EnforceDuelStage();
 
             // framing suave según la distancia entre los peleadores
             if (Sim != null) CamFx()?.SetDistance(Mathf.Abs(Sim.Fighters[1].X - Sim.Fighters[0].X));

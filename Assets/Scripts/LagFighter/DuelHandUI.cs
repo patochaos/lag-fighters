@@ -19,10 +19,13 @@ namespace LagFighter
     {
         public enum Mode { Pick, Prize, Punish }
 
-        const float CardW = 168f, CardH = 232f;
-        const float BaseY = 84f;
-        const float HoverY = 196f;
-        const float HoverScale = 1.5f;
+        // El abanico vive ENTERO dentro de la pantalla: con BaseY 84 la carta
+        // (232 de alto, pivote al medio) se cortaba 32px abajo y se comía los
+        // chips de keywords. BaseY = 142 deja 22px de aire.
+        const float CardW = 172f, CardH = 240f;
+        const float BaseY = 150f;
+        const float HoverY = 266f;
+        const float HoverScale = 1.45f;
 
         MatchController _mc;
         RectTransform _canvasRt;
@@ -70,7 +73,7 @@ namespace LagFighter
             if (d.Chip > 0) list.Add(($"PEGA {d.Chip} AUNQUE LA DEFIENDAN", new Color(1f, 0.75f, 0.25f)));
             if (d.FreeKnockdown) list.Add(("DERRIBO GRATIS", new Color(1f, 0.5f, 0.35f)));
             if (d.PunishOnGuard) list.Add(("SI TE LA DEFIENDEN, TE PEGAN", new Color(1f, 0.4f, 0.45f)));
-            if (d.Kind == DuelKind.Guard) list.Add(("ROBÁS 2 Y VUELVE A TU MANO", new Color(0.45f, 0.85f, 1f)));
+            if (d.Kind == DuelKind.Guard) list.Add(("ROBÁS 2 · VUELVE A TU MANO", new Color(0.45f, 0.85f, 1f)));
             if (d.Kind == DuelKind.Grab) list.Add(("LE GANA A LA GUARDIA", new Color(0.85f, 0.6f, 1f)));
             if (d.Kind == DuelKind.Escape) list.Add(("UNA POR PARTIDA", new Color(0.5f, 1f, 0.7f)));
             return list;
@@ -136,7 +139,7 @@ namespace LagFighter
         }
 
         static Text MakeText(RectTransform parent, string name, string content, Vector2 anchor, Vector2 pos,
-            Vector2 size, int fontSize, Color color, TextAnchor align, bool pixel = true)
+            Vector2 size, int fontSize, Color color, TextAnchor align, bool pixel = true, bool wrap = false)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(Text));
             var rt = go.GetComponent<RectTransform>();
@@ -150,8 +153,10 @@ namespace LagFighter
             t.fontSize = fontSize;
             t.color = color;
             t.alignment = align;
-            t.horizontalOverflow = HorizontalWrapMode.Wrap;
-            t.verticalOverflow = VerticalWrapMode.Overflow;
+            // Por defecto NADA envuelve: el texto que envuelve es exactamente
+            // lo que termina pisando al elemento de abajo.
+            t.horizontalOverflow = wrap ? HorizontalWrapMode.Wrap : HorizontalWrapMode.Overflow;
+            t.verticalOverflow = wrap ? VerticalWrapMode.Overflow : VerticalWrapMode.Truncate;
             t.raycastTarget = false;
             return t;
         }
@@ -160,41 +165,42 @@ namespace LagFighter
         {
             var bg = MakeImage(parent, name, new Vector2(0.5f, 0f), pos, size, c);
             var lbl = MakeText(bg.rectTransform, "T", "", new Vector2(0.5f, 0.5f), Vector2.zero,
-                new Vector2(size.x - 12f, size.y - 8f), 13, Color.white, TextAnchor.MiddleCenter);
+                new Vector2(size.x - 14f, size.y - 8f), 13, Color.white, TextAnchor.MiddleCenter, wrap: true);
             lbl.fontStyle = FontStyle.Bold;
             return (bg, lbl);
         }
 
         // Dibuja UNA carta completa dentro de un rect ya creado. Compartido con
         // la revelación del HUD para que la carta se vea IGUAL en todos lados.
+        //
+        // Layout en BANDAS de altura fija medidas desde ARRIBA, para que dos
+        // elementos nunca puedan pisarse: franja de altura (−6) · verbo (−30) ·
+        // nombre (−58) · números (−104, etiquetas −134) · chips (desde abajo).
         public static void PaintCard(RectTransform card, in DuelCard d, float w, float h, bool showKeywords = true)
         {
             var col = VerbColor(d);
             MakeImage(card, "Frame", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(w, h),
-                new Color(col.r, col.g, col.b, 0.85f));
+                new Color(col.r, col.g, col.b, 0.9f));
             MakeImage(card, "Inner", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(w - 6f, h - 6f),
                 new Color(0.07f, 0.08f, 0.11f, 1f));
 
-            // BARRA DE ALTURA: arriba = alto, abajo = bajo. Redundancia
-            // posicional para que la altura se lea sin leer.
-            if (d.Height != DuelHeight.None)
-            {
-                bool high = d.Height == DuelHeight.High;
-                var bar = MakeImage(card, "HeightBar", new Vector2(0.5f, high ? 1f : 0f),
-                    new Vector2(0f, high ? -5f : 5f), new Vector2(w - 12f, 9f),
-                    new Color(col.r, col.g, col.b, 0.95f));
-                MakeText(bar.rectTransform, "HL", high ? "▲ ALTO" : "▼ BAJO", new Vector2(0.5f, 0.5f),
-                    new Vector2(0f, high ? -13f : 13f), new Vector2(w, 14f), 9,
-                    new Color(col.r, col.g, col.b, 1f), TextAnchor.MiddleCenter);
-            }
+            // FRANJA DE ALTURA: arriba si el golpe es alto, abajo si es bajo.
+            // Redundancia POSICIONAL — se ve de reojo, sin leer una palabra.
+            bool hasHeight = d.Height != DuelHeight.None;
+            bool high = d.Height == DuelHeight.High;
+            if (hasHeight)
+                MakeImage(card, "HeightBar", new Vector2(0.5f, high ? 1f : 0f),
+                    new Vector2(0f, high ? -6f : 6f), new Vector2(w - 14f, 9f), col);
 
-            // banda del VERBO
-            var band = MakeImage(card, "Band", new Vector2(0.5f, 1f), new Vector2(0f, -34f),
-                new Vector2(w - 14f, 26f), new Color(col.r * 0.42f, col.g * 0.42f, col.b * 0.42f, 1f));
-            MakeText(band.rectTransform, "V", VerbLabel(d), new Vector2(0.5f, 0.5f), Vector2.zero,
-                new Vector2(w - 18f, 24f), 11, Color.white, TextAnchor.MiddleCenter);
+            // banda del VERBO, con la flecha adentro (no como elemento aparte:
+            // así no hay nada que pueda solaparse con la banda)
+            var band = MakeImage(card, "Band", new Vector2(0.5f, 1f), new Vector2(0f, -30f),
+                new Vector2(w - 14f, 26f), new Color(col.r * 0.4f, col.g * 0.4f, col.b * 0.4f, 1f));
+            string verb = (hasHeight ? (high ? "▲ " : "▼ ") : "") + VerbLabel(d);
+            MakeText(band.rectTransform, "V", verb, new Vector2(0.5f, 0.5f), Vector2.zero,
+                new Vector2(w - 16f, 24f), 11, Color.white, TextAnchor.MiddleCenter);
 
-            // nombre (sin la letra entre paréntesis: va aparte, grande)
+            // nombre (la letra va aparte, chiquita en la esquina)
             string name = d.Name;
             string letter = "";
             int par = name.IndexOf('(');
@@ -203,41 +209,47 @@ namespace LagFighter
                 letter = name.Substring(par + 1).TrimEnd(')');
                 name = name.Substring(0, par).Trim();
             }
-            MakeText(card, "Name", name.ToUpperInvariant(), new Vector2(0.5f, 1f), new Vector2(0f, -62f),
-                new Vector2(w - 16f, 30f), 13, Color.white, TextAnchor.MiddleCenter);
+            if (!string.Equals(name, VerbLabel(d), System.StringComparison.OrdinalIgnoreCase))
+                MakeText(card, "Name", name.ToUpperInvariant(), new Vector2(0.5f, 1f), new Vector2(0f, -58f),
+                    new Vector2(w - 14f, 22f), 12, Color.white, TextAnchor.MiddleCenter);
             if (letter != "")
-                MakeText(card, "Letter", letter, new Vector2(0f, 1f), new Vector2(17f, -16f),
-                    new Vector2(26f, 20f), 12, new Color(1f, 1f, 1f, 0.45f), TextAnchor.MiddleCenter);
+                MakeText(card, "Letter", letter, new Vector2(0f, 1f), new Vector2(16f, -17f),
+                    new Vector2(24f, 18f), 11, new Color(1f, 1f, 1f, 0.4f), TextAnchor.MiddleCenter);
 
             // los DOS números que deciden todo, enormes
             if (d.IsAttack)
             {
-                MakeText(card, "Spd", d.Speed.ToString(), new Vector2(0f, 0.5f), new Vector2(w * 0.27f, 4f),
-                    new Vector2(w * 0.46f, 42f), 30, new Color(0.5f, 0.85f, 1f), TextAnchor.MiddleCenter);
-                MakeText(card, "SpdL", "VELOCIDAD", new Vector2(0f, 0.5f), new Vector2(w * 0.27f, -22f),
-                    new Vector2(w * 0.5f, 14f), 8, new Color(0.5f, 0.85f, 1f, 0.8f), TextAnchor.MiddleCenter);
-                MakeText(card, "Dmg", d.Damage.ToString(), new Vector2(1f, 0.5f), new Vector2(-w * 0.27f, 4f),
-                    new Vector2(w * 0.46f, 42f), 30, new Color(1f, 0.5f, 0.42f), TextAnchor.MiddleCenter);
-                MakeText(card, "DmgL", "DAÑO", new Vector2(1f, 0.5f), new Vector2(-w * 0.27f, -22f),
-                    new Vector2(w * 0.5f, 14f), 8, new Color(1f, 0.5f, 0.42f, 0.8f), TextAnchor.MiddleCenter);
+                MakeText(card, "Spd", d.Speed.ToString(), new Vector2(0f, 1f), new Vector2(w * 0.27f, -104f),
+                    new Vector2(w * 0.46f, 44f), 32, new Color(0.5f, 0.85f, 1f), TextAnchor.MiddleCenter);
+                MakeText(card, "SpdL", "VELOCIDAD", new Vector2(0f, 1f), new Vector2(w * 0.27f, -134f),
+                    new Vector2(w * 0.5f, 14f), 8, new Color(0.5f, 0.85f, 1f, 0.85f), TextAnchor.MiddleCenter);
+                MakeText(card, "Dmg", d.Damage.ToString(), new Vector2(1f, 1f), new Vector2(-w * 0.27f, -104f),
+                    new Vector2(w * 0.46f, 44f), 32, new Color(1f, 0.5f, 0.42f), TextAnchor.MiddleCenter);
+                MakeText(card, "DmgL", "DAÑO", new Vector2(1f, 1f), new Vector2(-w * 0.27f, -134f),
+                    new Vector2(w * 0.5f, 14f), 8, new Color(1f, 0.5f, 0.42f, 0.85f), TextAnchor.MiddleCenter);
             }
             else
             {
-                string big = d.Kind == DuelKind.Guard ? (d.Height == DuelHeight.High ? "▲" : "▼") : "✦";
-                MakeText(card, "Big", big, new Vector2(0.5f, 0.5f), new Vector2(0f, 6f),
-                    new Vector2(w - 16f, 46f), 34, col, TextAnchor.MiddleCenter);
+                string big = d.Kind == DuelKind.Guard ? (high ? "▲" : "▼") : "✦";
+                MakeText(card, "Big", big, new Vector2(0.5f, 1f), new Vector2(0f, -110f),
+                    new Vector2(w - 16f, 52f), 38, col, TextAnchor.MiddleCenter);
             }
 
             if (!showKeywords) return;
             // keywords en CHIPS (con fondo): se ven, no se leen de corrido
             var kws = Keywords(d);
-            for (int k = 0; k < kws.Count && k < 2; k++)
+            int n = Mathf.Min(kws.Count, 2);
+            for (int k = 0; k < n; k++)
             {
-                float y = 34f + (kws.Count - 1 - k) * 26f;
+                float y = 38f + (n - 1 - k) * 34f;
                 var chip = MakeImage(card, "Kw" + k, new Vector2(0.5f, 0f), new Vector2(0f, y),
-                    new Vector2(w - 18f, 23f), new Color(kws[k].col.r * 0.24f, kws[k].col.g * 0.24f, kws[k].col.b * 0.24f, 1f));
+                    new Vector2(w - 18f, 31f),
+                    new Color(kws[k].col.r * 0.22f, kws[k].col.g * 0.22f, kws[k].col.b * 0.22f, 1f));
+                // el chip SÍ envuelve: es una caja cerrada de dos renglones, y
+                // sin wrap el texto largo se salía de la carta y pisaba a la
+                // carta vecina del abanico.
                 MakeText(chip.rectTransform, "T", kws[k].txt, new Vector2(0.5f, 0.5f), Vector2.zero,
-                    new Vector2(w - 22f, 21f), 8, kws[k].col, TextAnchor.MiddleCenter);
+                    new Vector2(w - 24f, 29f), 8, kws[k].col, TextAnchor.MiddleCenter, wrap: true);
             }
         }
 
@@ -277,26 +289,26 @@ namespace LagFighter
             }
 
             // los dos botones del premio (la única decisión extra del juego)
-            (_btnA, _lblA) = MakeButton(rootRt, "BtnA", new Vector2(-215f, 372f), new Vector2(400f, 84f),
+            (_btnA, _lblA) = MakeButton(rootRt, "BtnA", new Vector2(-232f, 470f), new Vector2(430f, 88f),
                 new Color(0.5f, 0.2f, 0.16f, 0.97f));
-            (_btnB, _lblB) = MakeButton(rootRt, "BtnB", new Vector2(215f, 372f), new Vector2(400f, 84f),
+            (_btnB, _lblB) = MakeButton(rootRt, "BtnB", new Vector2(232f, 470f), new Vector2(430f, 88f),
                 new Color(0.18f, 0.34f, 0.55f, 0.97f));
             _btnA.gameObject.SetActive(false);
             _btnB.gameObject.SetActive(false);
 
             // detalle de la carta hovereada
-            _infoBg = MakeImage(rootRt, "Info", new Vector2(1f, 0f), new Vector2(-215f, 470f),
-                new Vector2(400f, 250f), new Color(0.03f, 0.04f, 0.06f, 0.97f));
+            _infoBg = MakeImage(rootRt, "Info", new Vector2(1f, 0f), new Vector2(-222f, 596f),
+                new Vector2(408f, 258f), new Color(0.03f, 0.04f, 0.06f, 0.97f));
             _detailTitle = MakeText(_infoBg.rectTransform, "T", "", new Vector2(0.5f, 1f), new Vector2(0f, -26f),
                 new Vector2(368f, 30f), 15, Color.white, TextAnchor.MiddleCenter);
             _detailStats = MakeText(_infoBg.rectTransform, "S", "", new Vector2(0.5f, 1f), new Vector2(0f, -58f),
                 new Vector2(368f, 24f), 11, new Color(0.95f, 0.9f, 0.6f), TextAnchor.MiddleCenter);
             _detailDesc = MakeText(_infoBg.rectTransform, "D", "", new Vector2(0.5f, 1f), new Vector2(0f, -150f),
-                new Vector2(364f, 160f), 16, new Color(1f, 1f, 1f, 0.93f), TextAnchor.UpperLeft, pixel: false);
+                new Vector2(364f, 160f), 16, new Color(1f, 1f, 1f, 0.93f), TextAnchor.UpperLeft, pixel: false, wrap: true);
             _infoBg.gameObject.SetActive(false);
 
-            _status = MakeText(rootRt, "Status", "", new Vector2(0.5f, 0f), new Vector2(0f, BaseY + CardH + 26f),
-                new Vector2(1500f, 26f), 14, new Color(0.55f, 1f, 0.65f), TextAnchor.MiddleCenter);
+            _status = MakeText(rootRt, "Status", "", new Vector2(0.5f, 0f), new Vector2(0f, BaseY + CardH * 0.5f + 30f),
+                new Vector2(1600f, 26f), 14, new Color(0.55f, 1f, 0.65f), TextAnchor.MiddleCenter);
 
             RefreshStates();
             LayoutHand();
@@ -360,7 +372,7 @@ namespace LagFighter
                     return "¡SE LA DEFENDISTE! pegale gratis: elegí un golpe o agarre (ESPACIO para no castigar)";
             }
             if (S != null && S.KnockedDown[0])
-                return "¡ESTÁS DERRIBADO! tu GUARDIA no bloquea este turno — el ESCAPE congela el turno";
+                return "¡ESTÁS DERRIBADO! tu guardia no bloquea — el ESCAPE congela el turno";
             if (S != null && S.KnockedDown[1])
                 return "¡RIVAL DERRIBADO! su guardia no bloquea: es el turno de pegar";
             return "elegí UNA carta en secreto — el rival elige a la vez";
@@ -425,7 +437,7 @@ namespace LagFighter
         void LayoutHand()
         {
             int n = _cardRt.Length;
-            float spacing = n <= 1 ? 0f : Mathf.Min(CardW + 10f, 1120f / (n - 1));
+            float spacing = n <= 1 ? 0f : Mathf.Min(CardW + 10f, 1160f / (n - 1));
             float x0 = -spacing * (n - 1) * 0.5f;
             for (int i = 0; i < n; i++)
             {
