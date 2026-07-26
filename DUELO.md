@@ -533,3 +533,77 @@ máximo histórico: baseline +1.9, primera pasada de cantos +0.8) · cantar
 bien vs cantar al azar 51.2% (positivo por primera vez) · brecha 78%.
 Pendiente hacia el objetivo >+5: el respondedor adaptativo y probar
 contra humanos (la UI del canto).
+
+## 12. El diseño cerrado en papel: ROUNDS y límites (2026-07-26, madrugada)
+
+Última iteración solo-diseño antes de implementar (pedido de Patricio:
+"primero tener la teoría correcta"). Decisiones tomadas:
+
+### Rounds al mejor de 3
+
+- **Vida por round ~24-28** (dial de lab: barrer 24/26/28 y re-chequear
+  el chip de envido, que a menos vida pesa más relativo). Round = 6-8
+  turnos; la partida entera sigue en 3-5 minutos.
+- **Cada round arranca de cero**: mazo remezclado, mano inicial nueva,
+  su propio ENVIDO (ventana hasta la primera sangre DEL ROUND) y **una
+  sola cadena de truco por round** (como la mano del truco real: el que
+  la abre, la abre; el otro sube adentro de la negociación; cerrada, no
+  hay más). ESCAPE por round. Derribo y truco armado NO cruzan rounds:
+  el estado muere con el round.
+- **Lo único que persiste entre rounds es la lectura**: los hábitos
+  observados del rival (y los de la IA). La información trabaja en dos
+  escalas — la mano se renueva (el envido nunca está vencido), el
+  JUGADOR se acumula. Es la respuesta al principio de "vida útil de la
+  información" de DUELO-MANOS.md sin nada de aquella reestructura: el
+  round ES la mano del truco, en idioma fighting, y cuesta CERO
+  conceptos (los fighting tienen rounds de fábrica).
+- Por qué la vida corta ahora sí (el lab la había subido 30→46): esa
+  medición era pre-cantos — hoy el envido adelanta la información al
+  turno 1, no hace falta una partida larga para construir la lectura.
+- Bonus estructurales: freno anti-bola-de-nieve (la vida resetea),
+  comeback real (perdiste un round, no la partida), y "ya se gastó el
+  truco de este round" como información pública nueva (Ley 5 gratis).
+
+### Auditoría contra YOMI-BIBLE.md (el estado de la teoría)
+
+Cumplen bien: Leyes 1, 2 (reforzada: el truco paga en la moneda de cada
+opción), 4, 5, 6 (con rounds), 8, 9, 10, 11, 12. Presupuesto Ley 14:
+10/10 usado — los rounds no suman conceptos; NADA más entra sin sacar.
+
+**Las tres fallas señaladas (en orden de gravedad):**
+
+1. **Ley 7 / anti-patrón 5 — dispersión de fuerza suave.** Las manos
+   salen del mismo esqueleto y se emparejan rápido; sin posiciones
+   fuertes/débiles claras el bluff tiene techo (medido: cantar bien vs
+   al azar 51.2%, no 55). El tanto público y los rounds ayudan. **Si el
+   canto se siente flojo en vivo, la causa es esta ley, no el tuning**
+   — el dial anotado: más varianza en la mano inicial (menos cartas
+   garantizadas).
+2. **Ley 3 en observación.** Robo por defender 2→1: el lab viejo decía
+   que con 1 la guardia no era el default barato; hoy la compensa
+   cobrar trucos bloqueando, pero es condicional. Medir si el pasivo
+   que defiende ~45% sigue viable; si la tortuga muere, el agarre
+   pierde presa.
+3. **Ley 13 — truco sobre derribado.** La jugada más fuerte del juego
+   (la guardia apagada no puede cobrar el canto); el ESCAPE la
+   neutraliza una vez por round. Vigilar en vivo si se siente
+   inescapable.
+
+**Lo ignorado (pendiente, no roto)**: el onboarding guionado (ahora
+también debe enseñar quiero/no-quiero) y la medición contra humanos —
+todo el lab es IA-contra-IA, que acota por abajo (el spam de cantos que
+la IA no castiga, un humano lo castiga solo). Miedo y respeto no se
+miden en el lab. **La UI del canto es el instrumento de medición que
+falta, no un lujo.**
+
+### Orden de implementación (cuando Patricio dé el OK)
+
+1. Rounds en `DuelSim` (reset por round, marcador 2 de 3) + límites de
+   cantos (una cadena de truco por round, envido/escape por round) +
+   tests.
+2. Lab: barrido de vida por round (24/26/28) × chip de envido; re-medir
+   las tres fallas de la auditoría (uso de guardia del pasivo, valor
+   del canto, truco-sobre-derribado).
+3. **La UI del canto** (¡TRUCO! / QUIERO / NO QUIERO / el número del
+   envido en pantalla) — el instrumento para responder "¿es divertido?".
+4. Onboarding guionado con los cantos incluidos.

@@ -546,11 +546,17 @@ roba 2 y la guardia vuelve a la mano · robás 1 por turno, mano 8, remezcla
   ×2, escalable a retruco ×3 y vale cuatro ×4; el no quiero siempre paga).
   Ataca el valor de la información flaco (+1.9 pp): la lectura no cambia
   qué jugás, cambia CUÁNDO y CUÁNTO apostás. Conceptos 8-10 de 10 — tope
-  de la Ley 14 tocado. Primera pasada del lab: cantar PAGA (53.2% vs el
-  que no canta), el chip de envido quedó en 6 (pesa sin definir: 58.8%
-  env→partida), la siembra del tanto mejora el acierto de guardia +1.8 pp,
-  y el timing del canto aún no es habilidad (pendiente: respondedor
-  adaptativo en la IA). Diales, métricas y descartes en DUELO.md §11.
+  de la Ley 14 tocado. Segunda tanda: la guardia COBRA el truco en cartas
+  (robo 1 ×mult — Ley 2 por moneda), agarre 6→7 y X 4→5 (revisada contra
+  los mazos reales de Yomi 2; el 10 quedó como el número acertijo del
+  envido). Valor de la información: **+3.1 pp**, máximo histórico.
+  **Diseño cerrado en papel (2026-07-26, DUELO.md §12): ROUNDS al mejor
+  de 3** — vida ~24-28 por round, envido y una cadena de truco POR ROUND,
+  el estado muere con el round y solo la lectura persiste. Auditoría
+  contra la biblia hecha: las fallas vigiladas son Ley 7 (dispersión de
+  fuerza suave = techo del bluff), Ley 3 (robo 1 en observación) y Ley 13
+  (truco sobre derribado). Pendiente de implementación con su orden en
+  §12.
 
 ## Historial de pivots
 
