@@ -485,3 +485,10 @@ brecha 78.6%.
   con `st` null **se saltea el argumento** (null-condicional), así que el
   truco no se resolvía en NINGUNA corrida 1v1. Media sesión de conclusiones
   sobre datos con el truco apagado. Resultado en variable propia, siempre.
+
+> **Continuación (2026-07-25, más tarde):** el diagnóstico fino de "el
+> timing del canto no es habilidad" resultó ser ESTRUCTURAL — sin fold de
+> mano no hay bluff que cobre — y disparó una exploración en papel de
+> DUELO reestructurado en MANOS cortas con mazo compartido, estilo truco:
+> ver **[DUELO-MANOS.md](DUELO-MANOS.md)**. Nada de esta sección se
+> implementa distinto mientras esa exploración no cierre.
