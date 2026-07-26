@@ -1,11 +1,15 @@
-# DUELO EN MANOS — exploración en papel (2026-07-25, noche)
+# DUELO EN MANOS — exploración en papel (2026-07-25, noche) — **EN PAUSA**
 
-> **ESTO ES PAPEL. NO IMPLEMENTAR.** Decisión de método de Patricio: parar
-> de iterar código y diseñar como diseñadores — momento a momento, cuadro
-> a cuadro, fundando cada regla en por qué la hace el truco, por qué la
-> hace Yomi ([YOMI-BIBLE.md](YOMI-BIBLE.md)) y por qué la haríamos
-> nosotros. El DUELO actual ([DUELO.md](DUELO.md)) queda intacto y jugable
-> mientras esta exploración no cierre.
+> **PAUSADA esa misma noche.** Al verla desplegada, Patricio la frenó: la
+> reestructura en manos + mazo compartido enredaba el juego ("nos estamos
+> enredando en nosotros mismos"). **El juego es el DUELO simple de
+> [DUELO.md](DUELO.md)**: el triángulo con alturas + envido (información
+> y daño) + truco como multiplicador puro estilo póker, donde el no
+> quiero paga chico Y SE SIGUE JUGANDO — sin fold, sin manos, sin bazas.
+> Los principios del §1 (vida útil de la información, colisiones del
+> tanto, sin-fold-no-hay-bluff, reparto=dispersión) siguen siendo
+> aprendizajes válidos y quedan acá archivados por si esta puerta se
+> reabre.
 
 ## 0. Por qué existe esta exploración
 

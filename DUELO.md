@@ -486,9 +486,13 @@ brecha 78.6%.
   truco no se resolvía en NINGUNA corrida 1v1. Media sesión de conclusiones
   sobre datos con el truco apagado. Resultado en variable propia, siempre.
 
-> **Continuación (2026-07-25, más tarde):** el diagnóstico fino de "el
-> timing del canto no es habilidad" resultó ser ESTRUCTURAL — sin fold de
-> mano no hay bluff que cobre — y disparó una exploración en papel de
-> DUELO reestructurado en MANOS cortas con mazo compartido, estilo truco:
-> ver **[DUELO-MANOS.md](DUELO-MANOS.md)**. Nada de esta sección se
-> implementa distinto mientras esa exploración no cierre.
+> **Continuación (2026-07-25, más tarde):** el hallazgo de "el timing del
+> canto no es habilidad" disparó una exploración en papel de DUELO
+> reestructurado en manos cortas con mazo compartido
+> ([DUELO-MANOS.md](DUELO-MANOS.md)) que quedó **EN PAUSA la misma
+> noche**: al verla desplegada enredaba el juego. Veredicto de Patricio:
+> **esta sección tal como está ES el diseño** — el truco es un
+> multiplicador puro estilo póker, el no quiero paga chico y se sigue
+> jugando, el envido da información y daño. Lo que sigue del §11 es
+> pulir esto (respondedor adaptativo de la IA, la UI del canto), no
+> reestructurarlo.
