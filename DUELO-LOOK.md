@@ -28,7 +28,31 @@ Pendiente de la propuesta original, por orden de valor:
 2. **Outline** de los peleadores (inverted hull) — con el fondo oscuro se
    despegan bastante bien, así que bajó de prioridad.
 3. **Scanline** sobre el cromo y el glitch del SYNC.
-4. El **menú de modos**, que sigue con el panel gris translúcido sobre la foto.
+
+## El menú (2026-07-25, noche) — L-7
+
+Era la única pantalla que seguía con el look viejo, y es la primera que ve
+cualquiera: Arial, panel gris al 55% sobre una foto clara, y **cinco tarjetas
+idénticas en fila** — o sea que la portada decía "acá hay cinco juegos,
+elegí uno" cuando el diseño dice que DUELO ES el juego.
+
+- **Jerarquía**: DUELO es una tarjeta grande arriba con acento **dorado** (el
+  color de la ceremonia); los cuatro EXPERTO son chicos, abajo, bajo un
+  rótulo "MÁS MODOS · EXPERTO", y cada uno lleva su tag EXPERTO en la
+  tarjeta. Las flechas saltan de piso; el número sigue funcionando.
+- **La splash pasó de fondo a atmósfera**: la pared se adivina al 7% detrás
+  del negro en vez de pelear contra el texto. El título va escrito en la
+  pixel del juego, con la tesis abajo ("los dos tiran al mismo tiempo · el
+  juego decide después").
+- **Siluetas de personaje**: cada tarjeta de GRAVE / JAINA / GOLEM dibuja el
+  muñeco con **sus proporciones reales** (las mismas de `SetDuelBuild`).
+  "Bajo y ancho" se ve antes de empezar, no después de leer el panel.
+- **La línea de ACTION POINTS** (que es del modo clásico) dejó de estar en la
+  portada: aparece solo si estás mirando un EXPERTO.
+- Bugs de texto arreglados: "ELEGÍ RIVAL" salía "ELEGí RIVAL" (los títulos de
+  paso se mudaron a la condensada) y "ONLINE — CREAR SALA" **se desbordaba y
+  pisaba la tarjeta de al lado** (ahora ONLINE es un tag, y ningún rótulo
+  puede desbordar: se achica hasta entrar).
 
 ## Adaptación a los CANTOS y los ROUNDS (2026-07-25, noche)
 

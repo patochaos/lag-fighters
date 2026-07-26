@@ -85,9 +85,20 @@ namespace LagFighter
             return ui;
         }
 
+        // ---- el menú también es la SALA DE ESPERA (DUELO-LOOK.md) ----
+        // Era la única pantalla que seguía con el look viejo: panel gris al 55%
+        // sobre una foto clara, con Arial y cinco tarjetas iguales. Es lo
+        // primero que ve cualquiera que abre el juego.
+        readonly Image[] _cardAccent = new Image[6];
+        readonly Image[][] _cardBrackets = new Image[6][];
+        readonly Text[] _cardKey = new Text[6];
+        readonly Text[] _cardTag = new Text[6];
+        readonly GameObject[] _cardSil = new GameObject[6];
+        Text _title, _expertLbl;
+
         void Build(RectTransform canvasRt)
         {
-            _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            _font = UIFonts.Para;
 
             _root = new GameObject("Root", typeof(RectTransform), typeof(Image));
             var rootRt = _root.GetComponent<RectTransform>();
@@ -95,10 +106,12 @@ namespace LagFighter
             rootRt.anchorMin = Vector2.zero;
             rootRt.anchorMax = Vector2.one;
             rootRt.offsetMin = rootRt.offsetMax = Vector2.zero;
-            _root.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.65f);
+            _root.GetComponent<Image>().color = Duelo.Void;
             _root.GetComponent<Image>().raycastTarget = false;
 
-            // splash art de fondo (si está importada) + announcer
+            // La splash deja de ser FONDO y pasa a ser ATMÓSFERA: la pared
+            // apenas se adivina detrás del negro. Antes era una foto clara con
+            // la UI encima y no se leía nada.
             var splash = Resources.Load<Texture2D>("LagFighter/splash");
             if (splash != null)
             {
@@ -108,33 +121,28 @@ namespace LagFighter
                 bgRt.anchorMin = bgRt.anchorMax = new Vector2(0.5f, 0.5f);
                 var raw = bgGo.GetComponent<RawImage>();
                 raw.texture = splash;
+                // muy abajo a propósito: la pared se adivina, no se lee (y el
+                // logo de la foto no compite con el título de arriba)
+                raw.color = new Color(0.42f, 0.5f, 0.68f, 0.07f);
                 raw.raycastTarget = false;
                 var fitter = bgGo.GetComponent<AspectRatioFitter>();
                 fitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
                 fitter.aspectRatio = splash.width / (float)splash.height;
-                bgGo.transform.SetAsFirstSibling(); // detrás de todo lo demás… pero delante del velo oscuro
-                _root.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);
-            }
-            bool hasSplash = splash != null;
-            if (!hasSplash)
-            {
-                Txt(rootRt, "Title", "LAG FIGHTERS", new Vector2(0f, 230f), 78, Color.white, FontStyle.Bold);
-                Txt(rootRt, "Sub", "programá tu turno · ejecución simultánea · footsies puro", new Vector2(0f, 166f), 21, new Color(1f, 0.9f, 0.4f), FontStyle.Normal);
             }
 
-            // banda oscura detrás de la parte interactiva (la splash es clara)
-            var band = new GameObject("Band", typeof(RectTransform), typeof(Image));
-            var bandRt = band.GetComponent<RectTransform>();
-            bandRt.SetParent(rootRt, false);
-            bandRt.anchorMin = bandRt.anchorMax = new Vector2(0.5f, 0.5f);
-            bandRt.anchoredPosition = new Vector2(0f, -10f);
-            bandRt.sizeDelta = new Vector2(1280f, 500f); // 4 cartas en fila = 1200
+            _title = Txt(rootRt, "Title", "LAG FIGHTERS", new Vector2(0f, 372f), 54, Duelo.Paper, FontStyle.Normal);
+            _title.font = UIFonts.Pixel;
+            var sub = Txt(rootRt, "Sub", "los dos tiran al mismo tiempo · el juego decide después",
+                new Vector2(0f, 318f), 24, Duelo.Alpha(Duelo.Gold, 0.9f), FontStyle.Normal);
+            sub.font = UIFonts.Data;
 
-            band.GetComponent<Image>().color = new Color(0f, 0f, 0f, hasSplash ? 0.62f : 0.25f);
-            band.GetComponent<Image>().raycastTarget = false;
+            // en condensada y no en pixel: los títulos de paso llevan acentos
+            // ("ELEGÍ RIVAL", "¿CONTRA QUIÉN?") y la pixel los dibuja enanos
+            _stepTitle = Txt(rootRt, "Step", "", new Vector2(0f, 254f), 26, Duelo.Mute, FontStyle.Normal);
+            _stepTitle.font = UIFonts.Data;
 
-            _stepTitle = Txt(rootRt, "Step", "", new Vector2(0f, 175f), 16, new Color(1f, 1f, 1f, 0.85f), FontStyle.Normal);
-            _stepTitle.font = UIFonts.Pixel;
+            _expertLbl = Txt(rootRt, "Expert", "", new Vector2(0f, -46f), 17, Duelo.Alpha(Duelo.Mute, 0.75f), FontStyle.Normal);
+            _expertLbl.font = UIFonts.Data;
 
             // Perfil IA usa seis cartas en una grilla 3x2.
             _cards = new Image[6];
@@ -149,24 +157,99 @@ namespace LagFighter
                 _cards[i] = card.GetComponent<Image>();
                 _cards[i].raycastTarget = false;
 
-                var k = Txt(rt, "K", (i + 1).ToString(), new Vector2(-118f, 32f), 8, new Color(1f, 1f, 1f, 0.5f), FontStyle.Normal);
-                k.font = UIFonts.Pixel;
-                _cardLabels[i] = Txt(rt, "L", "", new Vector2(0f, 0f), 15, Color.white, FontStyle.Normal);
+                _cardAccent[i] = Img(rt, "Accent", new Vector2(0.5f, 1f), new Vector2(0f, -3f),
+                    new Vector2(300f, 6f), Duelo.Line);
+                _cardBrackets[i] = Brackets(rt, 300f, 110f, Duelo.Line);
+                _cardKey[i] = Txt(rt, "K", (i + 1).ToString(), new Vector2(0f, 0f), 12,
+                    Duelo.Alpha(Duelo.Mute, 0.85f), FontStyle.Normal);
+                _cardKey[i].font = UIFonts.Pixel;
+                _cardTag[i] = Txt(rt, "Tag", "", new Vector2(0f, 0f), 14, Duelo.Alpha(Duelo.Mute, 0.8f), FontStyle.Normal);
+                _cardTag[i].font = UIFonts.Data;
+                _cardLabels[i] = Txt(rt, "L", "", new Vector2(0f, 0f), 15, Duelo.Paper, FontStyle.Normal);
                 _cardLabels[i].font = UIFonts.Pixel;
+
+                var sil = new GameObject("Sil", typeof(RectTransform));
+                var srt = sil.GetComponent<RectTransform>();
+                srt.SetParent(rt, false);
+                srt.anchorMin = srt.anchorMax = new Vector2(0.5f, 0f);
+                // pivote ABAJO: sin esto el rect queda centrado en el ancla y
+                // los pies del muñeco se dibujan medio rect por debajo de la
+                // tarjeta (se veían las piernas colgando afuera)
+                srt.pivot = new Vector2(0.5f, 0f);
+                srt.anchoredPosition = new Vector2(0f, 22f);
+                srt.sizeDelta = new Vector2(160f, 200f);
+                _cardSil[i] = sil;
+                sil.SetActive(false);
             }
 
             // código de sala grande (escribirlo / mostrarlo mientras esperás)
-            _bigCode = Txt(rootRt, "BigCode", "", new Vector2(0f, 30f), 40, new Color(0.5f, 0.95f, 1f), FontStyle.Normal);
+            _bigCode = Txt(rootRt, "BigCode", "", new Vector2(0f, 30f), 56, Duelo.Vel, FontStyle.Normal);
             _bigCode.font = UIFonts.Pixel;
             _bigCode.gameObject.SetActive(false);
 
-            _desc = Txt(rootRt, "Desc", "", new Vector2(0f, -86f), 20, new Color(1f, 1f, 1f, 0.85f), FontStyle.Normal);
-            Txt(rootRt, "Help", "1-3 o flechas + Enter · click también funciona · ESC vuelve atrás · en partida: R reinicia, M vuelve acá",
-                new Vector2(0f, -210f), 16, new Color(1f, 1f, 1f, 0.5f), FontStyle.Normal);
+            _desc = Txt(rootRt, "Desc", "", new Vector2(0f, -86f), 22, Duelo.Alpha(Duelo.Paper, 0.92f), FontStyle.Normal);
+            _desc.rectTransform.sizeDelta = new Vector2(1180f, 90f);
+            _desc.horizontalOverflow = HorizontalWrapMode.Wrap;
+            var help = Txt(rootRt, "Help", "flechas + ENTER · o el número · click también · ESC vuelve · en partida: R revancha, M acá",
+                new Vector2(0f, -330f), 17, Duelo.Alpha(Duelo.Mute, 0.7f), FontStyle.Normal);
+            help.font = UIFonts.Data;
 
             // toggle experimental (tecla C): turno fluido = el último move
             // puede cruzar el límite del turno en vez de entrar completo
-            _carryLine = Txt(rootRt, "Carry", "", new Vector2(0f, -245f), 15, Color.white, FontStyle.Normal);
+            _carryLine = Txt(rootRt, "Carry", "", new Vector2(0f, -372f), 16, Duelo.Mute, FontStyle.Normal);
+            _carryLine.font = UIFonts.Data;
+        }
+
+        static Image Img(RectTransform parent, string name, Vector2 anchor, Vector2 pos, Vector2 size, Color c)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+            var rt = go.GetComponent<RectTransform>();
+            rt.SetParent(parent, false);
+            rt.anchorMin = rt.anchorMax = anchor;
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = size;
+            var img = go.GetComponent<Image>();
+            img.color = c;
+            img.raycastTarget = false;
+            return img;
+        }
+
+        // Los brackets de esquina del cromo, pero guardados para poder
+        // recolorearlos cuando la tarjeta se selecciona.
+        static Image[] Brackets(RectTransform parent, float w, float h, Color c)
+        {
+            var list = new Image[8];
+            const float len = 16f, th = 2f;
+            for (int s = 0; s < 4; s++)
+            {
+                float sx = (s & 1) == 0 ? -1f : 1f;
+                float sy = (s & 2) == 0 ? 1f : -1f;
+                var a = new Vector2(sx < 0 ? 0f : 1f, sy > 0 ? 1f : 0f);
+                list[s * 2] = Img(parent, "BrH" + s, a, new Vector2(sx * -len * 0.5f, sy * -th * 0.5f), new Vector2(len, th), c);
+                list[s * 2 + 1] = Img(parent, "BrV" + s, a, new Vector2(sx * -th * 0.5f, sy * -len * 0.5f), new Vector2(th, len), c);
+            }
+            return list;
+        }
+
+        // La silueta del personaje, con SUS proporciones: el Golem bajo y
+        // ancho, Jaina alta y flaca. Es la misma información que el rig
+        // procedural pone en el escenario, dicha antes de empezar.
+        void BuildSilhouette(int card, int charIdx, Color c)
+        {
+            var host = _cardSil[card];
+            for (int k = host.transform.childCount - 1; k >= 0; k--) Destroy(host.transform.GetChild(k).gameObject);
+            var rt = host.GetComponent<RectTransform>();
+            // (ancho, alto) relativos — los mismos números que SetDuelBuild
+            float bw = charIdx == DuelCatalog.GolemIdx ? 1.36f : charIdx == DuelCatalog.JainaIdx ? 0.80f : 1f;
+            float bh = charIdx == DuelCatalog.GolemIdx ? 0.81f : charIdx == DuelCatalog.JainaIdx ? 1.13f : 1f;
+            float u = 42f;   // unidad de dibujo
+            var dark = Duelo.Alpha(c, 0.72f);
+            Img(rt, "Head", new Vector2(0.5f, 0f), new Vector2(0f, u * 3.05f * bh), new Vector2(u * 0.62f * bw, u * 0.62f * bh), c);
+            Img(rt, "Torso", new Vector2(0.5f, 0f), new Vector2(0f, u * 2.05f * bh), new Vector2(u * 1.05f * bw, u * 1.35f * bh), c);
+            Img(rt, "LegL", new Vector2(0.5f, 0f), new Vector2(-u * 0.26f * bw, u * 0.7f * bh), new Vector2(u * 0.36f * bw, u * 1.45f * bh), dark);
+            Img(rt, "LegR", new Vector2(0.5f, 0f), new Vector2(u * 0.26f * bw, u * 0.7f * bh), new Vector2(u * 0.36f * bw, u * 1.45f * bh), dark);
+            Img(rt, "ArmL", new Vector2(0.5f, 0f), new Vector2(-u * 0.64f * bw, u * 2.2f * bh), new Vector2(u * 0.26f * bw, u * 1.05f * bh), dark);
+            Img(rt, "ArmR", new Vector2(0.5f, 0f), new Vector2(u * 0.64f * bw, u * 2.2f * bh), new Vector2(u * 0.26f * bw, u * 1.05f * bh), dark);
         }
 
         Text _carryLine;
@@ -226,11 +309,13 @@ namespace LagFighter
         };
 
         // DUELO: contra quién (paso 10, después de elegir personaje)
-        static readonly (string label, string desc)[] DuelDest =
+        // El rótulo largo ("ONLINE — CREAR SALA") no entraba en la tarjeta y se
+        // pisaba con la de al lado: la palabra ONLINE se mudó al tag.
+        static readonly (string label, string tag, string desc)[] DuelDest =
         {
-            ("VS IA", "Contra la máquina, ya mismo. Rounds al mejor de 3, envido y truco incluidos."),
-            ("ONLINE — CREAR SALA", "Sala con código de 4 letras: pasáselo a tu rival y esperá a que se una. Cada uno en su compu."),
-            ("ONLINE — UNIRSE", "Escribí el código que te pasaron. OJO: los dos tienen que entrar por DUELO (no por el ONLINE clásico)."),
+            ("VS IA", "", "Contra la máquina, ya mismo. Rounds al mejor de 3, envido y truco incluidos."),
+            ("CREAR SALA", "ONLINE", "Sala con código de 4 letras: pasáselo a tu rival y esperá a que se una. Cada uno en su compu."),
+            ("UNIRSE", "ONLINE", "Escribí el código que te pasaron. OJO: los dos tienen que entrar por DUELO (no por el ONLINE clásico)."),
         };
         int _duelCharChoice;
         bool _duelOnline;
@@ -282,7 +367,9 @@ namespace LagFighter
                               "ESPERANDO AL RIVAL…";
 
             _bigCode.gameObject.SetActive(_step >= 6);
-            if (_carryLine != null) _carryLine.gameObject.SetActive(_step <= 1); // solo mientras elegís lag/modo
+            // la línea de ACTION POINTS es del modo clásico: no tiene por qué
+            // estar en la portada. Aparece solo si estás mirando un EXPERTO.
+            if (_carryLine != null) _carryLine.gameObject.SetActive(_step == 1 && _sel != DueloIdx);
             if (_step == 6)
             {
                 _bigCode.text = _codeInput.PadRight(4, '_');
@@ -293,29 +380,84 @@ namespace LagFighter
                 _bigCode.text = NetLobby.I.Room;
                 _desc.text = "pasale este código a tu rival · la sala espera hasta que se una · Escape cancela";
             }
+            // JERARQUÍA (DUELO.md §5): DUELO es EL juego y el resto son modos
+            // EXPERTO. Hasta ahora eran cinco tarjetas idénticas en fila, o sea
+            // que la pantalla decía "acá hay cinco juegos, elegí uno".
+            bool modeStep = _step == 1;
+            bool chars = _step == 9;
+            _expertLbl.text = modeStep ? "MÁS MODOS  ·  EXPERTO" : "";
+
             float cardW = count >= 4 ? 300f : 330f;
             for (int i = 0; i < _cards.Length; i++)
             {
                 bool on = i < count;
                 _cards[i].gameObject.SetActive(on);
                 if (!on) continue;
-                bool grid = count > 4;
-                int col = grid ? i % 3 : i;
-                int row = grid ? i / 3 : 0;
-                float x = grid ? (col - 1) * cardW : (i - (count - 1) * 0.5f) * cardW;
-                float y = grid ? 55f - row * 115f : 10f;
-                _cards[i].rectTransform.sizeDelta = grid ? new Vector2(280f, 100f) : new Vector2(300f, 110f);
-                _cards[i].rectTransform.anchoredPosition = new Vector2(x, y);
-                _cardLabels[i].text = _step == 1 ? Modes[i].label :
+
+                Vector2 size, pos;
+                if (modeStep && i == DueloIdx)          { size = new Vector2(760f, 188f); pos = new Vector2(0f, 118f); }
+                else if (modeStep)                      { size = new Vector2(272f, 104f); pos = new Vector2((i - 1 - (count - 2) * 0.5f) * 286f, -124f); }
+                else if (chars)                         { size = new Vector2(300f, 260f); pos = new Vector2((i - (count - 1) * 0.5f) * 320f, 46f); }
+                else if (count > 4)                     { size = new Vector2(280f, 100f); pos = new Vector2(((i % 3) - 1) * cardW, 55f - (i / 3) * 115f); }
+                else                                    { size = new Vector2(330f, 118f); pos = new Vector2((i - (count - 1) * 0.5f) * 344f, 30f); }
+
+                var rt = _cards[i].rectTransform;
+                rt.sizeDelta = size;
+                rt.anchoredPosition = pos;
+                _cardAccent[i].rectTransform.sizeDelta = new Vector2(size.x, 6f);
+                LayoutBrackets(i, size);
+
+                bool big = modeStep && i == DueloIdx;
+                _cardLabels[i].text = modeStep ? Modes[i].label :
                     _step == 3 ? AIProfiles[i].label :
                     _step == 5 ? OnlineOptions[i].label :
                     _step == 8 ? CardChars[i].label :
-                    _step == 9 ? DuelChars[i].label :
+                    chars ? DuelChars[i].label :
                     _step == 10 ? DuelDest[i].label : AIDifficulties[i].label;
-                _cardLabels[i].fontSize = count >= 4 ? 16 : 24;
+                _cardLabels[i].fontSize = big ? 40 : chars ? 22 : count >= 4 ? 16 : 22;
+                _cardLabels[i].rectTransform.anchoredPosition =
+                    new Vector2(0f, big ? 34f : chars ? 96f : 0f);
+
+                // ningún rótulo puede desbordar su tarjeta: se achica hasta
+                // entrar (así fue como "ONLINE — CREAR SALA" terminó pisando a
+                // la tarjeta de al lado)
+                _cardLabels[i].resizeTextForBestFit = true;
+                _cardLabels[i].resizeTextMinSize = 10;
+                _cardLabels[i].resizeTextMaxSize = _cardLabels[i].fontSize;
+                _cardLabels[i].rectTransform.sizeDelta = new Vector2(size.x - 26f, big ? 56f : 34f);
+
+                // el rótulo EXPERTO vive en la tarjeta, no en la descripción
+                _cardTag[i].text = big ? "el juego"
+                    : modeStep && i != DueloIdx ? "EXPERTO"
+                    : _step == 10 ? DuelDest[i].tag : "";
+                _cardTag[i].rectTransform.anchoredPosition = new Vector2(0f, big ? -18f : chars ? -34f : -32f);
+                _cardTag[i].fontSize = big ? 22 : 13;
+
+                _cardKey[i].text = (i + 1).ToString();
+                _cardKey[i].rectTransform.anchoredPosition = new Vector2(size.x * 0.5f - 18f, size.y * 0.5f - 16f);
+
+                bool sil = chars;
+                if (_cardSil[i].activeSelf != sil) _cardSil[i].SetActive(sil);
+                if (sil) BuildSilhouette(i, i, Duelo.P1);
             }
-            _desc.rectTransform.anchoredPosition = new Vector2(0f, count > 4 ? -145f : -86f);
+            _desc.rectTransform.anchoredPosition = new Vector2(0f, modeStep ? -228f : count > 4 ? -145f : chars ? -166f : -110f);
             if (count > 0) Highlight(_sel);
+        }
+
+        void LayoutBrackets(int card, Vector2 size)
+        {
+            var b = _cardBrackets[card];
+            const float len = 16f, th = 2f;
+            for (int s = 0; s < 4; s++)
+            {
+                float sx = (s & 1) == 0 ? -1f : 1f;
+                float sy = (s & 2) == 0 ? 1f : -1f;
+                var a = new Vector2(sx < 0 ? 0f : 1f, sy > 0 ? 1f : 0f);
+                b[s * 2].rectTransform.anchorMin = b[s * 2].rectTransform.anchorMax = a;
+                b[s * 2].rectTransform.anchoredPosition = new Vector2(sx * -len * 0.5f, sy * -th * 0.5f);
+                b[s * 2 + 1].rectTransform.anchorMin = b[s * 2 + 1].rectTransform.anchorMax = a;
+                b[s * 2 + 1].rectTransform.anchoredPosition = new Vector2(sx * -th * 0.5f, sy * -len * 0.5f);
+            }
         }
 
         void Highlight(int idx)
@@ -323,10 +465,20 @@ namespace LagFighter
             _sel = Mathf.Clamp(idx, 0, OptionCount - 1);
             for (int i = 0; i < OptionCount; i++)
             {
-                _cards[i].color = i == _sel
-                    ? new Color(0.25f, 0.42f, 0.62f, 0.98f)
-                    : new Color(0.12f, 0.13f, 0.17f, 0.9f);
+                bool sel = i == _sel;
+                // DUELO se acentúa en DORADO (es la ceremonia, el juego); el
+                // resto en el celeste del lado propio. Sin seleccionar, la
+                // tarjeta es cromo puro y no compite.
+                var acc = _step == 1 && i == DueloIdx ? Duelo.Gold : Duelo.P1;
+                _cards[i].color = sel ? Duelo.Stage : Duelo.Panel;
+                _cardAccent[i].color = sel ? acc : Duelo.Line;
+                _cardLabels[i].color = sel ? Duelo.Paper : Duelo.Alpha(Duelo.Paper, 0.62f);
+                _cardTag[i].color = sel ? Duelo.Alpha(acc, 0.9f) : Duelo.Alpha(Duelo.Mute, 0.7f);
+                var bc = sel ? Duelo.Alpha(acc, 0.9f) : Duelo.Alpha(Duelo.Line, 0.8f);
+                foreach (var b in _cardBrackets[i]) b.color = bc;
+                _cards[i].rectTransform.localScale = Vector3.one * (sel ? 1.03f : 1f);
             }
+            if (_carryLine != null) _carryLine.gameObject.SetActive(_step == 1 && _sel != DueloIdx);
             _desc.text = _step == 1 ? Modes[_sel].desc :
                 _step == 3 ? AIProfiles[_sel].desc :
                 _step == 5 ? OnlineOptions[_sel].desc :
@@ -552,10 +704,23 @@ namespace LagFighter
                 }
             }
 
-            if (GameInput.LeftPressed()) { Highlight(_sel - 1); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
-            if (GameInput.RightPressed()) { Highlight(_sel + 1); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
-            if (OptionCount > 4 && GameInput.UpPressed()) { Highlight(_sel - 3); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
-            if (OptionCount > 4 && GameInput.DownPressed()) { Highlight(_sel + 3); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
+            // En el paso 1 la grilla es en DOS pisos (DUELO arriba solo, los
+            // EXPERTO abajo en fila), así que arriba/abajo saltan de piso y
+            // izquierda/derecha se mueven dentro del de abajo.
+            if (_step == 1)
+            {
+                if (GameInput.UpPressed() && _sel != DueloIdx) { Highlight(DueloIdx); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
+                if (GameInput.DownPressed() && _sel == DueloIdx) { Highlight(1); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
+                if (GameInput.LeftPressed()) { Highlight(_sel <= 1 ? DueloIdx : _sel - 1); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
+                if (GameInput.RightPressed()) { Highlight(_sel == DueloIdx ? 1 : _sel + 1); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
+            }
+            else
+            {
+                if (GameInput.LeftPressed()) { Highlight(_sel - 1); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
+                if (GameInput.RightPressed()) { Highlight(_sel + 1); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
+                if (OptionCount > 4 && GameInput.UpPressed()) { Highlight(_sel - 3); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
+                if (OptionCount > 4 && GameInput.DownPressed()) { Highlight(_sel + 3); SfxLib.Play(SfxLib.Kind.UiTick, 0.3f); }
+            }
             int n = GameInput.NumberPressed();
             if (n >= 1 && n <= OptionCount) { Confirm(n - 1); return; }
             if (GameInput.ConfirmPressed()) Confirm(_sel);
