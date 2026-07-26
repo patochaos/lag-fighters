@@ -297,6 +297,7 @@ namespace LagFighter
         public int BrujoSide = -1;           // quién declaró el brujo
         public int UpsetSide = -1;           // quién declaró EL PERDEDOR
         public int OracleSide = -1;          // quién usó LA LECHUZA (el rival jugó boca arriba)
+        public bool PowersCanceled;          // dos poderes IGUALES declarados: se anularon
         public bool RoundEnd;                // terminó un round este turno
         public int RoundWinner = -1;         // quién lo ganó (-1 = doble KO parejo)
         public bool KdNext0, KdNext1;
@@ -678,14 +679,23 @@ namespace LagFighter
             _r.Card1 = TakeCard(1, handIdx1);
 
             // ---- poderes declarados para este turno ----
+            // Regla del ESPEJO (2026-07-26): dos poderes IGUALES el mismo
+            // turno se ANULAN — como los dos Perdedores. Dos Lechuzas no ven
+            // nada (¿quién comprometería primero?), dos Brujos cruzan dos
+            // veces (= nada). Los usos quedan gastados igual: cantaste el
+            // poder, pagaste el poder. Solo pasa en el mirror match.
+            _r.PowersCanceled =
+                (OracleNow[0] && OracleNow[1]) ||
+                (SorcererNow[0] && SorcererNow[1]) ||
+                (UpsetNow[0] && UpsetNow[1]);
             // Oracle (LA LECHUZA) no toca la resolución: es puro flujo de
             // información (el rival eligió boca arriba) — vive afuera, acá
             // solo queda registrado para la UI/stats.
-            if (OracleNow[0] || OracleNow[1]) _r.OracleSide = OracleNow[0] ? 0 : 1;
+            if (OracleNow[0] ^ OracleNow[1]) _r.OracleSide = OracleNow[0] ? 0 : 1;
             // Sorcerer (EL BRUJO): las cartas se CRUZAN. El ESCAPE no se
             // embruja (quemarle la válvula al rival sería sacarle una
             // mecánica — regla de diseño), y sin dos cartas no hay cruce.
-            bool sorc = SorcererNow[0] || SorcererNow[1];
+            bool sorc = SorcererNow[0] ^ SorcererNow[1];
             bool escInvolved =
                 (_r.Card0 >= 0 && Def(0, _r.Card0).Kind == DuelKind.Escape) ||
                 (_r.Card1 >= 0 && Def(1, _r.Card1).Kind == DuelKind.Escape);
@@ -698,7 +708,7 @@ namespace LagFighter
             }
             // Loser (EL PERDEDOR): dos declaraciones se anulan (muy Cosmic).
             _upsetTurn = UpsetNow[0] ^ UpsetNow[1];
-            if (UpsetNow[0] || UpsetNow[1]) _r.UpsetSide = UpsetNow[0] ? 0 : 1;
+            if (_upsetTurn) _r.UpsetSide = UpsetNow[0] ? 0 : 1;
             OracleNow[0] = OracleNow[1] = false;
             SorcererNow[0] = SorcererNow[1] = false;
             UpsetNow[0] = UpsetNow[1] = false;

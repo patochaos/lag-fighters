@@ -390,6 +390,8 @@ namespace LagFighter
             if (_upset >= 0) note = "LOSER (EL PERDEDOR): este turno el que pierde, GANA";
             if (_oracle >= 0) note += (note.Length > 0 ? "\n" : "") +
                 (_oracle == 0 ? "ORACLE (LA LECHUZA): el rival jugó A LA VISTA" : "ORACLE (LA LECHUZA): tu carta estuvo A LA VISTA");
+            if (r.PowersCanceled) note += (note.Length > 0 ? "\n" : "") +
+                "PODERES ESPEJADOS: los dos cantaron lo mismo — se anulan";
             _powerNote.text = note;
 
             _phase = Phase.Deal;
@@ -473,6 +475,8 @@ namespace LagFighter
             }
             if (r.OracleSide >= 0)
                 _detailTxt += r.OracleSide == 0 ? "  ·  jugó a la vista (Oracle)" : "  ·  jugaste a la vista (Oracle)";
+            if (r.PowersCanceled)
+                _detailTxt += "  ·  poderes espejados: se anularon";
         }
 
         void ComputeVerdictCore(DuelTurnResult r)

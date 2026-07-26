@@ -104,8 +104,8 @@ namespace LagFighter
         bool _dnCantoEnvido;
         int _dnCantoLevel;
         int _dnLastCaller;             // frame local: 0 = el último nivel lo canté yo
-        int _dnMyCard = -1, _dnTheirCard = -1;
-        bool _dnMyCardSent;
+        int _dnMyCard = -1, _dnTheirCard = -1;   // −1 con carta recibida = mano vacía ("C-")
+        bool _dnMyCardSent, _dnTheirCardIn;
         bool _dnWaitRemoteChoice;
         bool _duelCombatOn;
         float _duelBeat;                       // reloj de los tres tiempos
@@ -1219,9 +1219,30 @@ namespace LagFighter
                 _dnMyDecl = _dnTheirDecl = ' ';
                 _dnProvisional = -1;
                 _dnMyCard = _dnTheirCard = -1;
+                _dnTheirCardIn = false;
                 _dnMyCardSent = false;
                 _dnWaitRemoteChoice = false;
-                _duelCanto.ShowOffers(Duel.CanEnvido, Duel.CanTruco);
+                if (Duel.Hand[0].Count == 0)
+                {
+                    // SIN CARTAS no hay nada que declarar ni elegir: pasás
+                    // solo y te comés lo que venga (la sim ya lo banca) —
+                    // sin esto el turno quedaba mudo para siempre
+                    _dnMyDecl = 'N';
+                    DnSend("DN");
+                    _hud.SetPrompt("SIN CARTAS — te comés lo que venga…");
+                    DnTryDeclare();
+                }
+                else
+                {
+                    _duelCanto.ShowOffers(Duel.CanEnvido, Duel.CanTruco);
+                    DuelShowPowerOffer();
+                }
+            }
+            else if (Duel.Hand[0].Count == 0)
+            {
+                // SIN CARTAS local: mismo trato, sin fase de cantos
+                _hud.SetPrompt($"ROUND {Duel.Round} · TURNO {TurnNumber} — SIN CARTAS: te comés lo que venga");
+                DuelResolveNow(-1);
             }
             else DuelCantoPhase();
         }
@@ -1358,11 +1379,15 @@ namespace LagFighter
         {
             string kd = Duel.KnockedDown[0] ? "  ·  ESTÁS DERRIBADO: tu guardia no bloquea"
                 : Duel.KnockedDown[1] ? "  ·  RIVAL DERRIBADO: su guardia no bloquea" : "";
-            // los poderes DECLARADOS cambian cómo conviene elegir: al prompt
+            // los poderes DECLARADOS cambian cómo conviene elegir: al prompt.
+            // Se ACUMULAN (Perdedor + Lechuza pueden convivir); los espejos
+            // (dos iguales) se anulan y el prompt lo dice.
             string pw = "";
-            if (Duel.UpsetNow[0] || Duel.UpsetNow[1]) pw = "  ·  ¡SE DA VUELTA: el que pierde, GANA!";
-            else if (Duel.OracleNow[1]) pw = "  ·  LA LECHUZA TE VE: tu carta se juega BOCA ARRIBA";
-            else if (Duel.OracleNow[0]) pw = "  ·  su carta está A LA VISTA →";
+            if (Duel.UpsetNow[0] && Duel.UpsetNow[1]) pw += "  ·  DOS PERDEDORES: se anulan";
+            else if (Duel.UpsetNow[0] || Duel.UpsetNow[1]) pw += "  ·  ¡SE DA VUELTA: el que pierde, GANA!";
+            if (Duel.OracleNow[0] && Duel.OracleNow[1]) pw += "  ·  DOS LECHUZAS: nadie ve nada";
+            else if (Duel.OracleNow[1]) pw += "  ·  LA LECHUZA TE VE: tu carta se juega BOCA ARRIBA";
+            else if (Duel.OracleNow[0]) pw += "  ·  su carta está A LA VISTA →";
             _hud.SetPrompt($"ROUND {Duel.Round} · TURNO {TurnNumber} — elegí tu carta{kd}{pw}");
         }
 
@@ -1378,7 +1403,11 @@ namespace LagFighter
         //    primero y su carta se ve.
         // 3. POST-CARTA: el Brujo se declara DESPUÉS de comprometer tu carta
         //    — el rival ya jugó y se entera recién en el reveal (fase CROSS).
-        // Online los poderes no viajan todavía: el botón no aparece.
+        // ONLINE (2026-07-26): el poder pre-carta viaja como mensaje 'W'
+        // ANTES de tu declaración de canto — el orden del stream garantiza
+        // que el rival lo sepa antes de comprometer carta (la garantía de
+        // reacción de la fase 1). El cruce del Brujo viaja pegado a la carta
+        // ("C3S"): la sim rival lo aplica ya, la UI lo canta en el reveal.
 
         int _duelOraclePeekAi = -1;   // la carta que la IA comprometió cuando usaste ORACLE
 
@@ -1397,16 +1426,19 @@ namespace LagFighter
         // El botón de poder, con su estado y su MOTIVO cuando no se puede.
         void DuelShowPowerOffer()
         {
-            if (DuelNet) { _duelCanto.HidePowerOffer(); return; }
             var p = Duel.Power[0];
             if (p == DuelPower.None) { _duelCanto.HidePowerOffer(); return; }
             bool armed = Duel.OracleNow[0] || Duel.SorcererNow[0] || Duel.UpsetNow[0];
             bool pre = DuelPowerInfo.PrePick(p);
-            bool clickable = pre && Duel.CanUsePower(0);
+            // online el poder pre-carta va DENTRO de tu declaración: antes de
+            // cantar o de jugar carta, así el rival SIEMPRE elige sabiendo
+            bool declared = DuelNet && (_dn != DnPhase.Declare || _dnMyDecl != ' ');
+            bool clickable = pre && Duel.CanUsePower(0) && !declared;
             string nota =
                 armed ? "¡EN JUEGO este turno!" :
                 Duel.PowerUses[0] <= 0 ? (DuelConfig.PowerPerMatch(p) ? "GASTADO — era 1 por partida" : "gastado — vuelve el round que viene") :
                 !pre ? "se ofrece al ELEGIR tu carta" :
+                declared ? "ya declaraste — queda para el turno que viene" :
                 DuelConfig.PowerPerMatch(p) ? "1 por PARTIDA — elegí el momento" : "1 por round";
             _duelCanto.ShowPowerOffer(DuelPowerInfo.Nombre(p), DuelPowerInfo.Efecto(p), clickable, nota);
         }
@@ -1415,10 +1447,13 @@ namespace LagFighter
         // ofrece en su fase, después de elegir la carta).
         public void DuelUsePowerClicked()
         {
-            if (!SimConfig.DuelEnabled || State != Flow.Planning || _duelCombatOn || Duel == null || DuelNet) return;
+            if (!SimConfig.DuelEnabled || State != Flow.Planning || _duelCombatOn || Duel == null) return;
             if (_duelCanto.ModalOpen) return;
             var p = Duel.Power[0];
-            if (p == DuelPower.None || !DuelPowerInfo.PrePick(p) || !Duel.CanUsePower(0))
+            bool ok = p != DuelPower.None && DuelPowerInfo.PrePick(p) && Duel.CanUsePower(0);
+            // online: solo mientras no declaraste (el poder viaja ANTES que tu canto)
+            if (DuelNet) ok = ok && _dn == DnPhase.Declare && _dnMyDecl == ' ';
+            if (!ok)
             {
                 SfxLib.Play(SfxLib.Kind.UiCancel, 0.4f);
                 return;
@@ -1427,12 +1462,24 @@ namespace LagFighter
             DuelCantoPoses(cantor: 0);
             DuelReturnPoses(2.0f);
             _duelCanto.Banner($"USÁS {DuelPowerInfo.Nombre(p)}", Duelo.Gold);
-            if (p == DuelPower.Oracle)
+            if (DuelNet)
             {
-                // LA LECHUZA: la IA queda comprometida YA — y su carta, a la vista
-                _duelOraclePeekAi = _ai.PickDuelCard(Duel, 1);
-                if (_duelOraclePeekAi >= 0 && _duelOraclePeekAi < Duel.Hand[1].Count)
-                    _duelHud.ShowPeek(Duel.Def(1, Duel.Hand[1][_duelOraclePeekAi]));
+                DnSend("W");
+            }
+            else if (p == DuelPower.Oracle)
+            {
+                if (Duel.OracleNow[1])
+                {
+                    // la IA también declaró su Lechuza: espejo — nadie ve nada
+                    _duelCanto.Banner("DOS LECHUZAS — se anulan: nadie ve nada", Duelo.Mute);
+                }
+                else
+                {
+                    // LA LECHUZA: la IA queda comprometida YA — y su carta, a la vista
+                    _duelOraclePeekAi = _ai.PickDuelCard(Duel, 1);
+                    if (_duelOraclePeekAi >= 0 && _duelOraclePeekAi < Duel.Hand[1].Count)
+                        _duelHud.ShowPeek(Duel.Def(1, Duel.Hand[1][_duelOraclePeekAi]));
+                }
             }
             DuelShowPowerOffer();
             UpdateDuelPrompt();
@@ -1471,6 +1518,7 @@ namespace LagFighter
                 _dnMyDecl = 'E';
                 DnSend("DE");
                 _duelCanto.HideOffers();
+                DuelShowPowerOffer();
                 _hud.SetPrompt("cantaste ¡ENVIDO! — esperando al rival…");
                 DnTryDeclare();
                 return;
@@ -1489,6 +1537,7 @@ namespace LagFighter
                 _dnMyDecl = 'T';
                 DnSend("DT");
                 _duelCanto.HideOffers();
+                DuelShowPowerOffer();
                 _hud.SetPrompt("cantaste ¡TRUCO! — esperando al rival…");
                 DnTryDeclare();
                 return;
@@ -1678,6 +1727,23 @@ namespace LagFighter
                     DnTryDeclare();
                     return true;
 
+                // el PODER pre-carta del rival: siempre viaja ANTES de su
+                // declaración de canto, así que llega mientras sigo en
+                // DECLARO — me entero antes de comprometer carta (fase 1)
+                case 'W':
+                    if (_dn != DnPhase.Declare) return false;
+                    if (Duel.UsePower(1))
+                    {
+                        _dnProvisional = -1;   // con un poder en la mesa, la carta se re-elige
+                        DuelCantoPoses(cantor: 1);
+                        DuelReturnPoses(2.0f);
+                        _duelCanto.Banner($"{Duel.Chr[1].Name} USA {DuelPowerInfo.Nombre(Duel.Power[1])}", Duelo.Golpe);
+                        DuelShowPowerOffer();
+                        if (_dnMyDecl == ' ') UpdateDuelPrompt();   // seguís declarando, con la info nueva
+                        else _hud.SetPrompt("esperando al rival…");
+                    }
+                    return true;
+
                 case 'R':
                     if (_dn != DnPhase.Canto || _dnLastCaller != 0) return false;
                     if (m.Length > 1 && m[1] == 'S' && _dnCantoLevel < DuelConfig.TrucoMaxLevel)
@@ -1692,8 +1758,24 @@ namespace LagFighter
 
                 case 'C':
                     if (_dn != DnPhase.Card) return false;
-                    if (_dnTheirCard >= 0) return true;   // duplicado
-                    _dnTheirCard = int.Parse(m.Substring(1));
+                    if (_dnTheirCardIn) return true;   // duplicado
+                    {
+                        // sufijo 'S': el Brujo rival CRUZÓ — la sim lo sabe ya,
+                        // la UI recién lo canta en el reveal (fase CROSS).
+                        // "C-" = mano vacía: juega "nada" y come lo que venga.
+                        bool crossed = m[m.Length - 1] == 'S';
+                        string idx = crossed ? m.Substring(1, m.Length - 2) : m.Substring(1);
+                        _dnTheirCard = idx == "-" ? -1 : int.Parse(idx);
+                        _dnTheirCardIn = true;
+                        if (crossed) Duel.UsePower(1);
+                        // tu LECHUZA ve: su carta llega BOCA ARRIBA y elegís viendo
+                        if (Duel.OracleNow[0] && !Duel.OracleNow[1] && !_dnMyCardSent &&
+                            _dnTheirCard >= 0 && _dnTheirCard < Duel.Hand[1].Count)
+                        {
+                            _duelHud.ShowPeek(Duel.Def(1, Duel.Hand[1][_dnTheirCard]));
+                            _hud.SetPrompt("su carta está A LA VISTA → elegí la tuya viendo");
+                        }
+                    }
                     DnTryCards();
                     return true;
 
@@ -1802,18 +1884,44 @@ namespace LagFighter
         {
             _dn = DnPhase.Card;
             _duelCanto.HideOffers();
+            DuelShowPowerOffer();
             UpdateDuelPrompt();
-            if (_dnProvisional >= 0) DnSendCard(_dnProvisional);
+            // sin cartas: jugás "nada" directo, no hay pick que esperar
+            if (Duel.Hand[0].Count == 0) { DnSendCard(-1); return; }
+            // tu LECHUZA ve: el rival compromete primero y su carta viaja
+            // boca arriba — acá solo se espera (el peek llega con su 'C')
+            if (Duel.OracleNow[0] && !Duel.OracleNow[1] && !_dnTheirCardIn)
+            {
+                _hud.SetPrompt("LA LECHUZA VE — esperando la carta del rival…");
+                return;
+            }
+            if (_dnProvisional >= 0) DnCommitCard(_dnProvisional);
             else DnTryCards();
         }
 
-        void DnSendCard(int idx)
+        // El pick online, con la fase POST-CARTA del Brujo adentro: tu carta
+        // ya está comprometida cuando se ofrece el cruce (mismo timing que
+        // contra la IA) y el rival se entera recién en el reveal.
+        void DnCommitCard(int idx)
+        {
+            if (_dnMyCardSent || idx < 0 || idx >= Duel.Hand[0].Count) return;
+            if (DuelSorcererOfferable(idx))
+            {
+                DuelOfferSorcerer(cross => DnSendCard(idx, cross));
+                return;
+            }
+            DnSendCard(idx);
+        }
+
+        void DnSendCard(int idx, bool crossed = false)
         {
             if (_dnMyCardSent) return;
-            if (idx < 0 || idx >= Duel.Hand[0].Count) { _dnProvisional = -1; return; }
+            // idx −1 solo con la mano vacía: viaja como "C-"
+            if (idx < 0 ? Duel.Hand[0].Count > 0 : idx >= Duel.Hand[0].Count) { _dnProvisional = -1; return; }
             _dnMyCard = idx;
             _dnMyCardSent = true;
-            DnSend($"C{idx}");
+            DnSend(idx < 0 ? "C-" : crossed ? $"C{idx}S" : $"C{idx}");
+            _duelCanto.HidePowerOffer();
             _duelHand.SetDimmed(true);
             _hud.SetPrompt("carta jugada — esperando la del rival…");
             DnTryCards();
@@ -1821,7 +1929,7 @@ namespace LagFighter
 
         void DnTryCards()
         {
-            if (_dn != DnPhase.Card || !_dnMyCardSent || _dnTheirCard < 0) return;
+            if (_dn != DnPhase.Card || !_dnMyCardSent || !_dnTheirCardIn) return;
             _duelHand.SetDimmed(false);
             for (int i = 0; i < 2; i++) _duelHpBefore[i] = Duel.Hp[i];
             _duelResult = Duel.Resolve(_dnMyCard, _dnTheirCard);
@@ -1854,61 +1962,84 @@ namespace LagFighter
             if (DuelNet)
             {
                 // en DECLARO, elegir carta declara "paso, no canto" (y la
-                // carta queda provisoria: si el rival cantó, se re-elige)
+                // carta queda provisoria: si el rival cantó o declaró un
+                // poder, se re-elige). Con TU Lechuza armada la carta se
+                // elige DESPUÉS de ver: este click solo declara el paso.
                 if (_dn == DnPhase.Declare && _dnMyDecl == ' ')
                 {
                     _dnMyDecl = 'N';
-                    _dnProvisional = handIdx;
+                    _dnProvisional = Duel.OracleNow[0] && !Duel.OracleNow[1] ? -1 : handIdx;
                     DnSend("DN");
                     _duelCanto.HideOffers();
+                    DuelShowPowerOffer();
                     _hud.SetPrompt("esperando al rival…");
                     DnTryDeclare();
                     return;
                 }
-                if (_dn == DnPhase.Card) DnSendCard(handIdx);
+                if (_dn == DnPhase.Card) DnCommitCard(handIdx);
                 return;
             }
             // ---- FASE POST-CARTA: el Brujo cruza DESPUÉS de comprometer ----
             // Tu carta ya está elegida; el rival no se entera hasta el reveal.
-            if (Duel.Power[0] == DuelPower.Sorcerer && Duel.CanUsePower(0))
+            if (DuelSorcererOfferable(handIdx))
             {
                 int chosen = handIdx;
-                _duelHand.SetDimmed(true);
-                _duelCanto.ShowModal("SORCERER (EL BRUJO) — ¿CRUZÁS LAS CARTAS?",
-                    "Tu carta ya está jugada. Si cruzás, cada uno EJECUTA la carta del otro — el rival " +
-                    "se entera recién en la revelación. El escape no se embruja y las guardias cruzadas no vuelven a la mano.",
-                    new[] { "¡CRUZAR!", "JUGAR LIMPIO" }, Duelo.Gold, pick =>
-                    {
-                        _duelHand.SetDimmed(false);
-                        if (pick == 0)
-                        {
-                            Duel.UsePower(0);
-                            DuelCantoPoses(cantor: 0);
-                        }
-                        DuelResolveNow(chosen);
-                    });
+                DuelOfferSorcerer(_ => DuelResolveNow(chosen));
                 return;
             }
             DuelResolveNow(handIdx);
+        }
+
+        // El cruce se ofrece si el Brujo está cargado, TU carta no es el
+        // ESCAPE y el rival tiene con qué cruzar (sin dos cartas no hay
+        // cruce): en esos casos era tirar el poder a la basura garantizado.
+        // Si el escape lo juega el RIVAL, en cambio, esa es la apuesta del
+        // poder y se pierde con honor.
+        bool DuelSorcererOfferable(int handIdx) =>
+            Duel.Power[0] == DuelPower.Sorcerer && Duel.CanUsePower(0) &&
+            Duel.Hand[1].Count > 0 &&
+            Duel.Def(0, Duel.Hand[0][handIdx]).Kind != DuelKind.Escape;
+
+        // El modal ¿CRUZÁS? — mismo teatro contra la IA y online. `then`
+        // recibe si cruzó; si cruzó, el poder ya quedó declarado en la sim.
+        void DuelOfferSorcerer(System.Action<bool> then)
+        {
+            _duelHand.SetDimmed(true);
+            _duelCanto.ShowModal("SORCERER (EL BRUJO) — ¿CRUZÁS LAS CARTAS?",
+                "Tu carta ya está jugada. Si cruzás, cada uno EJECUTA la carta del otro — el rival se " +
+                "entera recién en la revelación. Las guardias cruzadas no vuelven a la mano, y si el rival juega su ESCAPE el cruce se pierde.",
+                new[] { "¡CRUZAR!", "JUGAR LIMPIO" }, Duelo.Gold, pick =>
+                {
+                    _duelHand.SetDimmed(false);
+                    bool cross = pick == 0 && Duel.UsePower(0);
+                    if (cross)
+                    {
+                        DuelCantoPoses(cantor: 0);
+                        DuelReturnPoses(2.0f);
+                    }
+                    then(cross);
+                });
         }
 
         // Cierra la elección: poderes post-carta de la IA, el pick de la IA
         // (viendo la carta del humano si hay ORACLE de por medio) y la tabla.
         void DuelResolveNow(int handIdx)
         {
-            if (handIdx < 0 || handIdx >= Duel.Hand[0].Count) return;
+            // handIdx −1 solo con la mano vacía: jugás "nada" y comés lo que venga
+            if (handIdx < 0 ? Duel.Hand[0].Count > 0 : handIdx >= Duel.Hand[0].Count) return;
             _duelCanto.HideOffers();
             _duelCanto.HidePowerOffer();
             _duelHud.HidePeek();
             for (int i = 0; i < 2; i++) _duelHpBefore[i] = Duel.Hp[i];
             // el Brujo IA también declara en su fase: con su carta ya decidida
             // en la cabeza y sin que el humano se entere hasta el reveal
-            if (Duel.Power[1] == DuelPower.Sorcerer && Duel.CanUsePower(1) && _ai.WantsDuelPower(Duel, 1))
+            // (nunca contra una mano vacía: sin dos cartas no hay cruce)
+            if (Duel.Power[1] == DuelPower.Sorcerer && Duel.CanUsePower(1) && handIdx >= 0 && _ai.WantsDuelPower(Duel, 1))
                 Duel.UsePower(1);
             int aiIdx;
             if (_duelOraclePeekAi >= 0) aiIdx = _duelOraclePeekAi;   // usaste ORACLE: ya estaba comprometida
-            else if (Duel.OracleNow[1]) aiIdx = _ai.PickDuelCounter(Duel, 1, Duel.Hand[0][handIdx]);  // te vio
-            else aiIdx = _ai.PickDuelCard(Duel, 1);
+            else if (Duel.OracleNow[1] && !Duel.OracleNow[0] && handIdx >= 0) aiIdx = _ai.PickDuelCounter(Duel, 1, Duel.Hand[0][handIdx]);  // te vio
+            else aiIdx = _ai.PickDuelCard(Duel, 1);   // (dos Lechuzas se anulan: pick ciego)
             _duelOraclePeekAi = -1;
             _duelResult = Duel.Resolve(handIdx, aiIdx);
             _duelCombatOn = true;

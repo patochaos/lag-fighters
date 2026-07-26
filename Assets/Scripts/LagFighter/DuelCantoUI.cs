@@ -267,9 +267,12 @@ namespace LagFighter
                 else if (d.TrucoChainUsed) s += "   ·   truco gastado este round";
                 if (d.PublicTantoSide >= 0)
                     s += $"   ·   {(d.PublicTantoSide == 0 ? "CANTASTE" : "TE CANTÓ")} {d.PublicTanto}";
-                // poderes DECLARADOS este turno: lo más importante de la línea
-                if (d.UpsetNow[0] || d.UpsetNow[1]) { s += "   ·   ¡LA MANO SE DA VUELTA!"; hot = true; }
-                if (d.OracleNow[1]) { s += "   ·   LA LECHUZA TE VE"; hot = true; }
+                // poderes DECLARADOS este turno: lo más importante de la
+                // línea. Los espejos (dos iguales) se anulan y se dice.
+                if (d.UpsetNow[0] && d.UpsetNow[1]) { s += "   ·   DOS PERDEDORES: se anulan"; hot = true; }
+                else if (d.UpsetNow[0] || d.UpsetNow[1]) { s += "   ·   ¡LA MANO SE DA VUELTA!"; hot = true; }
+                if (d.OracleNow[0] && d.OracleNow[1]) { s += "   ·   DOS LECHUZAS: nadie ve nada"; hot = true; }
+                else if (d.OracleNow[1]) { s += "   ·   LA LECHUZA TE VE"; hot = true; }
                 else if (d.OracleNow[0]) { s += "   ·   el rival juega A LA VISTA"; hot = true; }
                 _status.text = s;
                 _status.color = hot ? Duelo.Gold : Duelo.Mute;

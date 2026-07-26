@@ -125,6 +125,7 @@ class Tests
         DueloPoderLoserDaVueltaLaCarrera();
         DueloPoderBrujoCruzaLasCartas();
         DueloPoderBrujoNoEmbrujaElEscape();
+        DueloPoderesEspejadosSeAnulan();
         DueloPoderesRecargaPorPoder();
         DueloRosterCriolloConPoderes();
         DueloEscapeCongelaElTurno();
@@ -1709,6 +1710,43 @@ class Tests
             $"swapped {r.Swapped}, escaped {r.Escaped1}");
     }
 
+    // La regla del ESPEJO (2026-07-26): dos poderes IGUALES el mismo turno
+    // se ANULAN (muy Cosmic) — dos Lechuzas no ven nada (¿quién compromete
+    // primero?), dos Brujos cruzan dos veces (= nada), dos Perdedores dan
+    // vuelta la vuelta. Los usos se gastan igual. Sin esta regla el mirror
+    // match colgaba el lockstep online (los dos esperando ver primero).
+    static void DueloPoderesEspejadosSeAnulan()
+    {
+        // dos Brujos cruzan: el cruce doble deja las cartas donde estaban
+        var d = NewDueloPoder(DuelPower.Sorcerer, DuelPower.Sorcerer);
+        d.UsePower(0); d.UsePower(1);
+        Mano(d, 0, DuelCatalog.GuardHigh);
+        Mano(d, 1, DuelCatalog.AttackC);   // golpe ALTO: la guardia propia acierta
+        var r = d.Resolve(0, 0);
+        bool brujos = !r.Swapped && r.PowersCanceled && r.Guarded0 && r.Returned0 &&
+                      d.Hp[0] == DuelConfig.MaxHp;
+
+        // dos Lechuzas: nadie ve nada (OracleSide queda vacío para la UI)
+        var d2 = NewDueloPoder(DuelPower.Oracle, DuelPower.Oracle);
+        d2.UsePower(0); d2.UsePower(1);
+        Mano(d2, 0, DuelCatalog.AttackA);
+        Mano(d2, 1, DuelCatalog.GuardHigh);
+        var r2 = d2.Resolve(0, 0);
+        bool lechuzas = r2.OracleSide < 0 && r2.PowersCanceled;
+
+        // dos Perdedores ya se anulaban: la carrera se corre derecha
+        var d3 = NewDueloPoder(DuelPower.Loser, DuelPower.Loser);
+        d3.UsePower(0); d3.UsePower(1);
+        Mano(d3, 0, DuelCatalog.AttackA);   // vel 8 gana normal
+        Mano(d3, 1, DuelCatalog.AttackD);   // vel 4
+        var r3 = d3.Resolve(0, 0);
+        bool perdedores = r3.UpsetSide < 0 && r3.PowersCanceled && r3.Winner == 0;
+
+        Check(brujos && lechuzas && perdedores,
+            "duelo: PODERES espejados — dos iguales el mismo turno se ANULAN",
+            $"brujos {brujos} (swap {r.Swapped}), lechuzas {lechuzas} (oracle {r2.OracleSide}), perdedores {perdedores} (upset {r3.UpsetSide}, w {r3.Winner})");
+    }
+
     // La recarga es POR PODER (medida en `duelopoderes`): la Lechuza es
     // 1×PARTIDA (a 1×round ganaba 69.9% — información pura escala con los
     // usos), Brujo y Perdedor recargan por round.
@@ -2192,6 +2230,7 @@ class Tests
             host.Round == guest.Round &&
             host.RoundWins[0] == guest.RoundWins[1] && host.RoundWins[1] == guest.RoundWins[0] &&
             host.KnockedDown[0] == guest.KnockedDown[1] && host.KnockedDown[1] == guest.KnockedDown[0] &&
+            host.PowerUses[0] == guest.PowerUses[1] && host.PowerUses[1] == guest.PowerUses[0] &&
             host.TrucoLevel == guest.TrucoLevel &&
             (host.PublicTantoSide < 0 ? guest.PublicTantoSide < 0 : host.PublicTantoSide == 1 - guest.PublicTantoSide) &&
             ListEq(host.Hand[0], guest.Hand[1]) && ListEq(host.Hand[1], guest.Hand[0]) &&
@@ -2221,6 +2260,7 @@ class Tests
         }
 
         bool ok = Mirror();
+        bool powersOk = true;
         int turn = 0;
         while (!host.Over && ok && turn++ < 60)
         {
@@ -2238,6 +2278,11 @@ class Tests
                 host.ResolveTruco(1, 2, quiero: true);
                 guest.ResolveTruco(0, 2, quiero: true);
             }
+            // los PODERES también viajan (mensaje 'W' / sufijo S del online):
+            // A declara su Lechuza el turno 3, B cruza con el Brujo el 5 y el
+            // 9 (recargado si hubo round nuevo — el fallo también es espejado)
+            if (turn == 3) powersOk &= host.UsePower(0) == guest.UsePower(1);
+            if (turn == 5 || turn == 9) powersOk &= host.UsePower(1) == guest.UsePower(0);
             if (host.Over) { ok = Mirror() && guest.Over; break; }
             int cardA = host.Hand[0].Count > 0 ? rngA.Next(host.Hand[0].Count) : -1;
             int cardB = host.Hand[1].Count > 0 ? rngB.Next(host.Hand[1].Count) : -1;
@@ -2247,10 +2292,10 @@ class Tests
             Choice(guest, 1);
             ok = Mirror() && host.Over == guest.Over;
         }
-        Check(ok && host.Over && guest.Over &&
+        Check(ok && powersOk && host.Over && guest.Over &&
               (host.Winner < 0 ? guest.Winner < 0 : host.Winner == 1 - guest.Winner),
-            "duelo: las sims ESPEJADAS del online quedan en lockstep exacto",
-            $"ok {ok}, turnos {turn}, winners {host.Winner}/{guest.Winner}");
+            "duelo: las sims ESPEJADAS del online quedan en lockstep exacto (poderes incluidos)",
+            $"ok {ok}, poderes {powersOk}, turnos {turn}, winners {host.Winner}/{guest.Winner}");
     }
 
     static string DueloFirma(int seed)

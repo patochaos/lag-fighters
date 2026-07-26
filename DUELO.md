@@ -852,8 +852,40 @@ salvo la vida del Lobizón), nombres nuevos + el poder de cada uno:
   ARRIBA y se enderezan mientras se canta el veredicto ("¡DADA VUELTA!").
 - El veredicto siempre canta el poder que tocó el turno; los banners de
   declaración usan las poses de canto del teatro (Canta/Aguanta).
-- **Online: los poderes no viajan todavía** — el botón no aparece en
-  DuelNet (agregar la fase al protocolo cuando el modo esté aprobado).
+
+### Poderes ONLINE + regla del espejo (2026-07-26, tarde)
+
+- **Regla del ESPEJO** (nueva, en la sim): dos poderes IGUALES declarados
+  el mismo turno se ANULAN — como ya pasaba con dos Perdedores, ahora
+  también dos Lechuzas (nadie ve nada) y dos Brujos (cruzar dos veces =
+  nada). Los usos se gastan igual: *cantaste el poder, pagaste el poder.*
+  Solo aparece en el mirror match, pero sin ella el doble Oracle era un
+  **deadlock literal** del online (los dos esperando ver primero) y el
+  doble Brujo cruzaba una vez acreditándosela al lado 0. La UI lo canta
+  en prompt, línea de estado y veredicto ("PODERES ESPEJADOS: se anulan").
+- **Protocolo** (lockstep espejado, `DnApply`): el poder pre-carta viaja
+  como mensaje **`W`**, enviado SIEMPRE ANTES de tu declaración de canto
+  (`D…`) — el orden del stream por seq garantiza que el rival lo procese
+  antes de comprometer carta: la garantía de reacción de la fase 1 no
+  depende de la suerte de la red. Declarar un poder (propio o rival)
+  invalida la carta provisoria: se re-elige con la información nueva.
+- **Oracle online**: el que VE espera; el VISTO compromete primero y su
+  carta viaja boca arriba (el peek "A LA VISTA" aparece al recibir su
+  `C`). Con tu Lechuza armada, el click de carta en DECLARO solo declara
+  el paso — la carta real se elige después de ver.
+- **Sorcerer online**: el cruce viaja pegado a la carta (**`C3S`**): la
+  sim rival lo aplica al recibirlo pero la UI recién lo canta en la fase
+  CROSS del reveal, como pide el timing post-carta.
+- El botón de poder online solo está vivo mientras NO declaraste
+  (después queda gris con el motivo "ya declaraste — queda para el turno
+  que viene"): el poder va DENTRO de tu declaración.
+- **Mano vacía** (fix de la misma pasada): la sim siempre bancó
+  `Resolve(-1, …)` ("sin cartas se come el golpe") pero la UI no tenía
+  cómo pasar sin carta que clickear — colgaba local Y online. Ahora el
+  turno se juega solo ("SIN CARTAS — te comés lo que venga"); online
+  viaja como **`C-`**. Y el cruce del Brujo no se ofrece cuando no hay
+  dos cartas en juego (tu escape o una mano vacía): era tirar el poder
+  a la basura garantizado.
 
 ### Cola anotada de poderes (del saqueo de los 148 aliens de CE)
 
