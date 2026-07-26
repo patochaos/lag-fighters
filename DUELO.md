@@ -377,8 +377,13 @@ igual que en el truco de verdad.
   "neutral" del fighting, que es el rol que el envido tiene en el truco:
   antes de la primera carta). Primera sangre = ventana cerrada. Una vez
   por partida.
-- **El tanto**: la suma de daño de **tus dos golpes de la MISMA altura**
-  (el palo ES la altura). Con un solo golpe, ese daño; sin golpes, 0.
+- **El tanto**: la suma de VELOCIDAD de **tus dos golpes de la MISMA
+  altura** (el palo ES la altura). Con un solo golpe, esa velocidad; sin
+  golpes, 0. *(Era daño; Patricio lo cambió a velocidad el 2026-07-26
+  jugándolo: como rápido=débil, ganar el envido NO te hace favorito del
+  combate — igual que el 33 del truco real, que no son las cartas que
+  ganan la mano. Desacopla las dos apuestas y mata la bola de nieve. La
+  siembra MEJORÓ: +10.7 pp.)*
 - **QUIERO** → se comparan los tantos en secreto y el juego anuncia:
   el ganador cobra **3 de chip** y su tanto se hace PÚBLICO (número
   verificado por el juego, no declarable en falso); del perdedor solo se
@@ -622,10 +627,30 @@ falta, no un lujo.**
 - Ritmo: 14.3 turnos y 2.6 rounds por partida, KO 100%, cantos en el
   17.7% de los turnos, 1.45 envidos/partida. envido→round 59% (pesa sin
   definir, con chip 4). Personajes 52.2 / 49.5 / 48.3.
-- **El escenario Ley 3 de Patricio, adoptado con datos**: robo por
-  defender 2 (truco ×2 = roba 4) midió mejor que robo 1 en las tres
-  columnas de canto. La mano suelta (Ley 7) se descartó con datos:
+- **El escenario Ley 3, adoptado con datos… y REVERTIDO jugando**
+  (2026-07-26, más tarde): robo 2 midió mejor en el lab, pero Patricio
+  lo probó en vivo y defender se SIENTE OP — robo por defender vuelve
+  a **1** (con truco: 2 · retruco 3 · vale cuatro 4, sus números
+  originales). Lección de método: el lab es IA vs IA y acota por abajo;
+  cuando el humano juega, su sensación manda sobre el barrido. El
+  balance no se movió (52/48/50, siembra +8.4 pp intacta). Anotado
+  además del playtest: el "pegar gratis" que se sintió fuerte era el
+  castigo de la Espada de Jaina (fiel al Unsafe on Block de Yomi 2);
+  si la defensa sigue rindiendo mucho, los diales Sirlin pendientes
+  son chip en las firmas (la Flame Arrow real pega 5 de chip) y
+  recién después el Lockdown. La mano suelta (Ley 7) sigue descartada:
   +0.8 pp de canto a cambio de −2.5 de brecha.
+- **El tanto pasó a VELOCIDAD** (mismo playtest): con daño, el ganador
+  del envido tenía además las mejores cartas — apuestas acopladas, bola
+  de nieve. Con velocidad se desacoplan (rápido=débil) y como
+  rápido=BAJO, el tanto grande filtra "tiene los bajitos" — con la Y de
+  Jaina (vel 11, ALTA) como la mentirosa del sistema. Medido: siembra
+  58.9% vs 48.2% (**+10.7 pp**, el mejor número del proyecto), envido en
+  el 70% de las partidas, tanto ganador promedio 17. A VIGILAR: Grave
+  subió a 53.0 (su X vel 10 lo hace favorito del envido) — si en vivo
+  se nota, el dial es el umbral de canto de la IA o el chip.
+  La colisión "engineered" del 10 por daño quedó obsoleta: con
+  velocidad las colisiones salen solas en la franja 13-15.
 - Rebalances de la escala nueva: Golem **+8→+4** de vida (por round, +8
   era +31% y lo mandaba a 63%), envido **6→4** (proporcional a vida 26).
 - **Flag Ley 12 pendiente**: el premio quedó 83/17 (+DAÑO domina — el

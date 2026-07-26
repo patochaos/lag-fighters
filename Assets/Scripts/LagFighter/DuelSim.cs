@@ -7,7 +7,7 @@ namespace LagFighter
     // Ver DUELO.md. El juego entero en 7 reglas: carta secreta simultánea,
     // GOLPE > AGARRE > GUARDIA > GOLPE, la velocidad desempata golpes (empate
     // = trade), cada golpe es ALTO o BAJO y cada guardia cubre UNA altura, el
-    // ganador elige +DAÑO o DERRIBO, defender roba 2 y la guardia vuelve a la
+    // ganador elige +DAÑO o DERRIBO, defender roba 1 y la guardia vuelve a la
     // mano, robás 1 por turno con mano máxima 8 y el mazo se remezcla UNA vez.
     //
     // Diferencias deliberadas con CardSim (la copia de Yomi 2): sin turno
@@ -180,9 +180,10 @@ namespace LagFighter
         public static int HandLimit = 8;
         public static int DrawPerTurn = 1;   // ambos roban TODOS los turnos (no hay turno activo)
         public static int OpeningRandom = 2; // + guardia alta, baja, agarre y escape garantizados
-        public static int GuardDraw = 2;     // cartas que roba el que defiende BIEN (Ley 2: la defensa paga en economía).
-                                             // 1→2 (2026-07-26): el escenario de Patricio "bloquear roba 2, el truco
-                                             // daría 4" midió mejor que robo 1 en info y valor del canto (duelotune).
+        public static int GuardDraw = 1;     // cartas que roba el que defiende BIEN (Ley 2: la defensa paga en economía).
+                                             // 2→1 (2026-07-26, jugado por Patricio): con 2 defender se SIENTE OP —
+                                             // el lab decía lo contrario (duelotune), pero el lab es IA vs IA y la
+                                             // mano del humano manda. Con truco: roba 2 · retruco 3 · vale cuatro 4.
         public static int HardTurnCap = 40;  // red de seguridad; el mazo suele cerrar antes
 
         // ---- LOS CANTOS (DUELO.md §11) ----
@@ -427,10 +428,14 @@ namespace LagFighter
 
         // ---- los cantos (DUELO.md §11) ----
 
-        // El TANTO: tus dos golpes de la MISMA altura suman su daño (el palo
-        // ES la altura). Con un solo golpe, ese daño; sin golpes, 0. Por la
-        // correlación rápido=BAJO/lento=ALTO, un tanto pesado FILTRA que la
-        // mano tiene los ALTOS — la declaración siembra la lectura.
+        // El TANTO: tus dos golpes de la MISMA altura suman su VELOCIDAD (el
+        // palo ES la altura). Con un solo golpe, esa velocidad; sin golpes, 0.
+        // Por qué velocidad y no daño (Patricio, 2026-07-26): rápido=débil,
+        // así que el que gana el envido NO es el favorito del combate — como
+        // en el truco real, donde el 33 no son las cartas que ganan la mano.
+        // Desacopla las dos apuestas y mata la bola de nieve. Y como
+        // rápido=BAJO, un tanto grande filtra "tiene los bajitos" (con la Y
+        // de Jaina, vel 11 y ALTA, como la mentirosa del sistema).
         public int Tanto(int side)
         {
             int bestPair = 0, bestSingle = 0;
@@ -441,9 +446,9 @@ namespace LagFighter
                 {
                     var d = Def(side, c);
                     if (d.Kind != DuelKind.Strike || (int)d.Height != h) continue;
-                    if (d.Damage >= a) { b = a; a = d.Damage; }
-                    else if (d.Damage > b) b = d.Damage;
-                    if (d.Damage > bestSingle) bestSingle = d.Damage;
+                    if (d.Speed >= a) { b = a; a = d.Speed; }
+                    else if (d.Speed > b) b = d.Speed;
+                    if (d.Speed > bestSingle) bestSingle = d.Speed;
                 }
                 if (b > 0 && a + b > bestPair) bestPair = a + b;
             }

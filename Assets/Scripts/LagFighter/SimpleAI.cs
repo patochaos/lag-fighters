@@ -620,15 +620,16 @@ namespace LagFighter
             {
                 if (gHigh < 0) return gLow;
                 if (gLow < 0) return gHigh;
-                // LA SIEMBRA DEL ENVIDO (Ley 5): el tanto público del ganador
-                // filtra su mano — ≥11 solo lo arman pares ALTOS, ≤9 solo
-                // bajos, y el 10 es EL número acertijo por diseño (X+X y K+K
-                // bajos = C+C alto): ahí no hay señal. Envejece a medida que
-                // el rival gasta.
+                // LA SIEMBRA DEL ENVIDO (Ley 5): el tanto público suma
+                // VELOCIDADES, y rápido=BAJO — un tanto grande (≥16) dice
+                // "tiene los bajitos", uno chico (≤12) "anda con los altos
+                // lentos". El 13-15 es el acertijo, y la Y de Jaina (vel 11
+                // ALTA) es la mentirosa que rompe la regla. Envejece a medida
+                // que el rival gasta.
                 if (ReadsHabits && s.PublicTantoSide == opp)
                 {
-                    if (s.PublicTanto >= 11 && _rng.NextDouble() < 0.65) return gHigh;
-                    if (s.PublicTanto <= 9 && s.PublicTanto > 0 && _rng.NextDouble() < 0.65) return gLow;
+                    if (s.PublicTanto >= 16 && _rng.NextDouble() < 0.65) return gLow;
+                    if (s.PublicTanto <= 12 && s.PublicTanto > 0 && _rng.NextDouble() < 0.65) return gHigh;
                 }
                 int skew = HeightSkew();
                 if (skew > 0) return gHigh;
@@ -795,13 +796,13 @@ namespace LagFighter
         public bool CantaEnvido(DuelSim s, int me)
         {
             if (!s.CanEnvido) return false;
-            int t = s.Tanto(me);
-            if (t >= 10) return true;                          // el par pesado canta por valor
-            return t >= 7 && _rng.NextDouble() < 0.15;         // el bluff barato, de vez en cuando
+            int t = s.Tanto(me);                               // tanto = VELOCIDADES del par
+            if (t >= 16) return true;                          // el par ligero canta por valor
+            return t >= 13 && _rng.NextDouble() < 0.15;        // el bluff barato, de vez en cuando
         }
 
         public bool QuiereEnvido(DuelSim s, int me)
-            => s.Tanto(me) >= 8 || _rng.NextDouble() < 0.20;
+            => s.Tanto(me) >= 14 || _rng.NextDouble() < 0.20;
 
         // La confianza en ganar el próximo intercambio, de lo PÚBLICO:
         // derribo (su guardia no bloquea), guardias agotadas en el descarte,

@@ -98,10 +98,11 @@ namespace LagFighter
                         : "Le gana a la GUARDIA (cualquier altura) y pierde con cualquier golpe. " +
                           "Contra otro agarre gana el más rápido; si empatan, se sueltan.";
                 case DuelKind.Guard:
+                    // el número sale del config: si el lab lo mueve, la carta no miente
                     return d.Height == DuelHeight.High
-                        ? "Para los golpes ALTOS: no comés nada, robás 2 cartas y la guardia vuelve a tu mano. " +
+                        ? $"Para los golpes ALTOS: no comés nada, robás {DuelConfig.GuardDraw} carta y la guardia vuelve a tu mano. " +
                           "Los golpes BAJOS te entran enteros, y el agarre te rompe la guardia."
-                        : "Para los golpes BAJOS: no comés nada, robás 2 cartas y la guardia vuelve a tu mano. " +
+                        : $"Para los golpes BAJOS: no comés nada, robás {DuelConfig.GuardDraw} carta y la guardia vuelve a tu mano. " +
                           "Los golpes ALTOS te entran enteros, y el agarre te rompe la guardia.";
                 case DuelKind.Escape:
                     return "No pasa nada este turno: ni pegás ni te pegan. Es la salida cuando estás " +

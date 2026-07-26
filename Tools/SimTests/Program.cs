@@ -1828,26 +1828,28 @@ class Tests
 
     static void DueloTantoEsElParDeLaMismaAltura()
     {
+        // El tanto suma VELOCIDADES (rápido=débil: ganar el envido no te
+        // hace favorito del combate — como el 33 del truco real).
         var d = NewDuelo();
-        Mano(d, 0, DuelCatalog.AttackC, DuelCatalog.AttackD, DuelCatalog.AttackA); // altos 5+7, bajo 3
-        Mano(d, 1, DuelCatalog.AttackA, DuelCatalog.AttackB);                      // bajos 3+4
+        Mano(d, 0, DuelCatalog.AttackC, DuelCatalog.AttackD, DuelCatalog.AttackA); // altos 6+4, bajo suelto 8
+        Mano(d, 1, DuelCatalog.AttackA, DuelCatalog.AttackB);                      // bajos 8+7
         int t0 = d.Tanto(0), t1 = d.Tanto(1);
-        Mano(d, 0, DuelCatalog.AttackD);                                           // un solo golpe
+        Mano(d, 0, DuelCatalog.AttackD);                                           // un solo golpe (vel 4)
         Mano(d, 1, DuelCatalog.Throw, DuelCatalog.GuardHigh);                      // sin golpes (el agarre no cuenta)
-        Check(t0 == 12 && t1 == 7 && d.Tanto(0) == 7 && d.Tanto(1) == 0,
-            "duelo: el tanto son los dos golpes de la MISMA altura (el palo es la altura)",
+        Check(t0 == 10 && t1 == 15 && d.Tanto(0) == 4 && d.Tanto(1) == 0,
+            "duelo: el tanto son las VELOCIDADES del par de la misma altura",
             $"par alto {t0}, par bajo {t1}, single {d.Tanto(0)}, sin golpes {d.Tanto(1)}");
     }
 
     static void DueloEnvidoQueridoCobraYPublicaElTanto()
     {
         var d = NewDuelo();
-        Mano(d, 0, DuelCatalog.AttackC, DuelCatalog.AttackD);   // tanto 12
-        Mano(d, 1, DuelCatalog.AttackA, DuelCatalog.AttackB);   // tanto 7
+        Mano(d, 0, DuelCatalog.AttackA, DuelCatalog.AttackB);   // tanto 15 (bajos ligeros)
+        Mano(d, 1, DuelCatalog.AttackC, DuelCatalog.AttackD);   // tanto 10 (altos lentos)
         var er = d.ResolveEnvido(1, quiero: true);              // el 1 canta de bluff y pierde
         Check(er.Winner == 0 && er.Chip == DuelConfig.EnvidoChip &&
               d.Hp[1] == DuelConfig.MaxHp - DuelConfig.EnvidoChip && d.Hp[0] == DuelConfig.MaxHp &&
-              d.PublicTanto == 12 && d.PublicTantoSide == 0 && d.EnvidoUsed && !d.CanEnvido,
+              d.PublicTanto == 15 && d.PublicTantoSide == 0 && d.EnvidoUsed && !d.CanEnvido,
             "duelo: envido querido — el tanto mayor cobra y queda CANTADO (público)",
             $"winner {er.Winner}, hp1 {d.Hp[1]}, público {d.PublicTanto}/{d.PublicTantoSide}");
     }
@@ -1881,10 +1883,10 @@ class Tests
     static void DueloEnvidoEmpateNoCobraNiPublica()
     {
         var d = NewDuelo();
-        Mano(d, 0, DuelCatalog.AttackA, DuelCatalog.AttackB);   // 7
-        Mano(d, 1, DuelCatalog.AttackA, DuelCatalog.AttackB);   // 7
+        Mano(d, 0, DuelCatalog.AttackA, DuelCatalog.AttackB);   // 15
+        Mano(d, 1, DuelCatalog.AttackA, DuelCatalog.AttackB);   // 15
         var er = d.ResolveEnvido(0, quiero: true);
-        Check(er.Winner == -1 && er.Tanto0 == 7 && er.Tanto1 == 7 && er.Chip == 0 &&
+        Check(er.Winner == -1 && er.Tanto0 == 15 && er.Tanto1 == 15 && er.Chip == 0 &&
               d.Hp[0] == DuelConfig.MaxHp && d.Hp[1] == DuelConfig.MaxHp &&
               d.PublicTanto == -1 && d.EnvidoUsed,
             "duelo: envido empatado — nadie cobra, nada se publica, el canto se gastó",

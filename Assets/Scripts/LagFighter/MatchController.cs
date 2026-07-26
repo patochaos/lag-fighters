@@ -1366,7 +1366,7 @@ namespace LagFighter
                 _duelHand.SetDimmed(true);
                 DuelCantoPoses(cantor: 1);
                 _duelCanto.ShowModal($"{Duel.Chr[1].Name} CANTA ¡ENVIDO!",
-                    "El mejor par de golpes de la MISMA altura suma su daño. El que gana pega " +
+                    "El mejor par de golpes de la MISMA altura suma su VELOCIDAD. El que gana pega " +
                     $"{DuelConfig.EnvidoChip} y CANTA su número; el que pierde no muestra nada.",
                     new[] { "QUIERO", $"NO QUIERO  −{DuelConfig.EnvidoFoldChip}" }, Duelo.Gold, pick =>
                     {
@@ -1672,7 +1672,7 @@ namespace LagFighter
             if (_dnCantoEnvido)
             {
                 _duelCanto.ShowModal($"{Duel.Chr[1].Name} CANTA ¡ENVIDO!",
-                    "El mejor par de golpes de la MISMA altura suma su daño. El que gana pega " +
+                    "El mejor par de golpes de la MISMA altura suma su VELOCIDAD. El que gana pega " +
                     $"{DuelConfig.EnvidoChip} y CANTA su número; el que pierde no muestra nada.",
                     new[] { "QUIERO", $"NO QUIERO  −{DuelConfig.EnvidoFoldChip}" }, Duelo.Gold, pick =>
                     {
