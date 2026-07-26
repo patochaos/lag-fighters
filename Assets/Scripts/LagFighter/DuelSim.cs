@@ -308,9 +308,17 @@ namespace LagFighter
         public DuelCard Def(int side, int card) => Chr[side].Cards[card];
         public int MaxHpOf(int side) => DuelConfig.MaxHp + Chr[side].HpBonus;
 
-        public DuelSim(int seed, int char0 = DuelCatalog.GraveIdx, int char1 = DuelCatalog.GraveIdx)
+        // ONLINE (lockstep ESPEJADO): cada cliente construye la sim con él
+        // mismo como lado 0, y los streams de RNG viajan con el JUGADOR
+        // (streamTag = 0 para el host, 1 para el invitado), no con el índice
+        // local. Como toda la resolución de DuelSim es simétrica por lado,
+        // las dos sims espejadas barajan idéntico y quedan en lockstep sin
+        // tocar una línea de la UI (que asume "vos = lado 0").
+        public DuelSim(int seed, int char0 = DuelCatalog.GraveIdx, int char1 = DuelCatalog.GraveIdx,
+            int streamTag0 = 0, int streamTag1 = 1)
         {
-            for (int s = 0; s < 2; s++) _rng[s] = Mix((uint)seed * 0x9E3779B9u + (uint)(s + 1) * 0x85EBCA6Bu);
+            _rng[0] = Mix((uint)seed * 0x9E3779B9u + (uint)(streamTag0 + 1) * 0x85EBCA6Bu);
+            _rng[1] = Mix((uint)seed * 0x9E3779B9u + (uint)(streamTag1 + 1) * 0x85EBCA6Bu);
             CharIdx[0] = char0; CharIdx[1] = char1;
             for (int s = 0; s < 2; s++)
             {

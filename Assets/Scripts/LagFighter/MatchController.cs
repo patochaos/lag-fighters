@@ -86,6 +86,27 @@ namespace LagFighter
         // de un canto) y hacer la ceremonia
         int _duelRoundSeen = 1;
         readonly int[] _duelRoundWinsSeen = new int[2];
+
+        // ---- DUELO ONLINE (lockstep espejado sobre NetLobby) ----
+        // Cada mensaje viaja en el FRAME LOCAL del que lo manda ("yo" = 0);
+        // el que recibe lo aplica al lado 1. Mensajes por turno:
+        //   H{char} (hola) · D{N|E|T} (declaro canto o paso) ·
+        //   R{Q|N|S} (quiero/no quiero/subo) · C{idx} (mi carta) ·
+        //   PK / PD{idx} (premio) · U{idx} / U- (castigo)
+        public bool DuelNet => SimConfig.DuelEnabled && Mode == GameMode.Online;
+        enum DnPhase { Off, Hello, Declare, Canto, Card, Choice }
+        DnPhase _dn = DnPhase.Off;
+        int _dnMySeq, _dnTheirSeq;
+        readonly System.Collections.Generic.Queue<string> _dnQueue = new System.Collections.Generic.Queue<string>();
+        bool _dnPumping;
+        char _dnMyDecl = ' ', _dnTheirDecl = ' ';
+        int _dnProvisional = -1;
+        bool _dnCantoEnvido;
+        int _dnCantoLevel;
+        int _dnLastCaller;             // frame local: 0 = el último nivel lo canté yo
+        int _dnMyCard = -1, _dnTheirCard = -1;
+        bool _dnMyCardSent;
+        bool _dnWaitRemoteChoice;
         bool _duelCombatOn;
         float _duelBeat;                       // reloj de los tres tiempos
         int _duelStage;                        // 0 coil · 1 impacto · 2 consecuencia · 3 leer
@@ -367,7 +388,23 @@ namespace LagFighter
             }
             if (SimConfig.DuelEnabled)
             {
-                Duel = new DuelSim(seed: _seed++, _duelPlayerChar, _duelAiChar);
+                if (DuelNet)
+                {
+                    // la sim se crea al llegar el HELLO del rival (con su
+                    // personaje); mientras tanto, la pantalla espera
+                    Duel = null;
+                    _dn = DnPhase.Hello;
+                    _dnMySeq = _dnTheirSeq = 0;
+                    _dnQueue.Clear();
+                    _dnPumping = false;   // el poll viejo murió con Generation al salir de la sala anterior
+                    NetLobby.I.PushTurn(_dnMySeq++, LocalSide, $"H{_duelPlayerChar}");
+                    DnPump();
+                }
+                else
+                {
+                    Duel = new DuelSim(seed: _seed++, _duelPlayerChar, _duelAiChar);
+                    _dn = DnPhase.Off;
+                }
                 _duelRoundSeen = 1;
                 _duelRoundWinsSeen[0] = _duelRoundWinsSeen[1] = 0;
                 _duelCanto.HideOffers();
@@ -1147,6 +1184,14 @@ namespace LagFighter
 
         void StartDuelPlanning()
         {
+            if (DuelNet && Duel == null)
+            {
+                // el HELLO del rival todavía no llegó: DnApply arranca esto
+                // de nuevo cuando la sim exista
+                State = Flow.Planning;
+                _hud.SetPrompt($"ONLINE — sala {NetLobby.I.Room} · esperando al rival…");
+                return;
+            }
             TurnNumber++;
             for (int i = 0; i < 2; i++)
             {
@@ -1164,7 +1209,19 @@ namespace LagFighter
             if (SimConfig.DuelTheaterEnabled) PoseDuelPlanning();
             _duelHand.Open(DuelHandUI.Mode.Pick);
             UpdateDuelPrompt();
-            DuelCantoPhase();
+            if (DuelNet)
+            {
+                // online no hay IA que cante: cada turno arranca en DECLARO —
+                // cantás con los botones o jugás carta (que declara "paso")
+                _dn = DnPhase.Declare;
+                _dnMyDecl = _dnTheirDecl = ' ';
+                _dnProvisional = -1;
+                _dnMyCard = _dnTheirCard = -1;
+                _dnMyCardSent = false;
+                _dnWaitRemoteChoice = false;
+                _duelCanto.ShowOffers(Duel.CanEnvido, Duel.CanTruco);
+            }
+            else DuelCantoPhase();
         }
 
         // El derribo se VE: mientras elegís carta, el derribado sigue en el
@@ -1242,14 +1299,34 @@ namespace LagFighter
         // El humano canta (botones de DuelCantoUI).
         public void DuelSingEnvido()
         {
-            if (!SimConfig.DuelEnabled || State != Flow.Planning || _duelCombatOn || !Duel.CanEnvido) return;
+            if (!SimConfig.DuelEnabled || State != Flow.Planning || _duelCombatOn || Duel == null || !Duel.CanEnvido) return;
+            if (DuelNet)
+            {
+                if (_dn != DnPhase.Declare || _dnMyDecl != ' ') return;
+                _dnMyDecl = 'E';
+                DnSend("DE");
+                _duelCanto.HideOffers();
+                _hud.SetPrompt("cantaste ¡ENVIDO! — esperando al rival…");
+                DnTryDeclare();
+                return;
+            }
             DuelEnvidoBanner(Duel.ResolveEnvido(0, _ai.QuiereEnvido(Duel, 1)));
             DuelAfterCanto();
         }
 
         public void DuelSingTruco()
         {
-            if (!SimConfig.DuelEnabled || State != Flow.Planning || _duelCombatOn || !Duel.CanTruco) return;
+            if (!SimConfig.DuelEnabled || State != Flow.Planning || _duelCombatOn || Duel == null || !Duel.CanTruco) return;
+            if (DuelNet)
+            {
+                if (_dn != DnPhase.Declare || _dnMyDecl != ' ') return;
+                _dnMyDecl = 'T';
+                DnSend("DT");
+                _duelCanto.HideOffers();
+                _hud.SetPrompt("cantaste ¡TRUCO! — esperando al rival…");
+                DnTryDeclare();
+                return;
+            }
             DuelPlayerTruco(level: 1);
         }
 
@@ -1354,13 +1431,262 @@ namespace LagFighter
             Announcer.Play();
         }
 
+        // ---------- DUELO ONLINE: el lockstep espejado ----------
+        // El turno online tiene FASES fijas para que ningún mensaje sea
+        // ambiguo: DECLARO (los dos dicen si cantan: elegir carta declara
+        // "paso") → CANTO (la negociación quiero/no quiero/subo, si hubo) →
+        // CARTA (los dos mandan su pick; si hubo canto, la carta se elige
+        // DESPUÉS de resolverlo — información pareja para los dos) →
+        // PREMIO (el ganador elige, el otro espera). La cola procesa en
+        // orden y los mensajes de fases futuras esperan su momento.
+
+        static int RoomSeed(string room)
+        {
+            int s = 17;
+            foreach (char c in room) s = s * 31 + c;
+            return s & 0x7FFFFFFF;
+        }
+
+        void DnPump()
+        {
+            if (_dnPumping || Mode != GameMode.Online) return;
+            _dnPumping = true;
+            int seq = _dnTheirSeq;
+            NetLobby.I.PollTurn(seq, 1 - LocalSide, payload =>
+            {
+                _dnPumping = false;
+                if (!DuelNet || seq != _dnTheirSeq) return;
+                _dnTheirSeq++;
+                _dnQueue.Enqueue(payload);
+                DnPump();
+            });
+        }
+
+        void DnSend(string payload) => NetLobby.I.PushTurn(_dnMySeq++, LocalSide, payload);
+
+        void DnProcess()
+        {
+            while (_dnQueue.Count > 0)
+            {
+                if (!DnApply(_dnQueue.Peek())) break;   // fase futura: esperar
+                _dnQueue.Dequeue();
+            }
+        }
+
+        // true = consumido · false = el mensaje espera a que mi cliente
+        // llegue a la fase que lo puede comer (p.ej. su DECLARO del turno
+        // siguiente mientras yo sigo mirando el teatro).
+        bool DnApply(string m)
+        {
+            if (string.IsNullOrEmpty(m)) return true;
+            switch (m[0])
+            {
+                case 'H':
+                    if (Duel != null) return true;   // duplicado
+                    int theirChar = Mathf.Clamp(int.Parse(m.Substring(1)), 0, DuelCatalog.Chars.Length - 1);
+                    _duelAiChar = theirChar;
+                    Duel = new DuelSim(RoomSeed(NetLobby.I.Room), _duelPlayerChar, theirChar,
+                        streamTag0: LocalSide, streamTag1: 1 - LocalSide);
+                    StartDuelPlanning();
+                    return true;
+
+                case 'D':
+                    if (_dn != DnPhase.Declare) return false;
+                    if (_dnTheirDecl != ' ') return true;   // duplicado
+                    _dnTheirDecl = m.Length > 1 ? m[1] : 'N';
+                    DnTryDeclare();
+                    return true;
+
+                case 'R':
+                    if (_dn != DnPhase.Canto || _dnLastCaller != 0) return false;
+                    if (m.Length > 1 && m[1] == 'S' && _dnCantoLevel < DuelConfig.TrucoMaxLevel)
+                    {
+                        _dnCantoLevel++;
+                        _dnLastCaller = 1;
+                        DnRespondModal();
+                        return true;
+                    }
+                    DnCantoEnd(m.Length > 1 && m[1] == 'Q');
+                    return true;
+
+                case 'C':
+                    if (_dn != DnPhase.Card) return false;
+                    if (_dnTheirCard >= 0) return true;   // duplicado
+                    _dnTheirCard = int.Parse(m.Substring(1));
+                    DnTryCards();
+                    return true;
+
+                case 'P':
+                    if (!_dnWaitRemoteChoice || !Duel.AwaitingChoice || Duel.PendingIsPunish) return false;
+                    if (m.Length > 1 && m[1] == 'D') Duel.ChoosePrize(DuelPrize.Damage, int.Parse(m.Substring(2)));
+                    else Duel.ChoosePrize(DuelPrize.Knockdown);
+                    _dnWaitRemoteChoice = false;
+                    _duelResult = Duel.LastResult;
+                    BeginDuelTheater();
+                    return true;
+
+                case 'U':
+                    if (!_dnWaitRemoteChoice || !Duel.AwaitingChoice || !Duel.PendingIsPunish) return false;
+                    Duel.Punish(m.Length > 1 && m[1] != '-' ? int.Parse(m.Substring(1)) : -1);
+                    _dnWaitRemoteChoice = false;
+                    _duelResult = Duel.LastResult;
+                    BeginDuelTheater();
+                    return true;
+            }
+            return true;   // desconocido: se tira
+        }
+
+        // Los dos declararon: precedencia envido > truco; si los dos
+        // cantaron lo mismo, la PALABRA la tiene el host en turnos impares
+        // (misma cuenta en las dos máquinas: el turno de sim coincide).
+        void DnTryDeclare()
+        {
+            if (_dn != DnPhase.Declare || _dnMyDecl == ' ' || _dnTheirDecl == ' ') return;
+            bool palabraMia = ((Duel.Turn & 1) == 1) == (LocalSide == 0);
+            bool mineE = _dnMyDecl == 'E', theirsE = _dnTheirDecl == 'E';
+            bool mineT = _dnMyDecl == 'T', theirsT = _dnTheirDecl == 'T';
+            char pick = mineE || theirsE ? 'E' : mineT || theirsT ? 'T' : ' ';
+            if (pick == ' ' ||
+                (pick == 'E' && !Duel.CanEnvido) ||
+                (pick == 'T' && !Duel.CanTruco))
+            {
+                DnEnterCard();
+                return;
+            }
+            int cantor = pick == 'E'
+                ? (mineE && theirsE ? (palabraMia ? 0 : 1) : (mineE ? 0 : 1))
+                : (mineT && theirsT ? (palabraMia ? 0 : 1) : (mineT ? 0 : 1));
+            _dn = DnPhase.Canto;
+            _dnCantoEnvido = pick == 'E';
+            _dnCantoLevel = 1;
+            _dnLastCaller = cantor;
+            _dnProvisional = -1;   // con canto en la mesa, la carta se re-elige
+            if (cantor == 0)
+                _hud.SetPrompt(_dnCantoEnvido ? "cantaste ¡ENVIDO! — esperando respuesta…"
+                                              : "cantaste ¡TRUCO! — esperando respuesta…");
+            else DnRespondModal();
+        }
+
+        // Me toca responder el canto del rival (nivel _dnCantoLevel).
+        void DnRespondModal()
+        {
+            _duelHand.SetDimmed(true);
+            if (_dnCantoEnvido)
+            {
+                _duelCanto.ShowModal($"{Duel.Chr[1].Name} CANTA ¡ENVIDO!",
+                    "El mejor par de golpes de la MISMA altura suma su daño. El que gana pega " +
+                    $"{DuelConfig.EnvidoChip} y CANTA su número; el que pierde no muestra nada.",
+                    new[] { "QUIERO", $"NO QUIERO  −{DuelConfig.EnvidoFoldChip}" }, Duelo.Gold, pick =>
+                    {
+                        DnSend(pick == 0 ? "RQ" : "RN");
+                        DnCantoEnd(pick == 0);
+                    });
+                return;
+            }
+            int level = _dnCantoLevel;
+            int mult = DuelSim.TrucoMult(level);
+            var opts = level < DuelConfig.TrucoMaxLevel
+                ? new[] { "QUIERO", $"NO QUIERO  −{level + 1}", DuelTrucoName(level + 1) }
+                : new[] { "QUIERO", $"NO QUIERO  −{level + 1}" };
+            _duelCanto.ShowModal($"{Duel.Chr[1].Name} CANTA {DuelTrucoName(level)}",
+                $"El próximo intercambio ganado vale ×{mult}: el golpe o el agarre pegan ×{mult}, " +
+                $"la guardia que lo pare roba ×{mult}. Rechazarlo paga {level + 1} y se sigue jugando.",
+                opts, Duelo.Golpe, pick =>
+                {
+                    if (pick == 2)
+                    {
+                        DnSend("RS");
+                        _dnCantoLevel++;
+                        _dnLastCaller = 0;
+                        _duelHand.SetDimmed(false);
+                        _hud.SetPrompt($"cantaste {DuelTrucoName(_dnCantoLevel)} — esperando respuesta…");
+                        return;
+                    }
+                    DnSend(pick == 0 ? "RQ" : "RN");
+                    DnCantoEnd(pick == 0);
+                });
+        }
+
+        void DnCantoEnd(bool quiero)
+        {
+            _duelHand.SetDimmed(false);
+            if (_dnCantoEnvido) DuelEnvidoBanner(Duel.ResolveEnvido(_dnLastCaller, quiero));
+            else DuelTrucoBanner(Duel.ResolveTruco(_dnLastCaller, _dnCantoLevel, quiero));
+            if (Duel.Over) { _dn = DnPhase.Off; DuelMatchEndByCanto(); return; }
+            if (Duel.Round != _duelRoundSeen) { DuelRoundCeremony(); return; }
+            DnEnterCard();
+        }
+
+        void DnEnterCard()
+        {
+            _dn = DnPhase.Card;
+            _duelCanto.HideOffers();
+            UpdateDuelPrompt();
+            if (_dnProvisional >= 0) DnSendCard(_dnProvisional);
+            else DnTryCards();
+        }
+
+        void DnSendCard(int idx)
+        {
+            if (_dnMyCardSent) return;
+            if (idx < 0 || idx >= Duel.Hand[0].Count) { _dnProvisional = -1; return; }
+            _dnMyCard = idx;
+            _dnMyCardSent = true;
+            DnSend($"C{idx}");
+            _duelHand.SetDimmed(true);
+            _hud.SetPrompt("carta jugada — esperando la del rival…");
+            DnTryCards();
+        }
+
+        void DnTryCards()
+        {
+            if (_dn != DnPhase.Card || !_dnMyCardSent || _dnTheirCard < 0) return;
+            _duelHand.SetDimmed(false);
+            for (int i = 0; i < 2; i++) _duelHpBefore[i] = Duel.Hp[i];
+            _duelResult = Duel.Resolve(_dnMyCard, _dnTheirCard);
+            _duelCombatOn = true;
+            _dn = DnPhase.Choice;
+            if (Duel.AwaitingChoice && Duel.PendingSide == 1)
+            {
+                // el rival elige su premio: ves el fallo y esperás
+                _dnWaitRemoteChoice = true;
+                StartDuelReveal(Duel.LastResult, awaitChoice: false);
+                return;
+            }
+            if (Duel.AwaitingChoice && Duel.PendingSide == 0)
+            {
+                StartDuelReveal(Duel.LastResult, awaitChoice: true);
+                return;
+            }
+            _duelResult = Duel.LastResult;
+            BeginDuelTheater();
+        }
+
         // El pick del humano cierra el turno: la IA ya eligió en secreto, la
         // tabla resuelve y recién después se actúa.
         public void DuelPick(int handIdx)
         {
             if (!SimConfig.DuelEnabled || State != Flow.Planning || _duelCombatOn) return;
+            if (Duel == null) return;
             if (_duelCanto.ModalOpen) return;   // primero respondé el canto
             if (handIdx < 0 || handIdx >= Duel.Hand[0].Count) return;
+            if (DuelNet)
+            {
+                // en DECLARO, elegir carta declara "paso, no canto" (y la
+                // carta queda provisoria: si el rival cantó, se re-elige)
+                if (_dn == DnPhase.Declare && _dnMyDecl == ' ')
+                {
+                    _dnMyDecl = 'N';
+                    _dnProvisional = handIdx;
+                    DnSend("DN");
+                    _duelCanto.HideOffers();
+                    _hud.SetPrompt("esperando al rival…");
+                    DnTryDeclare();
+                    return;
+                }
+                if (_dn == DnPhase.Card) DnSendCard(handIdx);
+                return;
+            }
             _duelCanto.HideOffers();
             for (int i = 0; i < 2; i++) _duelHpBefore[i] = Duel.Hp[i];
             int aiIdx = _ai.PickDuelCard(Duel, 1);
@@ -1387,6 +1713,7 @@ namespace LagFighter
         {
             if (!_duelCombatOn || !Duel.AwaitingChoice || Duel.PendingIsPunish) return;
             if (!Duel.ChoosePrize(prize, handIdx)) { SfxLib.Play(SfxLib.Kind.UiCancel, 0.4f); return; }
+            if (DuelNet) DnSend(prize == DuelPrize.Damage ? $"PD{handIdx}" : "PK");
             _duelResult = Duel.LastResult;
             BeginDuelTheater();
         }
@@ -1395,6 +1722,7 @@ namespace LagFighter
         {
             if (!_duelCombatOn || !Duel.AwaitingChoice || !Duel.PendingIsPunish) return;
             if (!Duel.Punish(handIdx)) { SfxLib.Play(SfxLib.Kind.UiCancel, 0.4f); return; }
+            if (DuelNet) DnSend(handIdx >= 0 ? $"U{handIdx}" : "U-");
             _duelResult = Duel.LastResult;
             BeginDuelTheater();
         }
@@ -1522,6 +1850,16 @@ namespace LagFighter
 
         void TickDuelTheater()
         {
+            // ONLINE: el rival está eligiendo su premio — el teatro espera el
+            // mensaje (BeginDuelTheater re-arranca todo cuando llegue).
+            if (_dnWaitRemoteChoice)
+            {
+                if (!_duelHud.RevealFinished && (GameInput.EndTurnPressed() || GameInput.ClickPressed()))
+                    _duelHud.SkipReveal();
+                else if (_duelHud.RevealFinished)
+                    _hud.SetPrompt("el rival elige su premio…");
+                return;
+            }
             // La ceremonia de las cartas ES el turno. Se puede apurar.
             if (!_duelHud.RevealFinished)
             {
@@ -1655,6 +1993,12 @@ namespace LagFighter
 
         public void DuelRematch()
         {
+            if (Mode == GameMode.Online)
+            {
+                // revancha local online = desync: sala nueva, como el clásico
+                _hud.Feedback(0, "ONLINE: no hay revancha — sala nueva desde el menú", new Color(1f, 0.7f, 0.4f));
+                return;
+            }
             _duelHud.HideResults();
             ResetMatch();
         }
@@ -2259,6 +2603,7 @@ namespace LagFighter
             }
 
             if (GameInput.MenuPressed()) { GoToModeSelect(); return; }
+            if (DuelNet) DnProcess();   // el correo del duelo online, en todas las fases
             if (State == Flow.GameOver && GameInput.ReplayPressed()) { StartReplay(); return; }
             if (State == Flow.Replay && GameInput.EndTurnPressed()) { SkipReplay(); return; }
             if (GameInput.RestartPressed())

@@ -225,17 +225,29 @@ namespace LagFighter
             ("JAINA", "HP 85 · combo 5 · agresiva: sangra por cartas (Imprudencia), Arco que castiga y supers baratas."),
         };
 
+        // DUELO: contra quién (paso 10, después de elegir personaje)
+        static readonly (string label, string desc)[] DuelDest =
+        {
+            ("VS IA", "Contra la máquina, ya mismo. Rounds al mejor de 3, envido y truco incluidos."),
+            ("ONLINE — CREAR SALA", "Sala con código de 4 letras: pasáselo a tu rival y esperá a que se una. Cada uno en su compu."),
+            ("ONLINE — UNIRSE", "Escribí el código que te pasaron. OJO: los dos tienen que entrar por DUELO (no por el ONLINE clásico)."),
+        };
+        int _duelCharChoice;
+        bool _duelOnline;
+
         int OptionCount => _step == 1 ? Modes.Length :
             _step == 3 ? AIProfiles.Length :
             _step == 4 ? AIDifficulties.Length : _step == 5 ? OnlineOptions.Length :
             _step == 8 ? CardChars.Length :
-            _step == 9 ? DuelChars.Length : 0;
+            _step == 9 ? DuelChars.Length :
+            _step == 10 ? DuelDest.Length : 0;
 
         public void Open()
         {
             _root.SetActive(true);
             _active = true;
             _step = 1;
+            _duelOnline = false;
             _lagChoice = false; // NORMAL siempre: LAG MODE quedó fuera del menú
             _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_mode", 1), 0, Modes.Length - 1); // arranca donde quedaste
             SimConfig.YomiEnabled = false; // el modo YOMI lo prende StartMatch; acá se apaga al volver
@@ -265,6 +277,8 @@ namespace LagFighter
                               _step == 5 ? "ONLINE — SALA CON CÓDIGO" :
                               _step == 6 ? "ESCRIBÍ EL CÓDIGO DE LA SALA" :
                               _step == 8 ? "CARTAS — ELEGÍ TU PERSONAJE" :
+                              _step == 9 ? "DUELO — ELEGÍ TU PERSONAJE" :
+                              _step == 10 ? "DUELO — ¿CONTRA QUIÉN?" :
                               "ESPERANDO AL RIVAL…";
 
             _bigCode.gameObject.SetActive(_step >= 6);
@@ -296,7 +310,8 @@ namespace LagFighter
                     _step == 3 ? AIProfiles[i].label :
                     _step == 5 ? OnlineOptions[i].label :
                     _step == 8 ? CardChars[i].label :
-                    _step == 9 ? DuelChars[i].label : AIDifficulties[i].label;
+                    _step == 9 ? DuelChars[i].label :
+                    _step == 10 ? DuelDest[i].label : AIDifficulties[i].label;
                 _cardLabels[i].fontSize = count >= 4 ? 16 : 24;
             }
             _desc.rectTransform.anchoredPosition = new Vector2(0f, count > 4 ? -145f : -86f);
@@ -316,7 +331,8 @@ namespace LagFighter
                 _step == 3 ? AIProfiles[_sel].desc :
                 _step == 5 ? OnlineOptions[_sel].desc :
                 _step == 8 ? CardChars[_sel].desc :
-                _step == 9 ? DuelChars[_sel].desc : AIDifficulties[_sel].desc;
+                _step == 9 ? DuelChars[_sel].desc :
+                _step == 10 ? DuelDest[_sel].desc : AIDifficulties[_sel].desc;
         }
 
         void Confirm(int idx)
@@ -346,6 +362,7 @@ namespace LagFighter
                 }
                 if (Modes[idx].mode == GameMode.Online)
                 {
+                    _duelOnline = false;
                     _step = 5;
                     _sel = 0;
                     Layout();
@@ -356,23 +373,7 @@ namespace LagFighter
             }
             if (_step == 5)
             {
-                if (idx == 0) // crear sala
-                {
-                    _desc.text = "creando sala…";
-                    NetLobby.I.CreateRoom(_lagChoice,
-                        code =>
-                        {
-                            if (!_active) return;
-                            _step = 7;
-                            Layout();
-                            NetLobby.I.WaitForGuest(() =>
-                            {
-                                if (_active && _step == 7)
-                                    _mc.StartMatch(GameMode.Online, _lagChoice, 0);
-                            });
-                        },
-                        err => { if (_active) _desc.text = err; });
-                }
+                if (idx == 0) CrearSala();
                 else // unirse
                 {
                     _codeInput = "";
@@ -381,11 +382,28 @@ namespace LagFighter
                 }
                 return;
             }
-            if (_step == 9) // DUELO: personaje elegido, a jugar
+            if (_step == 9) // DUELO: personaje elegido → ¿contra quién?
             {
                 PlayerPrefs.SetInt("lf_menu_duelchar", idx);
-                _mc.StartMatch(GameMode.VsAI, false, 0, AIProfile.Adaptive, AIDifficulty.Normal,
-                    yomi: false, cards: false, cardsChar: 0, duel: true, duelChar: idx);
+                _duelCharChoice = idx;
+                _step = 10;
+                _sel = 0;
+                Layout();
+                return;
+            }
+            if (_step == 10) // DUELO: vs IA u online
+            {
+                if (idx == 0)
+                {
+                    _mc.StartMatch(GameMode.VsAI, false, 0, AIProfile.Adaptive, AIDifficulty.Normal,
+                        yomi: false, cards: false, cardsChar: 0, duel: true, duelChar: _duelCharChoice);
+                    return;
+                }
+                _duelOnline = true;
+                if (idx == 1) { CrearSala(); return; }
+                _codeInput = "";
+                _step = 6;
+                Layout();
                 return;
             }
             if (_step == 8) // CARTAS: personaje elegido, a jugar
@@ -408,6 +426,30 @@ namespace LagFighter
             _mc.StartMatch(GameMode.VsAI, _lagChoice, 0, _aiProfileChoice, AIDifficulties[idx].difficulty);
         }
 
+        // Crear sala online: la usan el ONLINE clásico (paso 5) y el DUELO
+        // online (paso 10). Al unirse el rival arranca el modo que toque.
+        void CrearSala()
+        {
+            _desc.text = "creando sala…";
+            NetLobby.I.CreateRoom(_duelOnline ? false : _lagChoice,
+                code =>
+                {
+                    if (!_active) return;
+                    _step = 7;
+                    Layout();
+                    NetLobby.I.WaitForGuest(() =>
+                    {
+                        if (!_active || _step != 7) return;
+                        if (_duelOnline)
+                            _mc.StartMatch(GameMode.Online, false, 0, AIProfile.Adaptive, AIDifficulty.Normal,
+                                yomi: false, cards: false, cardsChar: 0, duel: true, duelChar: _duelCharChoice);
+                        else
+                            _mc.StartMatch(GameMode.Online, _lagChoice, 0);
+                    });
+                },
+                err => { if (_active) _desc.text = err; });
+        }
+
         void Update()
         {
             if (!_active) return;
@@ -422,12 +464,20 @@ namespace LagFighter
                     _codeInput = _codeInput.Substring(0, _codeInput.Length - 1);
                     Layout();
                 }
-                if (GameInput.CancelPressed()) { _step = 5; _sel = 1; Layout(); return; }
+                if (GameInput.CancelPressed()) { _step = _duelOnline ? 10 : 5; _sel = 1; Layout(); return; }
                 if (_codeInput.Length == 4 && c == '\0' && (GameInput.ConfirmPressed() || GameInput.EndTurnPressed()))
                 {
                     _desc.text = $"uniéndome a {_codeInput}…";
                     NetLobby.I.JoinRoom(_codeInput,
-                        lagMode => { if (_active) _mc.StartMatch(GameMode.Online, lagMode, 1); },
+                        lagMode =>
+                        {
+                            if (!_active) return;
+                            if (_duelOnline)
+                                _mc.StartMatch(GameMode.Online, false, 1, AIProfile.Adaptive, AIDifficulty.Normal,
+                                    yomi: false, cards: false, cardsChar: 0, duel: true, duelChar: _duelCharChoice);
+                            else
+                                _mc.StartMatch(GameMode.Online, lagMode, 1);
+                        },
                         err => { if (_active && _step == 6) _desc.text = err; });
                 }
                 return;
@@ -437,7 +487,7 @@ namespace LagFighter
                 if (GameInput.CancelPressed())
                 {
                     NetLobby.I.Leave();
-                    _step = 5;
+                    _step = _duelOnline ? 10 : 5;
                     _sel = 0;
                     Layout();
                 }
@@ -462,6 +512,12 @@ namespace LagFighter
                 {
                     _step = 3;
                     _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_profile", 0), 0, AIProfiles.Length - 1);
+                }
+                else if (_step == 10) // duelo destino → personaje
+                {
+                    _duelOnline = false;
+                    _step = 9;
+                    _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_duelchar", 0), 0, DuelChars.Length - 1);
                 }
                 else // perfil / online → elegir rival
                 {

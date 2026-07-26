@@ -634,6 +634,35 @@ falta, no un lujo.**
   corridas (+0.8 a +3.1) — con rounds, la SIEMBRA es el termómetro
   bueno de la información, no ese head-to-head.
 
+### DUELO ONLINE (2026-07-26): sala con código, para probarlo con gente
+
+Pedido de Patricio: el mismo esquema del ONLINE clásico (invitación de 4
+letras sobre el relay Supabase de `NetLobby`), para aprobar el modo
+jugando contra personas. Implementado:
+
+- **Lockstep ESPEJADO**: cada cliente construye su `DuelSim` con él mismo
+  como lado 0, y los streams de RNG viajan con el JUGADOR (`streamTag`),
+  no con el índice. Como toda la resolución es simétrica por lado, las
+  dos sims espejadas quedan idénticas sin tocar una línea de la UI (que
+  asume "vos = lado 0"). **Garantizado por test**: partidas completas
+  espejadas con cantos, premios, rounds y remezclas coinciden exactas.
+- **Protocolo por FASES** (mensajes `PushTurn/PollTurn`, frame local del
+  emisor): `H{char}` hola (la seed sale del hash del código de sala) →
+  por turno: `D{N|E|T}` DECLARO (cantar o pasar — elegir carta declara
+  "paso" y la carta queda provisoria) → `R{Q|N|S}` la negociación
+  (quiero / no quiero / subo, con retruco y vale cuatro) → `C{idx}` la
+  carta (si hubo canto, se re-elige DESPUÉS de resolverlo: información
+  pareja) → `PK/PD{idx}/U{idx}` el premio o castigo del ganador. La cola
+  procesa en orden y los mensajes de fases futuras esperan.
+- **Menú**: DUELO → personaje → ¿CONTRA QUIÉN? (VS IA · ONLINE crear ·
+  ONLINE unirse). El host es lado 0; sin revancha local (sala nueva).
+- **Limitaciones anotadas**: los DOS tienen que entrar por DUELO→ONLINE
+  (unirse a una sala de duelo desde el ONLINE clásico cuelga — el relay
+  no distingue modos) · online hay UN canto por turno (contra la IA se
+  puede envido+truco el mismo turno) · sin timer de planificación · sin
+  reconexión. **Compilado y con el lockstep testeado, NO probado con dos
+  clientes reales todavía.**
+
 ### Escenarios anotados por Patricio (2026-07-26, a revisar jugando)
 
 1. **Escape vs truco armado**: hoy el ESCAPE congela el turno pero el

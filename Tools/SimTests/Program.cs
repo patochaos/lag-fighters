@@ -148,6 +148,7 @@ class Tests
         DueloElChipDeUnCantoPuedeCerrarLaPartida();
         DueloTrucoBloqueadoSePagaEnCartas();
         DueloUnaCadenaDeTrucoPorRound();
+        DueloEspejoOnlineEsLockstep();
         if (SimConfig.LimbsEnabled)
         {
             TresJabsArrancanElBrazo();
@@ -2004,6 +2005,91 @@ class Tests
     {
         Check(DueloFirma(99) == DueloFirma(99) && DueloFirma(99) != DueloFirma(100),
             "duelo: misma seed = misma partida", DueloFirma(99));
+    }
+
+    // La premisa del ONLINE: dos clientes construyen sims ESPEJADAS (cada
+    // uno se ve como lado 0) con los streams de RNG viajando con el JUGADOR.
+    // Si la resolución es simétrica por lado, los estados coinciden espejados
+    // en cada turno — cantos, premios, rounds y remezclas incluidos.
+    static void DueloEspejoOnlineEsLockstep()
+    {
+        var host = new DuelSim(4242, DuelCatalog.GraveIdx, DuelCatalog.JainaIdx, streamTag0: 0, streamTag1: 1);
+        var guest = new DuelSim(4242, DuelCatalog.JainaIdx, DuelCatalog.GraveIdx, streamTag0: 1, streamTag1: 0);
+        var rngA = new System.Random(99);   // jugador A = host local 0 = guest local 1
+        var rngB = new System.Random(77);
+
+        bool ListEq(System.Collections.Generic.List<int> a, System.Collections.Generic.List<int> b)
+        {
+            if (a.Count != b.Count) return false;
+            var sa = new System.Collections.Generic.List<int>(a); sa.Sort();
+            var sb = new System.Collections.Generic.List<int>(b); sb.Sort();
+            for (int i = 0; i < sa.Count; i++) if (sa[i] != sb[i]) return false;
+            return true;
+        }
+        bool Mirror() =>
+            host.Hp[0] == guest.Hp[1] && host.Hp[1] == guest.Hp[0] &&
+            host.Round == guest.Round &&
+            host.RoundWins[0] == guest.RoundWins[1] && host.RoundWins[1] == guest.RoundWins[0] &&
+            host.KnockedDown[0] == guest.KnockedDown[1] && host.KnockedDown[1] == guest.KnockedDown[0] &&
+            host.TrucoLevel == guest.TrucoLevel &&
+            (host.PublicTantoSide < 0 ? guest.PublicTantoSide < 0 : host.PublicTantoSide == 1 - guest.PublicTantoSide) &&
+            ListEq(host.Hand[0], guest.Hand[1]) && ListEq(host.Hand[1], guest.Hand[0]) &&
+            ListEq(host.Deck[0], guest.Deck[1]) && ListEq(host.Deck[1], guest.Deck[0]) &&
+            ListEq(host.Discard[0], guest.Discard[1]) && ListEq(host.Discard[1], guest.Discard[0]);
+
+        void Choice(DuelSim d, int localOfA)
+        {
+            // política determinista idéntica en ambos clientes
+            while (d.AwaitingChoice)
+            {
+                int s = d.PendingSide;
+                if (d.PendingIsPunish)
+                {
+                    int atk = -1;
+                    for (int i = 0; i < d.Hand[s].Count; i++)
+                        if (d.Def(s, d.Hand[s][i]).IsAttack) { atk = i; break; }
+                    d.Punish(atk);
+                }
+                else
+                {
+                    var fuel = d.PrizeFuel(s);
+                    if (fuel.Count > 0) d.ChoosePrize(DuelPrize.Damage, fuel[0]);
+                    else d.ChoosePrize(DuelPrize.Knockdown);
+                }
+            }
+        }
+
+        bool ok = Mirror();
+        int turn = 0;
+        while (!host.Over && ok && turn++ < 60)
+        {
+            host.StartTurn(); guest.StartTurn();
+            if (host.Over || guest.Over) break;
+            // cantos deterministas en frame del JUGADOR: A canta envido el
+            // turno 2; B canta retruco directo el turno 4
+            if (turn == 2 && host.CanEnvido)
+            {
+                host.ResolveEnvido(0, quiero: true);
+                guest.ResolveEnvido(1, quiero: true);
+            }
+            if (turn == 4 && host.CanTruco)
+            {
+                host.ResolveTruco(1, 2, quiero: true);
+                guest.ResolveTruco(0, 2, quiero: true);
+            }
+            if (host.Over) { ok = Mirror() && guest.Over; break; }
+            int cardA = host.Hand[0].Count > 0 ? rngA.Next(host.Hand[0].Count) : -1;
+            int cardB = host.Hand[1].Count > 0 ? rngB.Next(host.Hand[1].Count) : -1;
+            host.Resolve(cardA, cardB);
+            guest.Resolve(cardB, cardA);
+            Choice(host, 0);
+            Choice(guest, 1);
+            ok = Mirror() && host.Over == guest.Over;
+        }
+        Check(ok && host.Over && guest.Over &&
+              (host.Winner < 0 ? guest.Winner < 0 : host.Winner == 1 - guest.Winner),
+            "duelo: las sims ESPEJADAS del online quedan en lockstep exacto",
+            $"ok {ok}, turnos {turn}, winners {host.Winner}/{guest.Winner}");
     }
 
     static string DueloFirma(int seed)
