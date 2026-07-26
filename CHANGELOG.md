@@ -2,6 +2,55 @@
 
 Cada subida a GitHub agrega acá sus change notes.
 
+## 0.6.0 — 2026-07-26 (DUELO es el juego: el fighting del truco)
+
+### DUELO — el modo principal nuevo ("JUGAR — DUELO")
+- **El juego entero en 7 reglas**: una carta secreta por turno, revelación
+  simultánea. GOLPE gana a AGARRE, AGARRE gana a GUARDIA, GUARDIA gana a
+  GOLPE; cada golpe es ALTO o BAJO, la velocidad desempata, el ganador
+  elige **+DAÑO o DERRIBO**, defender bien roba carta y la guardia vuelve.
+  El ESCAPE (uno por round) congela el turno: la salida del derribo.
+- **Tres personajes** que re-pesan números, sin reglas nuevas: GRAVE
+  (controla el espacio), JAINA (la apuesta: su Espada gana toda carrera
+  pero defendida se castiga) y GOLEM (grappler: 5 agarres, más vida y la
+  Roca con AGUANTE).
+- **Rounds al mejor de 3**, vida corta por round: mano, mazo y cantos
+  frescos cada round; solo la lectura del rival persiste.
+
+### LOS CANTOS — el truco arriba del fighting
+- **ENVIDO** (uno por round, hasta la primera sangre): el mejor par de
+  golpes de la misma altura suma su VELOCIDAD; quiero / no quiero; el que
+  gana pega y CANTA su número — el que pierde no muestra nada ("son
+  buenas"). El número cantado siembra la lectura de alturas del round.
+- **TRUCO → RETRUCO → VALE CUATRO** (una cadena por round): el próximo
+  intercambio ganado vale ×2/×3/×4 — y se cobra en la moneda de cada
+  opción: el golpe y el agarre pegan multiplicado, **la guardia que lo
+  pare roba cartas multiplicadas**. El no quiero siempre paga chico y se
+  sigue jugando.
+- UI completa: botones ¡ENVIDO!/¡TRUCO!, el modal QUIERO / NO QUIERO /
+  SUBIR, banners de resultado y la línea de estado (round · marcador ·
+  ×N EN JUEGO · tanto cantado).
+
+### DUELO ONLINE
+- **Sala con código de invitación** (el mismo relay del ONLINE clásico):
+  DUELO → personaje → ONLINE crear/unirse. Partida completa a distancia —
+  cantos negociados, premio del ganador, rounds. Los DOS tienen que
+  entrar por DUELO → ONLINE.
+
+### El lab detrás (miles de partidas IA vs IA por decisión)
+- Brecha de habilidad 87% (la IA que juega bien vs la que juega al azar),
+  KO 100%, 3-5 minutos por partida. Defender contra el que cantó el
+  envido acierta la altura 59% contra 48% de base: la información del
+  canto es real, no decorado.
+
+### Además
+- **CARTAS v2** (modo EXPERTO): la copia completa de Yomi 2 — combos,
+  super meter, supers, abilities, pumps e innates, con Grave y Jaina.
+- **La pasada de look de DUELO**: tipografía Barlow Condensed, el cuarto
+  oscuro, cartas con altura codificada por posición, el teatro de 12
+  poses en tres tiempos donde la consecuencia queda en pantalla, y el
+  menú como sala de espera.
+
 ## 0.5.0 — 2026-07-20 (action points, modo YOMI y la gran pasada de legibilidad)
 
 ### Clásico en ACTION POINTS
