@@ -154,10 +154,10 @@ namespace LagFighter
             BuildDuelBits();
             switch (charIdx)
             {
-                case DuelCatalog.JainaIdx:   // la que apuesta: alta y flaca
+                case DuelCatalog.BrujoIdx:   // la que apuesta: alta y flaca
                     _dBuild = new Vector3(0.80f, 1.13f, 0.80f);
                     break;
-                case DuelCatalog.GolemIdx:   // el grappler: bajo, ancho, +8 de vida
+                case DuelCatalog.LobizonIdx:   // el grappler: bajo, ancho, +8 de vida
                     _dBuild = new Vector3(1.36f, 0.81f, 1.36f);
                     break;
                 default:                     // GRAVE: la referencia

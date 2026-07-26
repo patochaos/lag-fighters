@@ -222,8 +222,10 @@ class Program
     }
 
     // Juega una partida entera. Devuelve el ganador (−1 empate).
+    // Poderes: el default None mantiene el BASELINE histórico comparable;
+    // null = los poderes reales de los personajes (el juego vivo).
     static int PlayDuel(int seed, int c0, int c1, DuelBot b0, DuelBot b1, DuelStats st = null,
-        DuelPower pw0 = DuelPower.None, DuelPower pw1 = DuelPower.None)
+        DuelPower? pw0 = DuelPower.None, DuelPower? pw1 = DuelPower.None)
     {
         // Seeds HASHEADAS por lado: System.Random correlaciona seeds que
         // difieren en un offset constante, y eso sesga el head-to-head sin
@@ -717,6 +719,31 @@ class Program
             }
             Console.Write($"{Nombre(pw)} {esp / n * 100:0.0}%  ");
         }
+        Console.WriteLine();
+
+        // EL JUEGO REAL: cada personaje con SU poder (Lechuza=Oracle,
+        // Brujo=Sorcerer, Lobizón=Loser). Es la tabla de matchups que vale
+        // desde que los poderes son parte del personaje.
+        Console.WriteLine();
+        Console.WriteLine($"=== DUELO: matchups con los poderes de personaje PUESTOS ===");
+        int nc2 = DuelCatalog.Chars.Length;
+        var wins = new double[nc2];
+        var games = new int[nc2];
+        for (int a = 0; a < nc2; a++)
+            for (int b = 0; b < nc2; b++)
+            {
+                double wa = 0; int n2 = Math.Max(1, matches / (nc2 * nc2));
+                for (int m = 0; m < n2; m++)
+                {
+                    int w = PlayDuel(m * nc2 * nc2 + a * nc2 + b + 1, a, b, DuelBot.Full, DuelBot.Full, null, null, null);
+                    if (w == 0) wa += 1; else if (w < 0) wa += 0.5;
+                }
+                wins[a] += wa; games[a] += n2;
+                wins[b] += n2 - wa; games[b] += n2;
+                Console.WriteLine($"  {DuelCatalog.Chars[a].Name,-11} vs {DuelCatalog.Chars[b].Name,-11}: {100.0 * wa / n2,5:0.0}% para el primero");
+            }
+        Console.Write("  global: ");
+        for (int a = 0; a < nc2; a++) Console.Write($"{DuelCatalog.Chars[a].Name} {100.0 * wins[a] / Math.Max(1, games[a]):0.0}%  ");
         Console.WriteLine();
     }
 

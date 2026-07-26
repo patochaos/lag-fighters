@@ -41,7 +41,7 @@ namespace LagFighter
         const int Cols = 5;   // el strip "LE QUEDAN" es 5×2 chips
 
         // ---- revelación ----
-        enum Phase { Off, Deal, Suspense, Flip, Judge, Docked }
+        enum Phase { Off, Deal, Suspense, Cross, Flip, Judge, Docked }
         Phase _phase = Phase.Off;
         float _t;
         GameObject _revealRoot;
@@ -50,11 +50,17 @@ namespace LagFighter
         readonly GameObject[] _rcBack = new GameObject[2];
         readonly Image[] _rcGlow = new Image[2];
         readonly Image[] _rcDim = new Image[2];
-        Text _vs, _verdict, _detail;
+        Text _vs, _verdict, _detail, _powerNote;
         int _winner = -1;
         string _verdictTxt = "", _detailTxt = "";
+        // poderes del turno revelado: mandan fases extra y carteles
+        bool _swap;                 // EL BRUJO: hay fase CROSS (las cartas se cruzan)
+        int _upset = -1, _oracle = -1;
 
-        const float DealT = 0.34f, SuspenseT = 0.30f, FlipT = 0.34f, JudgeT = 1.05f;
+        // carta espiada por LA LECHUZA durante la planificación
+        GameObject _peekRoot;
+
+        const float DealT = 0.34f, SuspenseT = 0.30f, CrossT = 0.55f, FlipT = 0.34f, JudgeT = 1.05f;
         const float RevealW = 232f, RevealH = 318f;
         const float SlotX = 258f;
         // dockeadas: pegadas al borde y POR DEBAJO del piso de los paneles
@@ -229,7 +235,7 @@ namespace LagFighter
         public void SetVisible(bool on)
         {
             if (_root != null && _root.activeSelf != on) _root.SetActive(on);
-            if (!on) { HideReveal(); HideResults(); HideRoundCard(); }
+            if (!on) { HideReveal(); HidePeek(); HideResults(); HideRoundCard(); }
         }
 
         // ---- refresco ----
@@ -308,7 +314,11 @@ namespace LagFighter
         public void ShowReveal(DuelTurnResult r)
         {
             HideReveal();
+            HidePeek();
             ComputeVerdict(r);
+            _swap = r.Swapped;
+            _upset = r.UpsetSide;
+            _oracle = r.OracleSide;
 
             _revealRoot = new GameObject("Reveal", typeof(RectTransform));
             var rt = _revealRoot.GetComponent<RectTransform>();
@@ -328,13 +338,15 @@ namespace LagFighter
                 _rcGlow[i] = Img(holder.rectTransform, "Glow", new Vector2(0.5f, 0.5f), Vector2.zero,
                     new Vector2(RevealW + 28f, RevealH + 28f), Duelo.Alpha(Duelo.Gold, 0f));
 
-                // FRENTE
+                // FRENTE — con el Brujo, r.Card(i) es la carta que el lado i
+                // EJECUTA pero pertenece al catálogo del OTRO (las firmas
+                // difieren): se pinta con la def de su dueño.
                 var front = new GameObject("Front", typeof(RectTransform));
                 var frt = front.GetComponent<RectTransform>();
                 frt.SetParent(holder.rectTransform, false);
                 frt.anchorMin = frt.anchorMax = new Vector2(0.5f, 0.5f);
                 frt.sizeDelta = new Vector2(RevealW, RevealH);
-                if (card >= 0) DuelHandUI.PaintCard(frt, S.Def(i, card), RevealW, RevealH);
+                if (card >= 0) DuelHandUI.PaintCard(frt, S.Def(_swap ? 1 - i : i, card), RevealW, RevealH);
                 else Txt(frt, "None", "SIN CARTAS", new Vector2(0.5f, 0.5f), Vector2.zero,
                     new Vector2(RevealW, 40f), 16, Duelo.Golpe, TextAnchor.MiddleCenter);
                 _rcFront[i] = front;
@@ -369,9 +381,54 @@ namespace LagFighter
             _verdict.gameObject.SetActive(false);
             _detail.gameObject.SetActive(false);
 
+            // el cartel de PODER, arriba de las cartas. Los pre-carta (Oracle,
+            // Loser) ya eran públicos: se muestran desde el reparto. El Brujo
+            // es secreto hasta la fase CROSS — se agrega recién ahí.
+            _powerNote = Txt(rt, "Power", "", new Vector2(0.5f, 0.5f), new Vector2(0f, 218f),
+                new Vector2(1500f, 60f), 27, Duelo.Gold, TextAnchor.MiddleCenter);
+            string note = "";
+            if (_upset >= 0) note = "LOSER (EL PERDEDOR): este turno el que pierde, GANA";
+            if (_oracle >= 0) note += (note.Length > 0 ? "\n" : "") +
+                (_oracle == 0 ? "ORACLE (LA LECHUZA): el rival jugó A LA VISTA" : "ORACLE (LA LECHUZA): tu carta estuvo A LA VISTA");
+            _powerNote.text = note;
+
             _phase = Phase.Deal;
             _t = 0f;
             TickReveal();
+        }
+
+        // Con el BRUJO las cartas ENTRAN del lado de su DUEÑO y en la fase
+        // CROSS vuelan al lado del que las ejecuta. Sin brujo, dueño = ejecutor.
+        float StartSign(int i) => _swap ? (i == 0 ? 1f : -1f) : (i == 0 ? -1f : 1f);
+
+        // ---- LA LECHUZA: la carta espiada, visible DURANTE la planificación ----
+
+        public void ShowPeek(DuelCard def)
+        {
+            HidePeek();
+            _peekRoot = new GameObject("Peek", typeof(RectTransform));
+            var rt = _peekRoot.GetComponent<RectTransform>();
+            rt.SetParent(_root.GetComponent<RectTransform>(), false);
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = new Vector2(520f, 70f);
+            rt.sizeDelta = new Vector2(RevealW, RevealH);
+            rt.localScale = Vector3.one * 0.82f;
+            Img(rt, "Glow", new Vector2(0.5f, 0.5f), Vector2.zero,
+                new Vector2(RevealW + 26f, RevealH + 26f), Duelo.Alpha(Duelo.Gold, 0.45f));
+            var face = new GameObject("Face", typeof(RectTransform));
+            var frt = face.GetComponent<RectTransform>();
+            frt.SetParent(rt, false);
+            frt.anchorMin = frt.anchorMax = new Vector2(0.5f, 0.5f);
+            frt.sizeDelta = new Vector2(RevealW, RevealH);
+            DuelHandUI.PaintCard(frt, def, RevealW, RevealH);
+            Txt(rt, "Lbl", "A LA VISTA — la va a jugar", new Vector2(0.5f, 1f), new Vector2(0f, 24f),
+                new Vector2(RevealW + 200f, 24f), 16, Duelo.Gold, TextAnchor.MiddleCenter);
+        }
+
+        public void HidePeek()
+        {
+            if (_peekRoot != null) Destroy(_peekRoot);
+            _peekRoot = null;
         }
 
         // Dorso: no hace falta arte, hace falta que se lea "esto está oculto".
@@ -402,13 +459,28 @@ namespace LagFighter
                 _verdictTxt = $"×{m}  ·  " + _verdictTxt;
                 _detailTxt += $"  ·  se cobró el truco: ×{m}";
             }
+            // los poderes también se cantan en el veredicto (el POR QUÉ tiene
+            // que incluir la regla que se rompió este turno)
+            if (r.UpsetSide >= 0)
+            {
+                _verdictTxt = "¡DADA VUELTA!  ·  " + _verdictTxt;
+                _detailTxt += "  ·  el Perdedor: ganó el que perdía";
+            }
+            if (r.Swapped)
+            {
+                _verdictTxt = "CRUZADAS  ·  " + _verdictTxt;
+                _detailTxt += "  ·  el Brujo: cada uno ejecutó la carta del otro";
+            }
+            if (r.OracleSide >= 0)
+                _detailTxt += r.OracleSide == 0 ? "  ·  jugó a la vista (Oracle)" : "  ·  jugaste a la vista (Oracle)";
         }
 
         void ComputeVerdictCore(DuelTurnResult r)
         {
             _winner = -1;
-            var d0 = r.Card0 >= 0 ? S.Def(0, r.Card0) : default;
-            var d1 = r.Card1 >= 0 ? S.Def(1, r.Card1) : default;
+            // con el Brujo, la carta que el lado i ejecuta es del catálogo del otro
+            var d0 = r.Card0 >= 0 ? S.Def(r.Swapped ? 1 : 0, r.Card0) : default;
+            var d1 = r.Card1 >= 0 ? S.Def(r.Swapped ? 0 : 1, r.Card1) : default;
 
             if (r.Escaped0 || r.Escaped1)
             {
@@ -494,7 +566,8 @@ namespace LagFighter
                     float e = 1f - Mathf.Pow(1f - t, 3f);
                     for (int i = 0; i < 2; i++)
                     {
-                        float sign = i == 0 ? -1f : 1f;
+                        // con el Brujo cada carta entra del lado de su DUEÑO
+                        float sign = StartSign(i);
                         _rc[i].anchoredPosition = new Vector2(sign * Mathf.Lerp(1100f, SlotX, e), 10f);
                         _rc[i].localRotation = Quaternion.Euler(0f, 0f, Mathf.Lerp(sign * 22f, 0f, e));
                         _rc[i].localScale = Vector3.one * Mathf.Lerp(0.65f, 1f, e);
@@ -509,7 +582,43 @@ namespace LagFighter
                     float pulse = 1f + Mathf.Sin(_t * 14f) * 0.02f;
                     for (int i = 0; i < 2; i++) _rc[i].localScale = Vector3.one * pulse;
                     _vs.transform.localScale = Vector3.one * (1f + Mathf.Sin(_t * 9f) * 0.09f);
-                    if (_t >= SuspenseT) { _phase = Phase.Flip; _t = 0f; }
+                    if (_t >= SuspenseT)
+                    {
+                        _t = 0f;
+                        if (_swap)
+                        {
+                            // el Brujo era SECRETO hasta acá: el cartel entra
+                            // junto con el cruce, no antes
+                            _phase = Phase.Cross;
+                            _powerNote.text = "SORCERER (EL BRUJO): ¡LAS CARTAS SE CRUZAN!" +
+                                (_powerNote.text.Length > 0 ? "\n" + _powerNote.text : "");
+                            SfxLib.Play(SfxLib.Kind.UiCancel, 0.9f);
+                        }
+                        else _phase = Phase.Flip;
+                    }
+                    break;
+                }
+                case Phase.Cross:
+                {
+                    // EL BRUJO: las cartas boca abajo VUELAN cruzándose — una
+                    // pasa por arriba y la otra por abajo, con giro completo.
+                    float t = Mathf.Clamp01(_t / CrossT);
+                    float e = t * t * (3f - 2f * t);
+                    for (int i = 0; i < 2; i++)
+                    {
+                        float from = StartSign(i) * SlotX;
+                        float to = (i == 0 ? -1f : 1f) * SlotX;
+                        float arc = (i == 0 ? 1f : -1f) * Mathf.Sin(t * Mathf.PI) * 130f;
+                        _rc[i].anchoredPosition = new Vector2(Mathf.Lerp(from, to, e), 10f + arc);
+                        _rc[i].localRotation = Quaternion.Euler(0f, 0f, (i == 0 ? 1f : -1f) * Mathf.Lerp(0f, 360f, e));
+                    }
+                    if (_t >= CrossT)
+                    {
+                        for (int i = 0; i < 2; i++) _rc[i].localRotation = Quaternion.identity;
+                        _phase = Phase.Flip;
+                        _t = 0f;
+                        SfxLib.Play(SfxLib.Kind.UiTick, 0.8f);
+                    }
                     break;
                 }
                 case Phase.Flip:
@@ -539,7 +648,11 @@ namespace LagFighter
                         _t = 0f;
                         for (int i = 0; i < 2; i++)
                         {
-                            _rc[i].localRotation = Quaternion.identity;
+                            // EL PERDEDOR: las cartas salen del flip PATAS PARA
+                            // ARRIBA y se enderezan mientras se canta el
+                            // veredicto — la vuelta se VE
+                            _rc[i].localRotation = _upset >= 0
+                                ? Quaternion.Euler(0f, 0f, 180f) : Quaternion.identity;
                             _rc[i].localScale = Vector3.one;
                         }
                         _verdict.text = _verdictTxt;
@@ -567,7 +680,8 @@ namespace LagFighter
                         float toS = win ? 1.22f : lose ? 0.82f : 1f;
                         _rc[i].anchoredPosition = Vector2.Lerp(new Vector2(sign * SlotX, 10f), new Vector2(toX, toY), e);
                         _rc[i].localScale = Vector3.one * Mathf.Lerp(1f, toS, e);
-                        _rc[i].localRotation = Quaternion.Euler(0f, 0f, lose ? Mathf.Lerp(0f, sign * 7f, e) : 0f);
+                        float upspin = _upset >= 0 ? Mathf.Lerp(180f, 0f, e) : 0f;
+                        _rc[i].localRotation = Quaternion.Euler(0f, 0f, upspin + (lose ? Mathf.Lerp(0f, sign * 7f, e) : 0f));
                         var dim = _rcDim[i].color;
                         dim.a = lose ? 0.55f * e : 0f;
                         _rcDim[i].color = dim;
@@ -603,6 +717,11 @@ namespace LagFighter
                 _verdict.transform.localScale = Vector3.one * 0.72f;
             }
             if (_detail != null) _detail.rectTransform.anchoredPosition = new Vector2(0f, 206f);
+            if (_powerNote != null)
+            {
+                _powerNote.rectTransform.anchoredPosition = new Vector2(0f, 296f);
+                _powerNote.fontSize = 17;
+            }
         }
 
         // El jugador puede apurar la ceremonia (clic o espacio).
@@ -614,6 +733,10 @@ namespace LagFighter
                 _rcFront[i].SetActive(true);
                 _rcBack[i].SetActive(false);
             }
+            // si el cruce del Brujo se apuró, el cartel entra igual
+            if (_swap && _powerNote != null && !_powerNote.text.StartsWith("SORCERER"))
+                _powerNote.text = "SORCERER (EL BRUJO): ¡LAS CARTAS SE CRUZAN!" +
+                    (_powerNote.text.Length > 0 ? "\n" + _powerNote.text : "");
             _verdict.text = _verdictTxt;
             _detail.text = _detailTxt;
             _verdict.gameObject.SetActive(true);

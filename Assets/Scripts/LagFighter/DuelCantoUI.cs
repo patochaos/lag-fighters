@@ -20,6 +20,13 @@ namespace LagFighter
         GameObject _offersRoot;
         Image _btnEnvido, _btnTruco;
 
+        // el PODER del personaje (DUELO.md §14): botón propio, siempre a la
+        // vista durante la planificación — cuando no se puede usar queda
+        // apagado CON el motivo escrito (que se entienda por qué no)
+        GameObject _powerRoot;
+        Image _btnPower;
+        bool _powerEnabled;
+
         // modal: te cantaron, respondé
         GameObject _modalRoot;
         Image[] _modalBtns;
@@ -96,7 +103,7 @@ namespace LagFighter
 
         public void SetVisible(bool on)
         {
-            if (!on) { HideOffers(); CloseModal(); if (_banner != null) { Destroy(_banner.gameObject); _banner = null; } }
+            if (!on) { HideOffers(); HidePowerOffer(); CloseModal(); if (_banner != null) { Destroy(_banner.gameObject); _banner = null; } }
             gameObject.SetActive(on);
         }
 
@@ -142,6 +149,43 @@ namespace LagFighter
             if (_offersRoot != null) Destroy(_offersRoot);
             _offersRoot = null;
             _btnEnvido = _btnTruco = null;
+        }
+
+        // ---- el botón de PODER ----
+
+        public void ShowPowerOffer(string nombre, string efecto, bool enabled, string nota)
+        {
+            HidePowerOffer();
+            _powerEnabled = enabled;
+            _powerRoot = new GameObject("Power", typeof(RectTransform));
+            var rt = _powerRoot.GetComponent<RectTransform>();
+            rt.SetParent(_canvasRt, false);
+            // misma columna que los cantos, DEBAJO: la zona de "cosas que
+            // podés declarar antes de jugar carta"
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
+            rt.anchoredPosition = new Vector2(-800f, 330f);
+            rt.sizeDelta = Vector2.zero;
+
+            Color c = enabled ? Duelo.Gold : Duelo.Mute;
+            var bg = Img(rt, "Btn", new Vector2(0.5f, 0f), Vector2.zero, new Vector2(260f, 86f),
+                Duelo.Wash(c, enabled ? 0.26f : 0.14f), ray: true);
+            DuelHandUI.Brackets(bg.rectTransform, 260f, 86f, Duelo.Alpha(c, enabled ? 0.8f : 0.4f));
+            Txt(bg.rectTransform, "T", nombre, new Vector2(0.5f, 1f), new Vector2(0f, -16f),
+                new Vector2(250f, 20f), 15, c, TextAnchor.MiddleCenter);
+            var ef = Txt(bg.rectTransform, "E", efecto, new Vector2(0.5f, 0.5f), new Vector2(0f, -2f),
+                new Vector2(244f, 30f), 11, Duelo.Alpha(enabled ? Duelo.Paper : Duelo.Mute, 0.85f),
+                TextAnchor.MiddleCenter, DuelHandUI.Face.Para, wrap: true);
+            ef.verticalOverflow = VerticalWrapMode.Truncate;
+            Txt(bg.rectTransform, "N", nota, new Vector2(0.5f, 0f), new Vector2(0f, 12f),
+                new Vector2(250f, 16f), 11, Duelo.Alpha(c, 0.75f), TextAnchor.MiddleCenter);
+            _btnPower = bg;
+        }
+
+        public void HidePowerOffer()
+        {
+            if (_powerRoot != null) Destroy(_powerRoot);
+            _powerRoot = null;
+            _btnPower = null;
         }
 
         // ---- modal de respuesta ----
@@ -223,6 +267,10 @@ namespace LagFighter
                 else if (d.TrucoChainUsed) s += "   ·   truco gastado este round";
                 if (d.PublicTantoSide >= 0)
                     s += $"   ·   {(d.PublicTantoSide == 0 ? "CANTASTE" : "TE CANTÓ")} {d.PublicTanto}";
+                // poderes DECLARADOS este turno: lo más importante de la línea
+                if (d.UpsetNow[0] || d.UpsetNow[1]) { s += "   ·   ¡LA MANO SE DA VUELTA!"; hot = true; }
+                if (d.OracleNow[1]) { s += "   ·   LA LECHUZA TE VE"; hot = true; }
+                else if (d.OracleNow[0]) { s += "   ·   el rival juega A LA VISTA"; hot = true; }
                 _status.text = s;
                 _status.color = hot ? Duelo.Gold : Duelo.Mute;
             }
@@ -258,11 +306,20 @@ namespace LagFighter
 
             bool overE = _btnEnvido != null && RectTransformUtility.RectangleContainsScreenPoint(_btnEnvido.rectTransform, mp, null);
             bool overT = _btnTruco != null && RectTransformUtility.RectangleContainsScreenPoint(_btnTruco.rectTransform, mp, null);
+            bool overP = _btnPower != null && RectTransformUtility.RectangleContainsScreenPoint(_btnPower.rectTransform, mp, null);
             if (_btnEnvido != null) _btnEnvido.color = Duelo.Wash(Duelo.Gold, overE ? 0.5f : 0.26f);
             if (_btnTruco != null) _btnTruco.color = Duelo.Wash(Duelo.Golpe, overT ? 0.5f : 0.26f);
+            if (_btnPower != null)
+                _btnPower.color = Duelo.Wash(_powerEnabled ? Duelo.Gold : Duelo.Mute,
+                    _powerEnabled ? (overP ? 0.5f : 0.26f) : 0.14f);
             if (!GameInput.ClickPressed()) return;
             if (overE) { SfxLib.Play(SfxLib.Kind.UiClick, 0.9f); _mc.DuelSingEnvido(); }
             else if (overT) { SfxLib.Play(SfxLib.Kind.UiClick, 0.9f); _mc.DuelSingTruco(); }
+            else if (overP)
+            {
+                if (_powerEnabled) { SfxLib.Play(SfxLib.Kind.UiClick, 0.9f); _mc.DuelUsePowerClicked(); }
+                else SfxLib.Play(SfxLib.Kind.UiCancel, 0.4f);   // el motivo ya está escrito en el botón
+            }
         }
     }
 }

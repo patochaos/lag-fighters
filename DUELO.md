@@ -794,6 +794,67 @@ declarar. Todo detrás de flags: personajes actuales siguen con
 - Espejos 49-50% (sin asimetrías escondidas) · KO 100% · el juego base
   sin poderes no se movió.
 
+### Las FASES del turno (corrección de Patricio, 2026-07-26)
+
+El timing de cada poder es parte de su diseño (calcado de los timings de
+CE) y quedó como **sistema de fases** explícito:
+
+1. **CANTOS** (envido/truco, como siempre).
+2. **PODERES PRE-CARTA** — Oracle y Loser: se declaran ANTES de que nadie
+   elija carta, son públicos y el rival puede reaccionar. Con Oracle
+   activo, el marcado queda **comprometido primero y su carta se ve**.
+3. **ELECCIÓN DE CARTA**.
+4. **PODERES POST-CARTA** — Sorcerer: se declara DESPUÉS de comprometer
+   TU carta y antes del reveal — el rival ya está jugado y se entera
+   recién en la revelación (fase CROSS). `DuelPowerInfo.PrePick(p)`
+   codifica la fase de cada poder.
+5. **REVEAL** y resolución.
+
+### El roster criollo: LOS DE LA SALAMANCA (2026-07-26)
+
+Grave/Jaina/Golem MURIERON. Mismos mazos medidos (ni un número tocado,
+salvo la vida del Lobizón), nombres nuevos + el poder de cada uno:
+
+| Personaje | ex | Arquetipo | Poder | Firmas renombradas |
+|---|---|---|---|---|
+| **LA LECHUZA** | Grave | zoner | Oracle (1×partida) | Luz Mala (X) · Vuelo Rasante (Z) |
+| **EL BRUJO** | Jaina | apostador | Sorcerer (1×round) | Facón del Pacto (Y) · La Traicionera (K) |
+| **EL LOBIZÓN** | Golem | grappler | Loser (1×round) | Tarascón (R) · Cabezazo (H) |
+
+- El ctor de `DuelSim` usa el poder del personaje por default; el lab pasa
+  `DuelPower.None` explícito para el baseline histórico.
+- **Matchups con poderes puestos** (`duelopoderes`, bloque nuevo): con
+  +4 de vida el Lobizón se iba a **59.6%** global (Loser × mazo lento =
+  la sinergia anticipada) → **HpBonus 4→2**: quedó **55.1 / 50.9 / 44.0**
+  (Lobizón/Lechuza/Brujo). *El poder es parte del presupuesto de fuerza
+  del personaje.* El Brujo sigue flojo entre IAs — es el poder más
+  dependiente de timing humano; dial pendiente tras el playtest (opciones:
+  mejorar la heurística de activación de la IA, o +vida).
+
+### La UI de poderes (2026-07-26 — compile-check + editor OK, falta jugarlo)
+
+- **Botón de poder** (DuelCantoUI): misma columna que ¡ENVIDO!/¡TRUCO!,
+  siempre visible en la planificación con nombre "CE (Criollo)", el
+  efecto en una línea y el ESTADO con motivo: "1 por PARTIDA — elegí el
+  momento" · "gastado — vuelve el round que viene" · "¡EN JUEGO este
+  turno!" · "se ofrece al ELEGIR tu carta" (el Brujo). Apagado = gris con
+  el porqué escrito.
+- **Oracle**: al usarlo, la carta comprometida de la IA aparece BOCA
+  ARRIBA al costado ("A LA VISTA — la va a jugar") durante toda tu
+  planificación. Si la IA lo usa contra vos: banner + prompt "LA LECHUZA
+  TE VE" y la IA contra-elige viendo tu carta.
+- **Sorcerer**: al confirmar tu carta se abre el modal "¿CRUZÁS LAS
+  CARTAS?" (¡CRUZAR! / JUGAR LIMPIO). En la revelación hay una fase
+  nueva **CROSS**: las cartas boca abajo VUELAN cruzándose con giro
+  completo y cartel — el rival se entera ahí, no antes.
+- **Loser**: banner al declararlo, línea de estado "¡LA MANO SE DA
+  VUELTA!", y en la revelación las cartas salen del flip PATAS PARA
+  ARRIBA y se enderezan mientras se canta el veredicto ("¡DADA VUELTA!").
+- El veredicto siempre canta el poder que tocó el turno; los banners de
+  declaración usan las poses de canto del teatro (Canta/Aguanta).
+- **Online: los poderes no viajan todavía** — el botón no aparece en
+  DuelNet (agregar la fase al protocolo cuando el modo esté aprobado).
+
 ### Cola anotada de poderes (del saqueo de los 148 aliens de CE)
 
 Trader (El Cambalachero) · Gambler (La Mentirosa — el canal de mentira

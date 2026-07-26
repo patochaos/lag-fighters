@@ -62,6 +62,35 @@ namespace LagFighter
         public DuelCard[] Cards;     // layout FIJO (ver DuelCatalog)
         public int[] DeckCounts;     // suma 20
         public int HpBonus;          // Ley 11: el tanque aguanta más (0 = vida estándar)
+        public DuelPower Power;      // el poder Cosmic del personaje (arquetipo × poder)
+    }
+
+    // Metadatos de los poderes para UI/IA: fase de declaración, nombre con
+    // el alias CE en brackets (convención de Patricio: "ORACLE (LA LECHUZA)")
+    // y el efecto en una línea.
+    public static class DuelPowerInfo
+    {
+        // PRE-CARTA (Oracle, Loser): se declaran ANTES de elegir carta y el
+        // rival se entera ANTES de elegir la suya. POST-CARTA (Sorcerer): se
+        // declara DESPUÉS de comprometer tu carta y ANTES del reveal — el
+        // rival ya está jugado y se entera recién en la revelación.
+        public static bool PrePick(DuelPower p) => p != DuelPower.Sorcerer;
+
+        public static string Nombre(DuelPower p) => p switch
+        {
+            DuelPower.Oracle => "ORACLE (LA LECHUZA)",
+            DuelPower.Sorcerer => "SORCERER (EL BRUJO)",
+            DuelPower.Loser => "LOSER (EL PERDEDOR)",
+            _ => "",
+        };
+
+        public static string Efecto(DuelPower p) => p switch
+        {
+            DuelPower.Oracle => "este turno el rival juega BOCA ARRIBA: elegís viendo su carta",
+            DuelPower.Sorcerer => "las cartas se CRUZAN: cada uno ejecuta la del otro (el escape no se embruja)",
+            DuelPower.Loser => "este turno la mano se DA VUELTA: el que pierde el intercambio, lo gana",
+            _ => "",
+        };
     }
 
     public static class DuelCatalog
@@ -100,82 +129,94 @@ namespace LagFighter
         //                            A  B  C  D  AGR ALT BJA S1 S2 ESC   = 20
         static readonly int[] Counts = { 2, 2, 2, 2, 3, 2, 2, 2, 2, 1 };
 
-        public static readonly DuelChar Grave = MakeGrave();
-        public static readonly DuelChar Jaina = MakeJaina();
-        public static readonly DuelChar Golem = MakeGolem();
-        public static readonly DuelChar[] Chars = { Grave, Jaina, Golem };
-        public const int GraveIdx = 0, JainaIdx = 1, GolemIdx = 2;
+        // ---- LOS DE LA SALAMANCA (2026-07-26): el roster criollo ----
+        // "Cthulhu meets truco": leyendas criollas que hicieron el pacto en la
+        // Salamanca. Cada uno = un ARQUETIPO de mazo ya medido (los números no
+        // se tocaron: eran los de Grave/Jaina/Golem) + UN poder Cosmic.
+        public static readonly DuelChar Lechuza = MakeLechuza();
+        public static readonly DuelChar Brujo = MakeBrujo();
+        public static readonly DuelChar Lobizon = MakeLobizon();
+        public static readonly DuelChar[] Chars = { Lechuza, Brujo, Lobizon };
+        public const int LechuzaIdx = 0, BrujoIdx = 1, LobizonIdx = 2;
 
         static DuelCard EscapeCard() => new DuelCard
         {
             Name = "Escape", Short = "ESC", Kind = DuelKind.Escape, Height = DuelHeight.None,
         };
 
-        static DuelChar MakeGrave()
+        // LA LECHUZA — la que todo lo ve (zoner, ex GRAVE). Su fuego fatuo
+        // quema aunque te tapes, y su poder es el Oracle: te hace jugar a la
+        // vista. Números intactos del arquetipo medido.
+        static DuelChar MakeLechuza()
         {
             var cards = new DuelCard[CardsPerChar];
             BaseCards().CopyTo(cards, 0);
             // El "proyectil" sin inventar la palabra proyectil: el más rápido
-            // del juego después de la espada, y pega igual si lo defendés.
-            // Daño 4→5 (2026-07-25): precio de firma estilo Sirlin, y crea
-            // LA colisión de tanto en 10 (X+X bajo = C+C alto) — el número
-            // acertijo del envido.
-            cards[Sig1] = new DuelCard { Name = "Nube Eléctrica (X)", Short = "X", Kind = DuelKind.Strike, Speed = 10, Damage = 5, Height = DuelHeight.Low, Chip = 2 };
+            // del juego después del facón, y pega igual si lo defendés.
+            // Daño 5: precio de firma estilo Sirlin (colisión de tanto en 10).
+            cards[Sig1] = new DuelCard { Name = "Luz Mala (X)", Short = "X", Kind = DuelKind.Strike, Speed = 10, Damage = 5, Height = DuelHeight.Low, Chip = 2 };
             // El rompe-correlación: ALTO y rápido — caza al que defiende bajo.
-            cards[Sig2] = new DuelCard { Name = "Torbellino (Z)", Short = "Z", Kind = DuelKind.Strike, Speed = 7, Damage = 6, Height = DuelHeight.High };
+            cards[Sig2] = new DuelCard { Name = "Vuelo Rasante (Z)", Short = "Z", Kind = DuelKind.Strike, Speed = 7, Damage = 6, Height = DuelHeight.High };
             cards[Escape] = EscapeCard();
             return new DuelChar
             {
-                Name = "GRAVE",
-                Tag = "Controla el espacio: su X pega 2 aunque la defiendas",
+                Name = "LA LECHUZA",
+                Tag = "Te ve. Siempre te vio. Su Luz Mala quema aunque te tapes",
                 Cards = cards,
                 DeckCounts = Counts,
+                Power = DuelPower.Oracle,
             };
         }
 
-        static DuelChar MakeJaina()
+        // EL BRUJO — el que hizo el pacto (apostador, ex JAINA). Su facón gana
+        // toda carrera pero el pacto se cobra si te lo paran; su poder es el
+        // Sorcerer: cruza las cartas.
+        static DuelChar MakeBrujo()
         {
             var cards = new DuelCard[CardsPerChar];
             BaseCards().CopyTo(cards, 0);
             // La apuesta: gana casi cualquier carrera de velocidad, pero si te
-            // la defienden pagás con un golpe gratis del rival.
-            cards[Sig1] = new DuelCard { Name = "Espada del Alba (Y)", Short = "Y", Kind = DuelKind.Strike, Speed = 11, Damage = 6, Height = DuelHeight.High, PunishOnGuard = true };
+            // la defienden pagás con un golpe gratis del rival (el pacto).
+            cards[Sig1] = new DuelCard { Name = "Facón del Pacto (Y)", Short = "Y", Kind = DuelKind.Strike, Speed = 11, Damage = 6, Height = DuelHeight.High, PunishOnGuard = true };
             // Derribo gratis: el premio deja de ser una elección con ella.
-            cards[Sig2] = new DuelCard { Name = "Patada Cruzada (K)", Short = "K", Kind = DuelKind.Strike, Speed = 6, Damage = 5, Height = DuelHeight.Low, FreeKnockdown = true };
+            cards[Sig2] = new DuelCard { Name = "La Traicionera (K)", Short = "K", Kind = DuelKind.Strike, Speed = 6, Damage = 5, Height = DuelHeight.Low, FreeKnockdown = true };
             cards[Escape] = EscapeCard();
             return new DuelChar
             {
-                Name = "JAINA",
-                Tag = "Apuesta: su Y gana toda carrera, defendida te cuesta un golpe",
+                Name = "EL BRUJO",
+                Tag = "Salió de la Salamanca: su Facón gana toda carrera, pero el pacto se cobra",
                 Cards = cards,
                 DeckCounts = Counts,
+                Power = DuelPower.Sorcerer,
             };
         }
 
-        // El GRAPPLER, en estado puro de la Ley 11: no tiene ninguna regla
-        // nueva — tiene DOS cartas de agarre (5 agarres en 20 cartas) y más
-        // vida. Eso solo ya re-pesa todo el juego contra él: defender pasa a
-        // ser carísimo, así que hay que pelearle, y pelearle es lo que su
-        // Cabezazo castiga.
-        static DuelChar MakeGolem()
+        // EL LOBIZÓN — el séptimo hijo (grappler, ex GOLEM): DOS agarres (5 en
+        // 20 cartas) y más vida. Nace perdedor y se da vuelta — su poder es el
+        // Loser, y su mazo lento-pesado es EXACTAMENTE el que el upset premia
+        // (el Cabezazo pierde toda carrera... salvo la noche que se da vuelta).
+        static DuelChar MakeLobizon()
         {
             var cards = new DuelCard[CardsPerChar];
             BaseCards().CopyTo(cards, 0);
-                        // La armadura se PAGA: es el agarre más lento del juego (pierde
+            // La armadura se PAGA: es el agarre más lento del juego (pierde
             // con el agarre común) y pega poco. Con vel 7 / 8 de daño no
-            // perdía con nada y el Golem se iba a 66% en el lab.
-            cards[Sig1] = new DuelCard { Name = "Roca Rodante (R)", Short = "R", Kind = DuelKind.Grab, Speed = 3, Damage = 5, Height = DuelHeight.None, Armor = true };
+            // perdía con nada y el arquetipo se iba a 66% en el lab.
+            cards[Sig1] = new DuelCard { Name = "Tarascón (R)", Short = "R", Kind = DuelKind.Grab, Speed = 3, Damage = 5, Height = DuelHeight.None, Armor = true };
             cards[Sig2] = new DuelCard { Name = "Cabezazo (H)", Short = "H", Kind = DuelKind.Strike, Speed = 3, Damage = 9, Height = DuelHeight.High };
             cards[Escape] = EscapeCard();
             return new DuelChar
             {
-                Name = "GOLEM",
-                Tag = "Grappler: 5 agarres y su Roca AGUANTA el golpe y te agarra igual",
+                Name = "EL LOBIZÓN",
+                Tag = "Séptimo hijo: te muerde aunque le pegues, y las malas noches se dan vuelta",
                 Cards = cards,
                 DeckCounts = Counts,
-                // 8→4 con los rounds (2026-07-26): el bonus es POR ROUND y
-                // 8 sobre 26 era +31% de vida (el lab lo mandó a 63%).
-                HpBonus = 4,
+                // 8→4 con los rounds (2026-07-26) y 4→2 con el PODER: el
+                // Loser sinergiza con este mazo lento-pesado (el upset le da
+                // vuelta las carreras que pierde) y con +4 el Lobizón se iba
+                // a 59.6% global. El poder ES parte del presupuesto de fuerza.
+                HpBonus = 2,
+                Power = DuelPower.Loser,
             };
         }
     }
@@ -390,17 +431,19 @@ namespace LagFighter
         // local. Como toda la resolución de DuelSim es simétrica por lado,
         // las dos sims espejadas barajan idéntico y quedan en lockstep sin
         // tocar una línea de la UI (que asume "vos = lado 0").
-        public DuelSim(int seed, int char0 = DuelCatalog.GraveIdx, int char1 = DuelCatalog.GraveIdx,
+        // Poderes: null = el del PERSONAJE (el juego real) · None explícito =
+        // sin poder (el baseline del lab) · otro = override para experimentos.
+        public DuelSim(int seed, int char0 = DuelCatalog.LechuzaIdx, int char1 = DuelCatalog.LechuzaIdx,
             int streamTag0 = 0, int streamTag1 = 1,
-            DuelPower power0 = DuelPower.None, DuelPower power1 = DuelPower.None)
+            DuelPower? power0 = null, DuelPower? power1 = null)
         {
             _rng[0] = Mix((uint)seed * 0x9E3779B9u + (uint)(streamTag0 + 1) * 0x85EBCA6Bu);
             _rng[1] = Mix((uint)seed * 0x9E3779B9u + (uint)(streamTag1 + 1) * 0x85EBCA6Bu);
             CharIdx[0] = char0; CharIdx[1] = char1;
-            Power[0] = power0; Power[1] = power1;
             for (int s = 0; s < 2; s++)
             {
                 Chr[s] = DuelCatalog.Chars[CharIdx[s]];
+                Power[s] = (s == 0 ? power0 : power1) ?? Chr[s].Power;
                 DealSide(s);
                 PowerUses[s] = PowerRefill(s);
             }

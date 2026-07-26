@@ -126,6 +126,7 @@ class Tests
         DueloPoderBrujoCruzaLasCartas();
         DueloPoderBrujoNoEmbrujaElEscape();
         DueloPoderesRecargaPorPoder();
+        DueloRosterCriolloConPoderes();
         DueloEscapeCongelaElTurno();
         DueloEscapeSeGastaParaSiempre();
         DueloChipPegaAunqueDefiendas();
@@ -1415,7 +1416,7 @@ class Tests
     // Una regla por test: la tabla completa, las alturas, el premio, el
     // derribo, el escape y la economía de mazo.
 
-    static DuelSim NewDuelo(int c0 = DuelCatalog.GraveIdx, int c1 = DuelCatalog.GraveIdx, int seed = 7)
+    static DuelSim NewDuelo(int c0 = DuelCatalog.LechuzaIdx, int c1 = DuelCatalog.LechuzaIdx, int seed = 7)
     {
         var d = new DuelSim(seed, c0, c1);
         d.StartTurn();
@@ -1432,7 +1433,7 @@ class Tests
     {
         var d = new DuelSim(3);
         int total = 0;
-        foreach (int n in DuelCatalog.Grave.DeckCounts) total += n;
+        foreach (int n in DuelCatalog.Lechuza.DeckCounts) total += n;
         bool mano = d.Hand[0].Contains(DuelCatalog.GuardHigh) &&
                     d.Hand[0].Contains(DuelCatalog.GuardLow) &&
                     d.Hand[0].Contains(DuelCatalog.Throw) &&
@@ -1446,7 +1447,7 @@ class Tests
     // alguien toca estos números sin querer, el juego cambia de personalidad.
     static void DueloVelocidadesDelCatalogo()
     {
-        var g = DuelCatalog.Grave.Cards; var j = DuelCatalog.Jaina.Cards;
+        var g = DuelCatalog.Lechuza.Cards; var j = DuelCatalog.Brujo.Cards;
         bool baseOk =
             g[DuelCatalog.AttackA].Speed == 8 && g[DuelCatalog.AttackA].Height == DuelHeight.Low &&
             g[DuelCatalog.AttackB].Speed == 7 && g[DuelCatalog.AttackB].Height == DuelHeight.Low &&
@@ -1646,7 +1647,7 @@ class Tests
 
     static DuelSim NewDueloPoder(DuelPower p0, DuelPower p1, int seed = 7)
     {
-        var d = new DuelSim(seed, DuelCatalog.GraveIdx, DuelCatalog.GraveIdx, 0, 1, p0, p1);
+        var d = new DuelSim(seed, DuelCatalog.LechuzaIdx, DuelCatalog.LechuzaIdx, 0, 1, p0, p1);
         d.StartTurn();
         return d;
     }
@@ -1745,6 +1746,26 @@ class Tests
             $"refills {refills} (usos {d.PowerUses[0]}/{d.PowerUses[1]}), forzado {forzado}");
     }
 
+    // El roster criollo (2026-07-26): cada personaje = arquetipo medido + UN
+    // poder. El ctor sin poderes explícitos usa el del personaje (el juego
+    // real); None explícito es el baseline del lab.
+    static void DueloRosterCriolloConPoderes()
+    {
+        bool roster =
+            DuelCatalog.Lechuza.Power == DuelPower.Oracle && DuelCatalog.Lechuza.Name == "LA LECHUZA" &&
+            DuelCatalog.Brujo.Power == DuelPower.Sorcerer && DuelCatalog.Brujo.Name == "EL BRUJO" &&
+            DuelCatalog.Lobizon.Power == DuelPower.Loser && DuelCatalog.Lobizon.Name == "EL LOBIZÓN";
+        var real = new DuelSim(7, DuelCatalog.LechuzaIdx, DuelCatalog.LobizonIdx);
+        bool defaults = real.Power[0] == DuelPower.Oracle && real.Power[1] == DuelPower.Loser &&
+                        real.PowerUses[0] == 1 && real.PowerUses[1] == 1;
+        var lab = new DuelSim(7, DuelCatalog.LechuzaIdx, DuelCatalog.LobizonIdx, 0, 1,
+            DuelPower.None, DuelPower.None);
+        bool overridden = lab.Power[0] == DuelPower.None && lab.PowerUses[0] == 0 && !lab.CanUsePower(0);
+        Check(roster && defaults && overridden,
+            "duelo: roster criollo — cada personaje trae SU poder (y el lab puede apagarlos)",
+            $"roster {roster}, defaults {defaults}, override {overridden}");
+    }
+
     static void DueloEscapeCongelaElTurno()
     {
         var d = NewDuelo();
@@ -1781,7 +1802,7 @@ class Tests
 
     static void DueloEspadaDefendidaSeCastiga()
     {
-        var d = NewDuelo(DuelCatalog.JainaIdx, DuelCatalog.GraveIdx);
+        var d = NewDuelo(DuelCatalog.BrujoIdx, DuelCatalog.LechuzaIdx);
         Mano(d, 0, DuelCatalog.Sig1);       // Y de Jaina: ALTA, unsafe
         Mano(d, 1, DuelCatalog.GuardHigh, DuelCatalog.AttackD);
         var r = d.Resolve(0, 0);
@@ -1795,19 +1816,19 @@ class Tests
 
     static void DueloEspadaGanaLaCarrera()
     {
-        var d = NewDuelo(DuelCatalog.JainaIdx, DuelCatalog.GraveIdx);
+        var d = NewDuelo(DuelCatalog.BrujoIdx, DuelCatalog.LechuzaIdx);
         Mano(d, 0, DuelCatalog.Sig1);       // Y vel 11
         Mano(d, 1, DuelCatalog.Sig1);       // X de Grave vel 10
         var r = d.Resolve(0, 0);
         d.ChoosePrize(DuelPrize.Knockdown);
-        int dmgY = DuelCatalog.Jaina.Cards[DuelCatalog.Sig1].Damage;
+        int dmgY = DuelCatalog.Brujo.Cards[DuelCatalog.Sig1].Damage;
         Check(r.Winner == 0 && d.Hp[1] == DuelConfig.MaxHp - dmgY && d.Hp[0] == DuelConfig.MaxHp,
             "duelo: la Y (vel 11) le gana a la X (vel 10)", $"hp {d.Hp[0]}/{d.Hp[1]}");
     }
 
     static void DueloPatadaCruzadaDerribaGratis()
     {
-        var d = NewDuelo(DuelCatalog.JainaIdx, DuelCatalog.GraveIdx);
+        var d = NewDuelo(DuelCatalog.BrujoIdx, DuelCatalog.LechuzaIdx);
         Mano(d, 0, DuelCatalog.Sig2, DuelCatalog.AttackD);  // K: 5 dmg, derribo GRATIS
         Mano(d, 1, DuelCatalog.Throw);
         d.Resolve(0, 0);
@@ -1904,13 +1925,15 @@ class Tests
     // (cinco agarres en veinte cartas y más vida) + UNA línea de carta.
     static void DueloElGolemEsGrappler()
     {
-        var d = NewDuelo(DuelCatalog.GolemIdx, DuelCatalog.GraveIdx);
-        var g = DuelCatalog.Golem;
+        var d = NewDuelo(DuelCatalog.LobizonIdx, DuelCatalog.LechuzaIdx);
+        var g = DuelCatalog.Lobizon;
         int agarres = g.DeckCounts[DuelCatalog.Throw] + g.DeckCounts[DuelCatalog.Sig1];
         bool armor = g.Cards[DuelCatalog.Sig1].Armor && g.Cards[DuelCatalog.Sig1].Kind == DuelKind.Grab;
-        Check(agarres == 5 && armor && d.MaxHpOf(0) == DuelConfig.MaxHp + 4 &&
+        // +2 de vida (era +4): el poder Loser sinergiza con el mazo lento y
+        // el lab lo mandó a 59.6% global — el poder es parte del presupuesto.
+        Check(agarres == 5 && armor && d.MaxHpOf(0) == DuelConfig.MaxHp + 2 &&
               d.MaxHpOf(1) == DuelConfig.MaxHp,
-            "duelo: el Golem es grappler (5 agarres, Roca con aguante, +4 de vida por round)",
+            "duelo: el Lobizón es grappler (5 agarres, Tarascón con aguante, +2 de vida por round)",
             $"agarres {agarres}, aguante {armor}, hp {d.MaxHpOf(0)}");
     }
 
@@ -1918,15 +1941,15 @@ class Tests
     // juego (ese es el precio de su aguante), así que el agarre común le gana.
     static void DueloAgarreVsAgarreDesempataLaVelocidad()
     {
-        var d = NewDuelo(DuelCatalog.GolemIdx, DuelCatalog.GraveIdx);
+        var d = NewDuelo(DuelCatalog.LobizonIdx, DuelCatalog.LechuzaIdx);
         Mano(d, 0, DuelCatalog.Sig1);    // Roca del Golem (la lenta)
         Mano(d, 1, DuelCatalog.Throw);   // agarre común (más rápida)
-        var roca = DuelCatalog.Golem.Cards[DuelCatalog.Sig1];
-        var comun = DuelCatalog.Grave.Cards[DuelCatalog.Throw];
+        var roca = DuelCatalog.Lobizon.Cards[DuelCatalog.Sig1];
+        var comun = DuelCatalog.Lechuza.Cards[DuelCatalog.Throw];
         var r = d.Resolve(0, 0);
         if (d.AwaitingChoice) d.ChoosePrize(DuelPrize.Knockdown);
         Check(roca.Speed < comun.Speed && !r.Tech && r.Winner == 1 &&
-              d.Hp[0] == DuelConfig.MaxHp + DuelCatalog.Golem.HpBonus - comun.Damage,
+              d.Hp[0] == DuelConfig.MaxHp + DuelCatalog.Lobizon.HpBonus - comun.Damage,
             "duelo: agarre vs agarre lo desempata la VELOCIDAD (tech solo si empatan)",
             $"tech {r.Tech}, winner {r.Winner}, hp0 {d.Hp[0]}");
     }
@@ -1935,14 +1958,14 @@ class Tests
     // no una derrota — y por eso nadie cobra premio.
     static void DueloAguanteComeElGolpeYAgarraIgual()
     {
-        var d = NewDuelo(DuelCatalog.GolemIdx, DuelCatalog.GraveIdx);
+        var d = NewDuelo(DuelCatalog.LobizonIdx, DuelCatalog.LechuzaIdx);
         Mano(d, 0, DuelCatalog.Sig1);     // Roca con AGUANTE (8)
         Mano(d, 1, DuelCatalog.AttackD);  // Patada (7): normalmente le gana al agarre
-        int dmgRoca = DuelCatalog.Golem.Cards[DuelCatalog.Sig1].Damage;
-        int dmgPatada = DuelCatalog.Grave.Cards[DuelCatalog.AttackD].Damage;
+        int dmgRoca = DuelCatalog.Lobizon.Cards[DuelCatalog.Sig1].Damage;
+        int dmgPatada = DuelCatalog.Lechuza.Cards[DuelCatalog.AttackD].Damage;
         var r = d.Resolve(0, 0);
         Check(r.Armor && r.Trade && !d.AwaitingChoice &&
-              d.Hp[0] == DuelConfig.MaxHp + DuelCatalog.Golem.HpBonus - dmgPatada &&
+              d.Hp[0] == DuelConfig.MaxHp + DuelCatalog.Lobizon.HpBonus - dmgPatada &&
               d.Hp[1] == DuelConfig.MaxHp - dmgRoca,
             "duelo: AGUANTE — el golpe pega pero el agarre entra igual (sin premio)",
             $"armor {r.Armor}, hp {d.Hp[0]}/{d.Hp[1]}, premio pendiente {d.AwaitingChoice}");
@@ -1950,7 +1973,7 @@ class Tests
 
     static void DueloAguanteNoAplicaSinLaCarta()
     {
-        var d = NewDuelo(DuelCatalog.GolemIdx, DuelCatalog.GraveIdx);
+        var d = NewDuelo(DuelCatalog.LobizonIdx, DuelCatalog.LechuzaIdx);
         Mano(d, 0, DuelCatalog.Throw);    // agarre COMÚN: sin aguante
         Mano(d, 1, DuelCatalog.AttackD);
         var r = d.Resolve(0, 0);
@@ -2151,8 +2174,8 @@ class Tests
     // en cada turno — cantos, premios, rounds y remezclas incluidos.
     static void DueloEspejoOnlineEsLockstep()
     {
-        var host = new DuelSim(4242, DuelCatalog.GraveIdx, DuelCatalog.JainaIdx, streamTag0: 0, streamTag1: 1);
-        var guest = new DuelSim(4242, DuelCatalog.JainaIdx, DuelCatalog.GraveIdx, streamTag0: 1, streamTag1: 0);
+        var host = new DuelSim(4242, DuelCatalog.LechuzaIdx, DuelCatalog.BrujoIdx, streamTag0: 0, streamTag1: 1);
+        var guest = new DuelSim(4242, DuelCatalog.BrujoIdx, DuelCatalog.LechuzaIdx, streamTag0: 1, streamTag1: 0);
         var rngA = new System.Random(99);   // jugador A = host local 0 = guest local 1
         var rngB = new System.Random(77);
 
@@ -2234,7 +2257,7 @@ class Tests
     {
         var ai0 = new SimpleAI(seed * 7919 + 13);
         var ai1 = new SimpleAI(seed * 104729 + 57);
-        var d = new DuelSim(seed, DuelCatalog.GraveIdx, DuelCatalog.JainaIdx);
+        var d = new DuelSim(seed, DuelCatalog.LechuzaIdx, DuelCatalog.BrujoIdx);
         int guard = 0;
         while (!d.Over && guard++ < 60)
         {

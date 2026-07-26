@@ -240,8 +240,8 @@ namespace LagFighter
             for (int k = host.transform.childCount - 1; k >= 0; k--) Destroy(host.transform.GetChild(k).gameObject);
             var rt = host.GetComponent<RectTransform>();
             // (ancho, alto) relativos — los mismos números que SetDuelBuild
-            float bw = charIdx == DuelCatalog.GolemIdx ? 1.36f : charIdx == DuelCatalog.JainaIdx ? 0.80f : 1f;
-            float bh = charIdx == DuelCatalog.GolemIdx ? 0.81f : charIdx == DuelCatalog.JainaIdx ? 1.13f : 1f;
+            float bw = charIdx == DuelCatalog.LobizonIdx ? 1.36f : charIdx == DuelCatalog.BrujoIdx ? 0.80f : 1f;
+            float bh = charIdx == DuelCatalog.LobizonIdx ? 0.81f : charIdx == DuelCatalog.BrujoIdx ? 1.13f : 1f;
             float u = 42f;   // unidad de dibujo
             var dark = Duelo.Alpha(c, 0.72f);
             Img(rt, "Head", new Vector2(0.5f, 0f), new Vector2(0f, u * 3.05f * bh), new Vector2(u * 0.62f * bw, u * 0.62f * bh), c);
@@ -297,9 +297,9 @@ namespace LagFighter
         // del catálogo real, así el menú nunca miente
         static readonly (string label, string desc)[] DuelChars =
         {
-            ("GRAVE", "Controla el espacio. Su Nube Eléctrica es el golpe más rápido del mazo y pega 2 aunque se la defiendan; su Torbellino es ALTO y rápido, para cazar al que se cubre abajo."),
-            ("JAINA", "La apuesta. Su Espada del Alba gana casi toda carrera de velocidad, pero si se la defienden te pegan gratis; su Patada Cruzada derriba sin pagar el premio."),
-            ("GOLEM", "El grappler. CINCO agarres en 20 cartas y más vida: defenderle sale carísimo, así que hay que pelearle — y su Cabezazo de 9 castiga al que se anima."),
+            ("LA LECHUZA", "Te ve. Su Luz Mala es el golpe más rápido del mazo y quema 2 aunque te tapes. PODER — ORACLE (1 por partida): el rival juega BOCA ARRIBA y elegís viendo."),
+            ("EL BRUJO", "Salió de la Salamanca. Su Facón del Pacto gana casi toda carrera, pero si se lo paran el pacto se cobra. PODER — SORCERER (1 por round): tras elegir tu carta, CRUZÁS las cartas — cada uno ejecuta la del otro."),
+            ("EL LOBIZÓN", "Séptimo hijo. CINCO agarres, más vida, y su Tarascón muerde aunque le pegues. PODER — LOSER (1 por round): cantás la vuelta ANTES de elegir — el que pierde el intercambio, lo gana."),
         };
 
         static readonly (string label, string desc)[] CardChars =
