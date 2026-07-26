@@ -120,6 +120,7 @@ class Tests
         DueloPremioSinCombustibleEsDerribo();
         DueloDerriboApagaLaGuardiaRival();
         DueloElDerriboDuraUnSoloTurno();
+        DueloVendidoLaGuardiaBloqueaDerribado();
         DueloEscapeCongelaElTurno();
         DueloEscapeSeGastaParaSiempre();
         DueloChipPegaAunqueDefiendas();
@@ -1607,6 +1608,33 @@ class Tests
         Mano(d, 1, DuelCatalog.GuardLow);
         d.Resolve(0, 0);
         Check(kdOn && !d.KnockedDown[1], "duelo: el derribo dura UN turno", $"antes {kdOn}, después {d.KnockedDown[1]}");
+    }
+
+    // VENDIDO (DuelConfig.KdVendido): el derribo no apaga la guardia — el
+    // castigo es que la próxima carta se juega boca arriba (eso vive fuera
+    // de la sim). Acá se verifica el lado sim: derribado, la guardia
+    // acertada SÍ bloquea, y el estado sigue durando un solo turno.
+    static void DueloVendidoLaGuardiaBloqueaDerribado()
+    {
+        bool v0 = DuelConfig.KdVendido;
+        DuelConfig.KdVendido = true;
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackA);
+        Mano(d, 1, DuelCatalog.Throw);
+        d.Resolve(0, 0);
+        d.ChoosePrize(DuelPrize.Knockdown);
+        bool kdOn = d.KnockedDown[1];
+        d.StartTurn();
+        Mano(d, 0, DuelCatalog.AttackC);    // ALTO
+        Mano(d, 1, DuelCatalog.GuardHigh);  // derribado... pero en VENDIDO bloquea
+        var r = d.Resolve(0, 0);
+        bool blocked = r.Guarded1 && !r.WrongGuard1 && r.Drew1 == DuelConfig.GuardDraw &&
+                       d.Hp[1] == DuelConfig.MaxHp - 3;
+        bool kdOff = !d.KnockedDown[1];     // sigue durando UN turno
+        DuelConfig.KdVendido = v0;
+        Check(blocked && kdOn && kdOff,
+            "duelo: VENDIDO — derribado la guardia SÍ bloquea (el castigo es el reveal)",
+            $"guard {r.Guarded1}, drew {r.Drew1}, hp1 {d.Hp[1]}, kd {kdOn}→{!kdOff}");
     }
 
     static void DueloEscapeCongelaElTurno()

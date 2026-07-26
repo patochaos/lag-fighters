@@ -650,9 +650,21 @@ namespace LagFighter
             if (s.KnockedDown[me])
             {
                 if (escape >= 0 && (s.Hp[me] <= DuelConfig.MaxHp / 3 || r < 0.55)) return escape;
-                if (r < 0.65 && fast >= 0) return fast;
-                if (r < 0.85 && strong >= 0) return strong;
-                if (grab >= 0) return grab;
+                if (DuelConfig.KdVendido)
+                {
+                    // VENDIDO: me la van a ver. El agarre visto es regalo (el
+                    // golpe rival gana limpio) y la guardia vista la caza el
+                    // agarre; el mal menor es el golpe rápido — parado solo
+                    // pierde tempo, y al menos fuerza la carrera.
+                    if (fast >= 0) return fast;
+                    if (grab >= 0) return grab;
+                }
+                else
+                {
+                    if (r < 0.65 && fast >= 0) return fast;
+                    if (r < 0.85 && strong >= 0) return strong;
+                    if (grab >= 0) return grab;
+                }
                 return AnyStrike() >= 0 ? AnyStrike() : 0;
             }
 
@@ -720,6 +732,74 @@ namespace LagFighter
             if (grab >= 0) return grab;
             int guardFallback = Guard();
             return guardFallback >= 0 ? guardFallback : 0;
+        }
+
+        // VENDIDO (DuelConfig.KdVendido): el derribado juega BOCA ARRIBA y
+        // esta rama contra-elige VIENDO su carta (la ventaja de +13pp de la
+        // Ley 8, convertida en el premio del derribo). oppCard es índice de
+        // CATÁLOGO del rival, no de mano. Con −1 (no se vio nada) delega en
+        // la elección ciega normal.
+        public int PickDuelCounter(DuelSim s, int me, int oppCard)
+        {
+            if (oppCard < 0) return PickDuelCard(s, me);
+            var hand = s.Hand[me];
+            if (hand.Count == 0) return -1;
+            var seen = s.Def(1 - me, oppCard);
+
+            int fasterBest = -1, strongest = -1, weakest = -1, otherHeight = -1,
+                gMatch = -1, gAny = -1, grabFast = -1, armorGrab = -1;
+            for (int i = 0; i < hand.Count; i++)
+            {
+                var d = s.Def(me, hand[i]);
+                switch (d.Kind)
+                {
+                    case DuelKind.Strike:
+                        if (strongest < 0 || d.Damage > s.Def(me, hand[strongest]).Damage) strongest = i;
+                        if (weakest < 0 || d.Damage < s.Def(me, hand[weakest]).Damage) weakest = i;
+                        if (seen.Kind == DuelKind.Strike && d.Speed > seen.Speed &&
+                            (fasterBest < 0 || d.Damage > s.Def(me, hand[fasterBest]).Damage)) fasterBest = i;
+                        if (seen.Kind == DuelKind.Guard && d.Height != seen.Height &&
+                            (otherHeight < 0 || d.Damage > s.Def(me, hand[otherHeight]).Damage)) otherHeight = i;
+                        break;
+                    case DuelKind.Grab:
+                        if (grabFast < 0 || d.Speed > s.Def(me, hand[grabFast]).Speed) grabFast = i;
+                        if (d.Armor) armorGrab = i;
+                        break;
+                    case DuelKind.Guard:
+                        if (gAny < 0) gAny = i;
+                        if (seen.Kind == DuelKind.Strike && d.Height == seen.Height) gMatch = i;
+                        break;
+                }
+            }
+
+            switch (seen.Kind)
+            {
+                case DuelKind.Escape:
+                    // el turno se congela: la guardia vuelve gratis, el resto
+                    // se tira sin efecto — no quemar nada que valga.
+                    if (gAny >= 0) return gAny;
+                    return weakest >= 0 ? weakest : 0;
+                case DuelKind.Strike:
+                    if (fasterBest >= 0) return fasterBest;   // sangre + premio
+                    if (gMatch >= 0) return gMatch;           // economía (y cobra el truco)
+                    if (armorGrab >= 0) return armorGrab;     // cambio con aguante
+                    if (strongest >= 0) return strongest;     // trade con suerte
+                    if (gAny >= 0) return gAny;
+                    break;
+                case DuelKind.Grab:
+                    // contra la Roca con AGUANTE el golpe es solo un cambio;
+                    // el agarre más rápido le gana LIMPIO la carrera de agarres.
+                    if (seen.Armor && grabFast >= 0 && s.Def(me, hand[grabFast]).Speed > seen.Speed) return grabFast;
+                    if (strongest >= 0) return strongest;     // el golpe le gana al agarre
+                    if (grabFast >= 0 && s.Def(me, hand[grabFast]).Speed > seen.Speed) return grabFast;
+                    break;
+                case DuelKind.Guard:
+                    if (grabFast >= 0) return grabFast;       // el depredador, visto
+                    if (otherHeight >= 0) return otherHeight; // la altura que NO cubre
+                    if (gAny >= 0) return gAny;               // no regalarle el robo
+                    break;
+            }
+            return PickDuelCard(s, me);
         }
 
         // +1 = le pega ALTO seguido · −1 = ABAJO · 0 = no hay sesgo legible.

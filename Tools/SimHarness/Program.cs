@@ -35,6 +35,7 @@ class Program
             RunCardsTrace(args.Length > 1 ? int.Parse(args[1]) : 1);
             return;
         }
+        if (Array.IndexOf(args, "vendido") >= 0) DuelConfig.KdVendido = true;
         if (args.Length > 0 && args[0] == "duelo")
         {
             RunDueloLab(args.Length > 1 ? int.Parse(args[1]) : 5000);
@@ -53,6 +54,14 @@ class Program
         if (args.Length > 0 && args[0] == "duelocantos")
         {
             RunDueloCantos(args.Length > 1 ? int.Parse(args[1]) : 3000);
+            return;
+        }
+        // A/B del derribo: guardia apagada (clásico) vs VENDIDO (boca arriba).
+        // Además, "vendido" como argumento extra de cualquier comando duelo*
+        // corre ese comando con el modo VENDIDO prendido (p.ej. duelo 8000 vendido).
+        if (args.Length > 0 && args[0] == "duelovendido")
+        {
+            RunDueloVendido(args.Length > 1 ? int.Parse(args[1]) : 4000);
             return;
         }
         int matches = args.Length > 0 ? int.Parse(args[0]) : 3000;
@@ -163,6 +172,15 @@ class Program
             return pick;
         }
 
+        // VENDIDO: contra-elegir viendo la carta del derribado. El bot
+        // random no explota nada (elige igual que siempre) — la brecha
+        // entre ambos mide cuánto vale saber explotar el reveal.
+        public int PickCounter(DuelSim d, int me, int revealedCard)
+        {
+            if (_ai == null) return d.Hand[me].Count == 0 ? -1 : _rand.Next(d.Hand[me].Count);
+            return _ai.PickDuelCounter(d, me, revealedCard);
+        }
+
         // Cierra la decisión pendiente. El bot random elige a ciegas pero
         // SIEMPRE cierra (el derribo es el fallback legal).
         public void Choice(DuelSim d)
@@ -270,12 +288,26 @@ class Program
             RoundTick();               // el chip de un canto pudo cerrar el round
             if (d.Over) break;
 
-            int h0 = p0.Pick(d, 0), h1 = p1.Pick(d, 1);
+            // kdSide = quién arranca el turno derribado (el turno de oki).
+            int kdSide = d.KnockedDown[0] == d.KnockedDown[1] ? -1 : (d.KnockedDown[0] ? 0 : 1);
+            int h0, h1;
+            if (DuelConfig.KdVendido && kdSide >= 0)
+            {
+                // VENDIDO: el derribado elige primero y su carta se juega
+                // BOCA ARRIBA — el otro contra-elige viéndola.
+                int hs = (kdSide == 0 ? p0 : p1).Pick(d, kdSide);
+                int revealed = hs >= 0 && hs < d.Hand[kdSide].Count ? d.Hand[kdSide][hs] : -1;
+                int ho = (kdSide == 0 ? p1 : p0).PickCounter(d, 1 - kdSide, revealed);
+                h0 = kdSide == 0 ? hs : ho;
+                h1 = kdSide == 0 ? ho : hs;
+            }
+            else { h0 = p0.Pick(d, 0); h1 = p1.Pick(d, 1); }
             var r = d.Resolve(h0, h1);
             if (d.AwaitingChoice) (d.PendingSide == 0 ? p0 : p1).Choice(d);
             if (r.Card1 >= 0) p0.Observe(d.Def(1, r.Card1));
             if (r.Card0 >= 0) p1.Observe(d.Def(0, r.Card0));
             st?.Turn(d, r, c0, c1);
+            if (kdSide >= 0) st?.Oki(kdSide, r);
             RoundTick();
         }
         st?.Match(d);
@@ -358,6 +390,22 @@ class Program
         }
 
         public long RoundsSum;
+
+        // ---- oki (el turno post-derribo): cuánto convierte el que derribó.
+        // La comparación clave del A/B derribo-clásico vs VENDIDO.
+        public long OkiTurns, OkiWinAtacante, OkiWinDerribado, OkiEscapes;
+        public long OkiDmgAlDerribado, OkiDmgAlAtacante;   // sangre del turno de oki
+
+        public void Oki(int kdSide, DuelTurnResult r)
+        {
+            OkiTurns++;
+            if (r.Escaped0 || r.Escaped1) { OkiEscapes++; return; }
+            if (r.Winner == 1 - kdSide) OkiWinAtacante++;
+            else if (r.Winner == kdSide) OkiWinDerribado++;
+            // r.Dmg ya incluye premio y castigo (todo pasa por Damage())
+            OkiDmgAlDerribado += r.Dmg(kdSide);
+            OkiDmgAlAtacante += r.Dmg(1 - kdSide);
+        }
 
         public void Match(DuelSim d)
         {
@@ -549,6 +597,39 @@ class Program
             }
         DuelConfig.TrucoPrizeToo = prize0;
         DuelConfig.TrucoFoldBonus = fold0;
+    }
+
+    // A/B del DERRIBO (2026-07-26, sesión de identidad): guardia APAGADA
+    // (la herencia de Yomi 2) vs VENDIDO (tu próxima carta se juega boca
+    // arriba y el rival contra-elige viéndola — el okizeme hecho
+    // información). Columnas que deciden: oki-atk% (cuánto convierte el
+    // turno post-derribo el que derribó), la parte del premio que va a
+    // DERRIBO (flag Ley 12: estaba 83/17 con el derribo clásico) y que la
+    // brecha/info no se caigan.
+    static void RunDueloVendido(int matches)
+    {
+        bool v0 = DuelConfig.KdVendido;
+        Console.WriteLine($"=== DUELO: derribo clásico vs VENDIDO ({matches} partidas por modo) ===");
+        Console.WriteLine("  modo     | turnos rounds   KO%  premio dmg/kd  oki-atk%  oki-esc%  oki-dmg(a/d)  brecha   info");
+        foreach (bool vendido in new[] { false, true })
+        {
+            DuelConfig.KdVendido = vendido;
+            var st = new DuelStats();
+            int nc = DuelCatalog.Chars.Length;
+            for (int m = 0; m < matches; m++)
+                PlayDuel(m + 1, (m / nc) % nc, m % nc, DuelBot.Full, DuelBot.Full, st);
+            double gap = Duel1v1(matches, DuelBot.Full, DuelBot.Random);
+            double con = Duel1v1(matches, DuelBot.Full, DuelBot.Predictable);
+            double sin = Duel1v1(matches, DuelBot.NoReads, DuelBot.Predictable);
+            long premios = Math.Max(1, st.PrizeDmg + st.PrizeKd);
+            Console.WriteLine($"  {(vendido ? "VENDIDO" : "clásico"),-8} | {(double)st.Turns / matches,6:0.0} {(double)st.RoundsSum / matches,6:0.0} {100.0 * st.Kos / matches,5:0.0} " +
+                              $"{100.0 * st.PrizeDmg / premios,7:0.0}/{100.0 * st.PrizeKd / premios,-5:0.0} " +
+                              $"{100.0 * st.OkiWinAtacante / Math.Max(1, st.OkiTurns),8:0.0} {100.0 * st.OkiEscapes / Math.Max(1, st.OkiTurns),9:0.0} " +
+                              $"{(double)st.OkiDmgAlDerribado / Math.Max(1, st.OkiTurns),7:0.00}/{(double)st.OkiDmgAlAtacante / Math.Max(1, st.OkiTurns),-5:0.00} " +
+                              $"{gap * 100,7:0.0} {(con - sin) * 100,6:+0.0;-0.0}");
+        }
+        DuelConfig.KdVendido = v0;
+        Console.WriteLine("  [oki-atk% = el que derribó gana el intercambio siguiente · oki-esc% = el derribado escapa]");
     }
 
     static double Duel1v1(int matches, DuelBot a, DuelBot b, DuelStats[] porLado = null)

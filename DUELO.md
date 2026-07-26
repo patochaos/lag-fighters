@@ -688,6 +688,58 @@ jugando contra personas. Implementado:
   reconexión. **Compilado y con el lockstep testeado, NO probado con dos
   clientes reales todavía.**
 
+## 13. VENDIDO — el derribo como información (experimento, 2026-07-26)
+
+Sesión de identidad ("Cthulhu meets truco", ver conversación): el derribo
+que apaga la guardia es herencia directa de Yomi 2. Alternativa propia:
+**el derribado queda VENDIDO — su próxima carta se juega BOCA ARRIBA y el
+rival elige la suya viéndola**. Es el okizeme hecho información (la biblia
+midió +13 pp para el que responde viendo, Ley 8: esa ventaja pasa a SER el
+premio del derribo). En idioma truco: "quedaste vendido".
+
+- **Implementado detrás de `DuelConfig.KdVendido`** (default false, el
+  juego vivo no cambia): en la sim solo cambia que la guardia del derribado
+  sigue bloqueando; el reveal-primero vive afuera (IA/harness/UI/protocolo),
+  como la negociación de los cantos. `SimpleAI.PickDuelCounter` es el
+  contra-pick que explota la carta vista; test nuevo (164 en verde).
+- **Lab**: `duelovendido N` (A/B contra el derribo clásico) y `vendido`
+  como argumento extra de cualquier comando duelo* (p.ej. `duelo 8000
+  vendido`).
+
+### Lo que midió (6000 partidas por modo)
+
+| modo | premio dmg/kd | oki: gana el atacante | oki: escape | oki-dmg (al caído / al atacante) | brecha | info |
+|---|---|---|---|---|---|---|
+| clásico | 82.6/17.4 | 13.7% | 67.6% | 1.38 / **1.43** | 87.2 | +1.4 |
+| VENDIDO | 85.9/14.1 | 9.2% | 74.4% | 0.90 / **0.17** | 88.9 | +1.2 |
+
+Lecturas:
+
+1. **El derribo clásico es un cambio de sangre casi parejo** entre IAs: el
+   caído pega DE VUELTA 1.43 por turno de oki (más de lo que recibe) —
+   sin guardia, ataca, y el atacante no adivina la altura mejor que
+   siempre. El "momento del daño" era en buena parte ilusión.
+2. **VENDIDO es un oki de CONTROL, no de sangre**: el caído queda mudo
+   (0.17 de daño — el contra-pick lo neutraliza casi siempre) pero el
+   atacante convierte menos vida (0.90) porque la respuesta correcta a la
+   carta vista muchas veces es la guardia (paga en cartas, no en HP).
+   La brecha de habilidad SUBE (87.2 → 88.9): explotar el reveal es
+   habilidad que el random no tiene.
+3. **El dato gordo es del ESCAPE, no del vendido: se come ~70% de los
+   turnos de oki en AMBOS modos.** El premio DERRIBO hoy es sobre todo
+   "quemale el escape". Conecta directo con el escenario pendiente
+   "escape vs truco armado" (§12): la válvula está tapando el okizeme
+   entero, no solo el truco.
+
+**Veredicto provisorio**: en números fríos entre IAs el vendido no
+mejora el balance (el premio derribo se elige aún menos: 14.1%), pero es
+más habilidad, más propio y sirve LA fantasía ("te la vi"). La decisión
+es de sensación contra humanos — falta la UI del reveal-primero (misma
+razón por la que la UI del canto era el instrumento de medición, no un
+lujo). Diales anotados si el vendido queda: que el escape del vendido
+también se vea venir (responde al escenario §12.1), y re-precio del
+premio (derribar debería tentar más que 14%).
+
 ### Escenarios anotados por Patricio (2026-07-26, a revisar jugando)
 
 1. **Escape vs truco armado**: hoy el ESCAPE congela el turno pero el

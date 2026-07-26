@@ -192,6 +192,15 @@ namespace LagFighter
         public static int TrucoMaxLevel = 3;  // 1=TRUCO ×2 · 2=RETRUCO ×3 · 3=VALE CUATRO ×4
         public static bool TrucoPrizeToo = false; // dial: el quiero multiplica también el premio +DAÑO
         public static int TrucoFoldBonus = 0;     // dial: chip extra del no quiero (el peaje del cobarde)
+
+        // ---- VENDIDO (experimento 2026-07-26) ----
+        // true: el derribo NO apaga la guardia — te deja VENDIDO: tu próxima
+        // carta se juega BOCA ARRIBA y el rival elige la suya viéndola. La
+        // biblia midió +13pp para el que responde viendo (Ley 8): esa ventaja
+        // ES el premio del derribo en este modo. El reveal-primero vive AFUERA
+        // de la sim (IA/UI/protocolo), igual que la negociación de los cantos;
+        // acá solo cambia que la guardia del derribado sigue bloqueando.
+        public static bool KdVendido = false;
     }
 
     // Todo lo que pasó en un turno, para el teatro, el log y los tests.
@@ -644,8 +653,9 @@ namespace LagFighter
             var atk = Def(atkSide, card);
             int def = 1 - atkSide;
             var guard = Def(def, _r.Card(def));
-            // derribado: la guardia NO bloquea (dura un solo turno)
-            bool down = KnockedDown[def];
+            // derribado: la guardia NO bloquea (dura un solo turno).
+            // En modo VENDIDO sí bloquea: el castigo es el reveal, no la guardia.
+            bool down = !DuelConfig.KdVendido && KnockedDown[def];
             bool blocks = !down && guard.Height == atk.Height;
             if (!blocks)
             {
