@@ -146,6 +146,7 @@ class Tests
         DueloTrucoNoQueridoPagaChip();
         DueloValeCuatroCuadruplica();
         DueloElChipDeUnCantoPuedeCerrarLaPartida();
+        DueloTrucoBloqueadoSePagaEnCartas();
         if (SimConfig.LimbsEnabled)
         {
             TresJabsArrancanElBrazo();
@@ -1469,7 +1470,7 @@ class Tests
         Mano(d, 1, DuelCatalog.GuardHigh);
         var r = d.Resolve(0, 0);
         d.ChoosePrize(DuelPrize.Knockdown);
-        Check(r.Winner == 0 && d.Hp[1] == DuelConfig.MaxHp - 6 && d.KnockedDown[1],
+        Check(r.Winner == 0 && d.Hp[1] == DuelConfig.MaxHp - 7 && d.KnockedDown[1],
             "duelo: el agarre le gana a la guardia (y el premio derriba)", $"hp1 {d.Hp[1]}, kd {d.KnockedDown[1]}");
     }
 
@@ -1942,6 +1943,26 @@ class Tests
         Check(d.Over && d.Winner == 0 && d.Hp[1] == 0,
             "duelo: rechazar un canto con la vida justa cierra la partida",
             $"over {d.Over}, winner {d.Winner}");
+    }
+
+    static void DueloTrucoBloqueadoSePagaEnCartas()
+    {
+        var d = NewDuelo();
+        d.ResolveTruco(0, level: 1, quiero: true);              // ×2 armado
+        Mano(d, 0, DuelCatalog.AttackC);                        // ALTO
+        Mano(d, 1, DuelCatalog.GuardHigh);                      // guardia CORRECTA
+        var r = d.Resolve(0, 0);
+        bool dobla = r.Guarded1 && r.Drew1 == DuelConfig.GuardDraw * 2 &&
+                     r.Truco == 1 && d.TrucoLevel == 0 &&
+                     d.Hp[1] == DuelConfig.MaxHp && r.Returned1;
+        var d2 = NewDuelo();
+        d2.ResolveTruco(1, level: 2, quiero: true);             // retruco ×3
+        Mano(d2, 0, DuelCatalog.AttackA);                       // BAJO
+        Mano(d2, 1, DuelCatalog.GuardLow);
+        var r2 = d2.Resolve(0, 0);
+        Check(dobla && r2.Drew1 == DuelConfig.GuardDraw * 3 && d2.TrucoLevel == 0,
+            "duelo: la guardia acertada COBRA el truco en cartas (×2 roba 2, ×3 roba 3)",
+            $"robo x2 {r.Drew1}, robo x3 {r2.Drew1}");
     }
 
     static void DueloMismaSeedMismaPartida()

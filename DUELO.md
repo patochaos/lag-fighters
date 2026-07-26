@@ -496,3 +496,40 @@ brecha 78.6%.
 > jugando, el envido da información y daño. Lo que sigue del §11 es
 > pulir esto (respondedor adaptativo de la IA, la UI del canto), no
 > reestructurarlo.
+
+### Segunda tanda (2026-07-25, madrugada): la guardia cobra el truco + la revisada Sirlin
+
+**Idea de Patricio**: el truco paga en la moneda de cada opción (Ley 2
+aplicada al canto). Ganás el intercambio con golpe/agarre → daño
+multiplicado; **lo ganás BLOQUEANDO → cartas multiplicadas** — robo base
+**1** (era 2; con el truco potenciándolo, 2 era mucho), ×2 roba 2, ×3
+roba 3, ×4 roba 4. El loop de tercer orden queda armado: gané el envido →
+me leíste → bloqueo y robo (lo leído se vence) → pero vos lo sabés →
+agarre rompe-guardia. Implementado en `StrikeVsGuard` + test.
+
+**La revisada de mazos contra el Yomi 2 real** (fuente: la investigación
+de [YOMI2-CARDS.md](YOMI2-CARDS.md) §1, rulebook v7.7 + Mizuumi; la wiki
+da 403 al fetch automático pero los números ya estaban capturados y los
+119 tests de CARTAS reproducen los combos del rulebook):
+
+- **La curva `velocidad + daño = 11`** de las normales de Sirlin (8/3,
+  7/4, 6/5, 5/6, 4/7) — las nuestras la cumplen, salteando el escalón
+  5/6 a propósito.
+- **Las firmas de Sirlin rompen la curva con miedo** (X 7/8 chip 4,
+  Espada 11/10 unsafe, Y de Jaina velocidad 14 con daño propio); las
+  nuestras estaban +1 a +3 sobre curva: tímidas.
+- **Ajustes**: Agarre **6→7** (el throw real pega 5/7 — el depredador del
+  bloqueo con dientes, clave ahora que bloquear cobra trucos) · X de
+  Grave **4→5** (precio de firma, y crea LA colisión: X+X bajo = 10 =
+  C+C alto). **El 10 es el número acertijo del envido por diseño** (X+X
+  y K+K bajos vs C+C alto); la IA lee ≥11 = alto seguro, ≤9 = bajo
+  seguro, 10 = sin señal.
+
+**Lab (8000 balance / 6000 profundidad)**: KO 100% · 12.0 turnos ·
+Grave 50.9 · Jaina 47.9 · Golem 51.2 (el agarre a 7 no disparó al Golem)
+· cantos 20.5% de turnos · trucos cobrados bloqueando: 1244 de 8853
+(14%) · siembra 48.8% vs 46.7% · **valor de la información +3.1 pp** (el
+máximo histórico: baseline +1.9, primera pasada de cantos +0.8) · cantar
+bien vs cantar al azar 51.2% (positivo por primera vez) · brecha 78%.
+Pendiente hacia el objetivo >+5: el respondedor adaptativo y probar
+contra humanos (la UI del canto).

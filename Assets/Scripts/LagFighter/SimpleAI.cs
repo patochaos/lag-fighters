@@ -621,13 +621,14 @@ namespace LagFighter
                 if (gHigh < 0) return gLow;
                 if (gLow < 0) return gHigh;
                 // LA SIEMBRA DEL ENVIDO (Ley 5): el tanto público del ganador
-                // filtra su mano — pesado = tiene los ALTOS, liviano = anda
-                // con los bajitos. Es una lectura, no una certeza (la K de
-                // Jaina hace 10 siendo baja), y envejece a medida que gasta.
+                // filtra su mano — ≥11 solo lo arman pares ALTOS, ≤9 solo
+                // bajos, y el 10 es EL número acertijo por diseño (X+X y K+K
+                // bajos = C+C alto): ahí no hay señal. Envejece a medida que
+                // el rival gasta.
                 if (ReadsHabits && s.PublicTantoSide == opp)
                 {
-                    if (s.PublicTanto >= 10 && _rng.NextDouble() < 0.65) return gHigh;
-                    if (s.PublicTanto <= 7 && s.PublicTanto > 0 && _rng.NextDouble() < 0.65) return gLow;
+                    if (s.PublicTanto >= 11 && _rng.NextDouble() < 0.65) return gHigh;
+                    if (s.PublicTanto <= 9 && s.PublicTanto > 0 && _rng.NextDouble() < 0.65) return gLow;
                 }
                 int skew = HeightSkew();
                 if (skew > 0) return gHigh;
@@ -694,6 +695,15 @@ namespace LagFighter
                 // agarre castiga al que se queda). La lectura de altura vale
                 // para elegir QUÉ guardia, no para guardar más veces — eso ya
                 // lo hace Guard() en la mezcla base.
+            }
+
+            // TRUCO ARMADO: bloquear bien lo cobra en cartas multiplicadas —
+            // la guardia sube en la mezcla (y el agarre rival caza justo a
+            // los que se esconden acá: el loop se cierra solo).
+            if (s.TrucoLevel > 0 && _rng.NextDouble() < 0.20)
+            {
+                int g = Guard();
+                if (g >= 0) return g;
             }
 
             // rematar: si el rival está a tiro, el golpe fuerte paga más

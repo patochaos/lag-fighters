@@ -74,7 +74,10 @@ namespace LagFighter
             new DuelCard { Name = "Directo (B)", Short = "B",   Kind = DuelKind.Strike, Speed = 7, Damage = 4, Height = DuelHeight.Low },
             new DuelCard { Name = "Gancho (C)",  Short = "C",   Kind = DuelKind.Strike, Speed = 6, Damage = 5, Height = DuelHeight.High },
             new DuelCard { Name = "Patada (D)",  Short = "D",   Kind = DuelKind.Strike, Speed = 4, Damage = 7, Height = DuelHeight.High },
-            new DuelCard { Name = "Agarre",      Short = "AGR", Kind = DuelKind.Grab,   Speed = 5, Damage = 6, Height = DuelHeight.None },
+            // Daño 7 como el throw real de Yomi 2 (5/7): el depredador del
+            // bloqueo pega como un pesado (Ley 3) — clave desde que la
+            // guardia cobra el truco en cartas.
+            new DuelCard { Name = "Agarre",      Short = "AGR", Kind = DuelKind.Grab,   Speed = 5, Damage = 7, Height = DuelHeight.None },
             new DuelCard { Name = "Guardia Alta",Short = "ALT", Kind = DuelKind.Guard,  Height = DuelHeight.High },
             new DuelCard { Name = "Guardia Baja",Short = "BJA", Kind = DuelKind.Guard,  Height = DuelHeight.Low },
         };
@@ -99,7 +102,10 @@ namespace LagFighter
             BaseCards().CopyTo(cards, 0);
             // El "proyectil" sin inventar la palabra proyectil: el más rápido
             // del juego después de la espada, y pega igual si lo defendés.
-            cards[Sig1] = new DuelCard { Name = "Nube Eléctrica (X)", Short = "X", Kind = DuelKind.Strike, Speed = 10, Damage = 4, Height = DuelHeight.Low, Chip = 2 };
+            // Daño 4→5 (2026-07-25): precio de firma estilo Sirlin, y crea
+            // LA colisión de tanto en 10 (X+X bajo = C+C alto) — el número
+            // acertijo del envido.
+            cards[Sig1] = new DuelCard { Name = "Nube Eléctrica (X)", Short = "X", Kind = DuelKind.Strike, Speed = 10, Damage = 5, Height = DuelHeight.Low, Chip = 2 };
             // El rompe-correlación: ALTO y rápido — caza al que defiende bajo.
             cards[Sig2] = new DuelCard { Name = "Torbellino (Z)", Short = "Z", Kind = DuelKind.Strike, Speed = 7, Damage = 6, Height = DuelHeight.High };
             cards[Escape] = EscapeCard();
@@ -165,7 +171,8 @@ namespace LagFighter
         public static int HandLimit = 8;
         public static int DrawPerTurn = 1;   // ambos roban TODOS los turnos (no hay turno activo)
         public static int OpeningRandom = 2; // + guardia alta, baja, agarre y escape garantizados
-        public static int GuardDraw = 2;     // cartas que roba el que defiende BIEN (Ley 2: la defensa paga en economía)
+        public static int GuardDraw = 1;     // cartas que roba el que defiende BIEN (Ley 2: la defensa paga en economía).
+                                             // 2→1 (2026-07-25, Patricio): con el truco multiplicándolo, robar 2 de base era mucho.
         public static int HardTurnCap = 40;  // red de seguridad; el mazo suele cerrar antes
 
         // ---- LOS CANTOS (DUELO.md §11) ----
@@ -569,7 +576,19 @@ namespace LagFighter
             }
             if (def == 0) _r.Guarded0 = true; else _r.Guarded1 = true;
             if (atk.Chip > 0) Damage(def, atk.Chip, chip: true);
-            for (int n = 0; n < DuelConfig.GuardDraw; n++)
+            // El truco también se cobra BLOQUEANDO (Patricio, 2026-07-25):
+            // la guardia acertada gana la apuesta en SU moneda — cartas
+            // multiplicadas (Ley 2 aplicada al canto). Robás 1 normal, 2 con
+            // truco, 3 con retruco, 4 con vale cuatro.
+            int draw = DuelConfig.GuardDraw;
+            if (TrucoLevel > 0)
+            {
+                draw *= TrucoMult(TrucoLevel);
+                _r.Truco = TrucoLevel;
+                TrucoLevel = 0;
+                TrucoCaller = -1;
+            }
+            for (int n = 0; n < draw; n++)
             {
                 DrawOne(def);
                 if (def == 0) _r.Drew0++; else _r.Drew1++;

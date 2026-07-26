@@ -308,9 +308,12 @@ class Program
             else { TrucoFolds++; TrucoChipTotal += tr.Chip; }
         }
 
+        public long TrucoGuardCobros;   // trucos cobrados BLOQUEANDO (en cartas)
+
         public void Turn(DuelSim d, DuelTurnResult r, int c0, int c1)
         {
             if (r.Truco > 0) TrucoCobrados++;
+            if (r.Truco > 0 && (r.Guarded0 || r.Guarded1)) TrucoGuardCobros++;
             // la siembra: ¿el que defiende CONTRA el ganador del envido
             // acierta más la altura? (los derribos no cuentan: no adivinaron)
             if (d.PublicTantoSide >= 0)
@@ -374,7 +377,7 @@ class Program
         Console.WriteLine($"  envido: {st.EnvCantados} cantados ({100.0 * st.EnvCantados / Math.Max(1, matches):0}% de partidas) · queridos {st.EnvQueridos} · empates {st.EnvEmpates} · tanto ganador prom {(double)st.EnvTantoSum / Math.Max(1, st.EnvQueridos - st.EnvEmpates):0.0}");
         Console.WriteLine($"  envido→partida: el ganador del envido gana el {100.0 * st.EnvGanadorGanaPartida / Math.Max(1, st.EnvConGanador):0.0}% de esas partidas [~50% = no la define]");
         Console.WriteLine($"  siembra: acierto de guardia contra el CANTADO {100.0 * st.PostEnvGuardOk / Math.Max(1, st.PostEnvGuardOk + st.PostEnvGuardMal):0.0}% vs global {100.0 * st.GuardOk / Math.Max(1, st.GuardOk + st.GuardMal):0.0}%");
-        Console.WriteLine($"  truco: {st.TrucoCantados} cantados · queridos {st.TrucoQueridos} (×2 {st.TrucoNivel[1]} · ×3 {st.TrucoNivel[2]} · ×4 {st.TrucoNivel[3]}) · no quiero {st.TrucoFolds} · cobrados {st.TrucoCobrados}");
+        Console.WriteLine($"  truco: {st.TrucoCantados} cantados · queridos {st.TrucoQueridos} (×2 {st.TrucoNivel[1]} · ×3 {st.TrucoNivel[2]} · ×4 {st.TrucoNivel[3]}) · no quiero {st.TrucoFolds} · cobrados {st.TrucoCobrados} (bloqueando {st.TrucoGuardCobros})");
         Console.WriteLine("  winrate global por personaje (los dos lados juntos):");
         for (int a = 0; a < nc; a++)
         {
