@@ -199,9 +199,24 @@ class Program
         var p0 = new DuelPlayer(HashSeed(seed, 0), b0);
         var p1 = new DuelPlayer(HashSeed(seed, 1), b1);
         var d = new DuelSim(seed, c0, c1);
-        int envidoWinner = -1;
+        // envido→round: el ganador del envido de cada round vs quién ganó
+        // ESE round (los rounds pueden terminar por KO, chip de canto o
+        // time over — se detecta por el marcador, no por el turno).
+        int envWinnerRound = -1, prevRound = 1, prevW0 = 0, prevW1 = 0;
+        void RoundTick()
+        {
+            if (d.Round == prevRound && !d.Over) return;
+            int rw = d.RoundWins[0] > prevW0 ? 0 : d.RoundWins[1] > prevW1 ? 1 : -1;
+            prevRound = d.Round; prevW0 = d.RoundWins[0]; prevW1 = d.RoundWins[1];
+            if (st != null && envWinnerRound >= 0 && rw >= 0)
+            {
+                st.EnvConGanador++;
+                if (rw == envWinnerRound) st.EnvGanadorGanaPartida++;
+            }
+            envWinnerRound = -1;
+        }
         int guard = 0;
-        while (!d.Over && guard++ < 80)
+        while (!d.Over && guard++ < 150)
         {
             d.StartTurn();
             if (d.Over) break;
@@ -218,7 +233,7 @@ class Program
                     if (!(side == 0 ? p0 : p1).CantaEnvido(d, side)) continue;
                     bool quiero = (side == 0 ? p1 : p0).QuiereEnvido(d, 1 - side);
                     var er = d.ResolveEnvido(side, quiero);
-                    if (er.Winner >= 0) envidoWinner = er.Winner;
+                    if (er.Winner >= 0) envWinnerRound = er.Winner;
                     st?.Envido(er);
                     canto = true;
                     break;
@@ -252,7 +267,8 @@ class Program
                 }
             }
             if (canto && st != null) st.TurnosConCanto++;
-            if (d.Over) break;   // el chip de un canto puede cerrar la partida
+            RoundTick();               // el chip de un canto pudo cerrar el round
+            if (d.Over) break;
 
             int h0 = p0.Pick(d, 0), h1 = p1.Pick(d, 1);
             var r = d.Resolve(h0, h1);
@@ -260,8 +276,9 @@ class Program
             if (r.Card1 >= 0) p0.Observe(d.Def(1, r.Card1));
             if (r.Card0 >= 0) p1.Observe(d.Def(0, r.Card0));
             st?.Turn(d, r, c0, c1);
+            RoundTick();
         }
-        st?.Match(d, envidoWinner);
+        st?.Match(d);
         return d.Winner;
     }
 
@@ -340,17 +357,15 @@ class Program
             HandSum += d.Hand[0].Count + d.Hand[1].Count; HandSamples += 2;
         }
 
-        public void Match(DuelSim d, int envidoWinner = -1)
+        public long RoundsSum;
+
+        public void Match(DuelSim d)
         {
             Matches++;
             Turns += d.Turn;
+            RoundsSum += d.Round;
             if (d.Hp[0] <= 0 || d.Hp[1] <= 0) Kos++; else TimeOvers++;
             if (d.Winner < 0) Draws++;
-            if (envidoWinner >= 0)
-            {
-                EnvConGanador++;
-                if (d.Winner == envidoWinner) EnvGanadorGanaPartida++;
-            }
         }
     }
 
@@ -370,12 +385,12 @@ class Program
         var cn = new string[nc];
         for (int i = 0; i < nc; i++) cn[i] = DuelCatalog.Chars[i].Name;
         Console.WriteLine($"partidas: {matches} · empates {st.Draws} · KO {100.0 * st.Kos / matches:0.0}% · time over {100.0 * st.TimeOvers / matches:0.0}%");
-        Console.WriteLine($"turnos/partida: {(double)st.Turns / matches:0.0} · mano promedio {(double)st.HandSum / Math.Max(1, st.HandSamples):0.0}/{DuelConfig.HandLimit} · manos vacías {st.Empty}");
+        Console.WriteLine($"turnos/partida: {(double)st.Turns / matches:0.0} · rounds/partida {(double)st.RoundsSum / matches:0.0} · mano promedio {(double)st.HandSum / Math.Max(1, st.HandSamples):0.0}/{DuelConfig.HandLimit} · manos vacías {st.Empty}");
         Console.WriteLine($"guardias bien {st.GuardOk} · altura equivocada {st.GuardMal} ({100.0 * st.GuardOk / Math.Max(1, st.GuardOk + st.GuardMal):0}% acierto) · chips {st.Chips}");
         Console.WriteLine($"premio: +DAÑO {st.PrizeDmg} vs DERRIBO {st.PrizeKd} · derribos {st.Kds} · castigos {st.Punishes} · trades {st.Trades} · techs {st.Techs} · escapes {st.Escapes}");
         Console.WriteLine($"cantos: {100.0 * st.TurnosConCanto / Math.Max(1, st.Turns):0.0}% de los turnos");
         Console.WriteLine($"  envido: {st.EnvCantados} cantados ({100.0 * st.EnvCantados / Math.Max(1, matches):0}% de partidas) · queridos {st.EnvQueridos} · empates {st.EnvEmpates} · tanto ganador prom {(double)st.EnvTantoSum / Math.Max(1, st.EnvQueridos - st.EnvEmpates):0.0}");
-        Console.WriteLine($"  envido→partida: el ganador del envido gana el {100.0 * st.EnvGanadorGanaPartida / Math.Max(1, st.EnvConGanador):0.0}% de esas partidas [~50% = no la define]");
+        Console.WriteLine($"  envido→round: el ganador del envido gana el {100.0 * st.EnvGanadorGanaPartida / Math.Max(1, st.EnvConGanador):0.0}% de esos rounds [~50% = no lo define]");
         Console.WriteLine($"  siembra: acierto de guardia contra el CANTADO {100.0 * st.PostEnvGuardOk / Math.Max(1, st.PostEnvGuardOk + st.PostEnvGuardMal):0.0}% vs global {100.0 * st.GuardOk / Math.Max(1, st.GuardOk + st.GuardMal):0.0}%");
         Console.WriteLine($"  truco: {st.TrucoCantados} cantados · queridos {st.TrucoQueridos} (×2 {st.TrucoNivel[1]} · ×3 {st.TrucoNivel[2]} · ×4 {st.TrucoNivel[3]}) · no quiero {st.TrucoFolds} · cobrados {st.TrucoCobrados} (bloqueando {st.TrucoGuardCobros})");
         Console.WriteLine("  winrate global por personaje (los dos lados juntos):");
@@ -435,34 +450,50 @@ class Program
         DueloDiagnostico(matches, DuelBot.NoReads, "sin leer");
     }
 
-    // Barrido de los dos diales que deciden el RITMO (vida y robo por turno)
-    // contra las métricas que importan: largo de partida, KO% y —la clave—
-    // cuánto empieza a pagar la lectura cuando la partida da tiempo a leer.
+    // Barridos de la era de ROUNDS (DUELO.md §12): vida por round × robo de
+    // guardia (el escenario Ley 3 de Patricio: robo 2 base → truco roba 4),
+    // y el A/B de mano suelta (Ley 7: ¿más dispersión de reparto = más
+    // dientes para el canto?).
     static void RunDueloTune(int matches)
     {
         int hp0 = DuelConfig.MaxHp, gd0 = DuelConfig.GuardDraw;
-        Console.WriteLine($"=== DUELO: barrido ({matches} partidas por celda) ===");
-        Console.WriteLine("  vida  robo-def | turnos   KO%   mano  premio+D%  brecha  control  info");
-        foreach (int hp in new[] { 40, 46 })
+        Console.WriteLine($"=== DUELO: barrido vida-por-round × robo de guardia ({matches} partidas por celda) ===");
+        Console.WriteLine("  vida  robo-def | turnos rounds   KO%   mano  brecha  info   vsNoCanta  cantarBien");
+        foreach (int hp in new[] { 24, 26, 28 })
             foreach (int gd in new[] { 1, 2 })
             {
                 DuelConfig.MaxHp = hp;
                 DuelConfig.GuardDraw = gd;
-                var st = new DuelStats();
-                int nc = DuelCatalog.Chars.Length;
-                for (int m = 0; m < matches; m++)
-                    PlayDuel(m + 1, (m / nc) % nc, m % nc, DuelBot.Full, DuelBot.Full, st);
-                double gap = Duel1v1(matches, DuelBot.Full, DuelBot.Random);
-                double ctrl = Duel1v1(matches, DuelBot.Full, DuelBot.NoReads);
-                double con = Duel1v1(matches, DuelBot.Full, DuelBot.Predictable);
-                double sin = Duel1v1(matches, DuelBot.NoReads, DuelBot.Predictable);
-                Console.WriteLine($"  {hp,4}  {gd,8} | {(double)st.Turns / matches,6:0.0} {100.0 * st.Kos / matches,5:0.0} " +
-                                  $"{(double)st.HandSum / Math.Max(1, st.HandSamples),6:0.0} " +
-                                  $"{100.0 * st.PrizeDmg / Math.Max(1, st.PrizeDmg + st.PrizeKd),9:0} " +
-                                  $"{gap * 100,7:0.0} {ctrl * 100,8:0.0} {(con - sin) * 100,6:+0.0;-0.0}");
+                TuneRow($"  {hp,4}  {gd,8} |", matches);
             }
         DuelConfig.MaxHp = hp0;
         DuelConfig.GuardDraw = gd0;
+
+        Console.WriteLine();
+        Console.WriteLine($"=== DUELO: Ley 7 — mano garantizada vs mano SUELTA (solo escape) ===");
+        Console.WriteLine("  reparto        | turnos rounds   KO%   mano  brecha  info   vsNoCanta  cantarBien");
+        foreach (bool loose in new[] { false, true })
+        {
+            DuelConfig.LooseOpening = loose;
+            TuneRow($"  {(loose ? "SUELTO" : "garantizado"),-14} |", matches);
+        }
+        DuelConfig.LooseOpening = false;
+    }
+
+    static void TuneRow(string label, int matches)
+    {
+        var st = new DuelStats();
+        int nc = DuelCatalog.Chars.Length;
+        for (int m = 0; m < matches; m++)
+            PlayDuel(m + 1, (m / nc) % nc, m % nc, DuelBot.Full, DuelBot.Full, st);
+        double gap = Duel1v1(matches, DuelBot.Full, DuelBot.Random);
+        double con = Duel1v1(matches, DuelBot.Full, DuelBot.Predictable);
+        double sin = Duel1v1(matches, DuelBot.NoReads, DuelBot.Predictable);
+        double noCanta = Duel1v1(matches, DuelBot.Full, DuelBot.NoCantos);
+        double cantaRandom = Duel1v1(matches, DuelBot.Full, DuelBot.RandomCantos);
+        Console.WriteLine($"{label} {(double)st.Turns / matches,6:0.0} {(double)st.RoundsSum / matches,6:0.0} {100.0 * st.Kos / matches,5:0.0} " +
+                          $"{(double)st.HandSum / Math.Max(1, st.HandSamples),6:0.0} " +
+                          $"{gap * 100,7:0.0} {(con - sin) * 100,6:+0.0;-0.0} {noCanta * 100,10:0.0} {cantaRandom * 100,11:0.0}");
     }
 
     // Barrido del dial del envido (DUELO.md §11): la intuición de Patricio

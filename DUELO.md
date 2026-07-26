@@ -598,12 +598,49 @@ falta, no un lujo.**
 
 ### Orden de implementación (cuando Patricio dé el OK)
 
-1. Rounds en `DuelSim` (reset por round, marcador 2 de 3) + límites de
-   cantos (una cadena de truco por round, envido/escape por round) +
-   tests.
-2. Lab: barrido de vida por round (24/26/28) × chip de envido; re-medir
-   las tres fallas de la auditoría (uso de guardia del pasivo, valor
-   del canto, truco-sobre-derribado).
-3. **La UI del canto** (¡TRUCO! / QUIERO / NO QUIERO / el número del
-   envido en pantalla) — el instrumento para responder "¿es divertido?".
-4. Onboarding guionado con los cantos incluidos.
+1. ~~Rounds en `DuelSim` + límites de cantos + tests~~ **HECHO**
+   (2026-07-26): vida por round 26, marcador 2 de 3, envido y UNA cadena
+   de truco por round, escape por round, el estado muere con el round.
+   163 tests en verde.
+2. ~~Lab~~ **HECHO**: barridos `duelotune` (vida 24/26/28 × robo 1/2 +
+   mano suelta). Resultados abajo.
+3. ~~La UI del canto~~ **HECHO**: `DuelCantoUI.cs` — botones ¡ENVIDO! /
+   ¡TRUCO!, modal QUIERO / NO QUIERO / SUBIR (con retruco y vale cuatro
+   negociados de verdad), banners de resultado, línea de estado (round ·
+   marcador · ×N EN JUEGO · tanto cantado) y la ceremonia de round en
+   `MatchController`. **Compile-check y tests OK, NO visto en vivo** —
+   Patricio lo prueba.
+4. Onboarding guionado — despriorizado a pedido (es un prototipo).
+
+### Tercera tanda (2026-07-26): rounds implementados + lo que midió el lab
+
+- **La siembra EXPLOTÓ con los rounds: 57.8% vs 49.1% (+8.7 pp)** de
+  acierto de guardia contra el que cantó. Con la mano fresca por round
+  el tanto nunca está vencido — la teoría de la vida útil, confirmada
+  con el número más claro que dio este proyecto.
+- **La brecha de habilidad subió a 87%** (era 78 sin rounds).
+- Ritmo: 14.3 turnos y 2.6 rounds por partida, KO 100%, cantos en el
+  17.7% de los turnos, 1.45 envidos/partida. envido→round 59% (pesa sin
+  definir, con chip 4). Personajes 52.2 / 49.5 / 48.3.
+- **El escenario Ley 3 de Patricio, adoptado con datos**: robo por
+  defender 2 (truco ×2 = roba 4) midió mejor que robo 1 en las tres
+  columnas de canto. La mano suelta (Ley 7) se descartó con datos:
+  +0.8 pp de canto a cambio de −2.5 de brecha.
+- Rebalances de la escala nueva: Golem **+8→+4** de vida (por round, +8
+  era +31% y lo mandaba a 63%), envido **6→4** (proporcional a vida 26).
+- **Flag Ley 12 pendiente**: el premio quedó 83/17 (+DAÑO domina — el
+  derribo vale menos en rounds cortos). Dial a revisar tras jugarlo.
+- Métrica "valor de la información" (vs el bot con tic): ruidosa entre
+  corridas (+0.8 a +3.1) — con rounds, la SIEMBRA es el termómetro
+  bueno de la información, no ese head-to-head.
+
+### Escenarios anotados por Patricio (2026-07-26, a revisar jugando)
+
+1. **Escape vs truco armado**: hoy el ESCAPE congela el turno pero el
+   multiplicador SIGUE armado. La lectura de Patricio: derribado+truco →
+   el escape es la respuesta obvia → "te quemo el escape, pero quema el
+   truco". ¿Debería el escape desarmar el truco? Y la capa que falta:
+   **si el cantor ADIVINA que vas a escapar, debería poder castigarlo**
+   — hoy no existe respuesta al escape (es la válvula por diseño, Ley
+   13). Sin solución todavía; pensarlo después de jugarlo.
+2. El derribo/premio en rounds cortos (el 83/17 de arriba).

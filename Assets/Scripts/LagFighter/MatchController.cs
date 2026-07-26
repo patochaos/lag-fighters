@@ -80,6 +80,12 @@ namespace LagFighter
         int _duelPlayerChar, _duelAiChar;
         DuelHandUI _duelHand;
         DuelHudUI _duelHud;
+        DuelCantoUI _duelCanto;
+        // rounds del DUELO (al mejor de 3): lo último que este controller vio
+        // del marcador, para detectar cierres de round (por KO o por el chip
+        // de un canto) y hacer la ceremonia
+        int _duelRoundSeen = 1;
+        readonly int[] _duelRoundWinsSeen = new int[2];
         bool _duelCombatOn;
         float _duelBeat;                       // reloj de los tres tiempos
         int _duelStage;                        // 0 coil · 1 impacto · 2 consecuencia · 3 leer
@@ -254,6 +260,7 @@ namespace LagFighter
             _hand = CardHandUI.Create(this);
             _duelHand = DuelHandUI.Create(this);
             _duelHud = DuelHudUI.Create(this);
+            _duelCanto = DuelCantoUI.Create(this);
             _modeMenu = ModeMenuUI.Create(this);
             GoToModeSelect();
         }
@@ -272,6 +279,7 @@ namespace LagFighter
             _tipStage = -1;
             _hud.SetTip("");
             _hud.HideYomiCards();
+            if (_duelCanto != null) _duelCanto.SetVisible(false);
             UpdateYomiFloor();
             _menu.Close();
             _hand.Close();
@@ -299,6 +307,7 @@ namespace LagFighter
             _duelPlayerChar = Mathf.Clamp(duelChar, 0, DuelCatalog.Chars.Length - 1);
             _duelAiChar = Random.Range(0, DuelCatalog.Chars.Length);
             _duelHud.SetVisible(duel);
+            _duelCanto.SetVisible(duel);
             _hud.SetDuelChrome(duel);
             ArenaBuilder.SetDuelStage(duel);   // el cuarto oscuro (DUELO-LOOK §2)
             // Sin teatro los peleadores no tienen nada que actuar: se ocultan
@@ -359,6 +368,9 @@ namespace LagFighter
             if (SimConfig.DuelEnabled)
             {
                 Duel = new DuelSim(seed: _seed++, _duelPlayerChar, _duelAiChar);
+                _duelRoundSeen = 1;
+                _duelRoundWinsSeen[0] = _duelRoundWinsSeen[1] = 0;
+                _duelCanto.HideOffers();
                 _duelCombatOn = false;
                 for (int i = 0; i < 2; i++)
                 {
@@ -1152,6 +1164,7 @@ namespace LagFighter
             if (SimConfig.DuelTheaterEnabled) PoseDuelPlanning();
             _duelHand.Open(DuelHandUI.Mode.Pick);
             UpdateDuelPrompt();
+            DuelCantoPhase();
         }
 
         // El derribo se VE: mientras elegís carta, el derribado sigue en el
@@ -1198,7 +1211,147 @@ namespace LagFighter
         {
             string kd = Duel.KnockedDown[0] ? "  ·  ESTÁS DERRIBADO: tu guardia no bloquea"
                 : Duel.KnockedDown[1] ? "  ·  RIVAL DERRIBADO: su guardia no bloquea" : "";
-            _hud.SetPrompt($"TURNO {TurnNumber} — elegí tu carta{kd}");
+            _hud.SetPrompt($"ROUND {Duel.Round} · TURNO {TurnNumber} — elegí tu carta{kd}");
+        }
+
+        // ---- LOS CANTOS (DUELO.md §11-12): la negociación vive acá ----
+        // La sim solo valida y aplica; SimpleAI decide por la IA; DuelCantoUI
+        // muestra. Orden del turno: canta la IA si tiene algo (uno por
+        // turno); si no, quedan los botones para cantar vos.
+
+        void DuelCantoPhase()
+        {
+            _duelCanto.HideOffers();
+            if (Duel.CanEnvido && _ai.CantaEnvido(Duel, 1))
+            {
+                _duelHand.SetDimmed(true);
+                _duelCanto.ShowModal($"{Duel.Chr[1].Name} CANTA ¡ENVIDO!",
+                    "El mejor par de golpes de la MISMA altura suma su daño. El que gana pega " +
+                    $"{DuelConfig.EnvidoChip} y CANTA su número; el que pierde no muestra nada.",
+                    new[] { "QUIERO", $"NO QUIERO  −{DuelConfig.EnvidoFoldChip}" }, Duelo.Gold, pick =>
+                    {
+                        DuelEnvidoBanner(Duel.ResolveEnvido(1, pick == 0));
+                        DuelAfterCanto();
+                    });
+                return;
+            }
+            if (Duel.CanTruco && _ai.CantaTruco(Duel, 1)) { DuelTrucoModal(level: 1); return; }
+            _duelCanto.ShowOffers(Duel.CanEnvido, Duel.CanTruco);
+        }
+
+        // El humano canta (botones de DuelCantoUI).
+        public void DuelSingEnvido()
+        {
+            if (!SimConfig.DuelEnabled || State != Flow.Planning || _duelCombatOn || !Duel.CanEnvido) return;
+            DuelEnvidoBanner(Duel.ResolveEnvido(0, _ai.QuiereEnvido(Duel, 1)));
+            DuelAfterCanto();
+        }
+
+        public void DuelSingTruco()
+        {
+            if (!SimConfig.DuelEnabled || State != Flow.Planning || _duelCombatOn || !Duel.CanTruco) return;
+            DuelPlayerTruco(level: 1);
+        }
+
+        // El humano cantó `level`; la IA responde: quiero, no quiero o SUBIR
+        // (y si sube, el modal te devuelve la pregunta a vos).
+        void DuelPlayerTruco(int level)
+        {
+            int ans = _ai.RespondeTruco(Duel, 1, level);
+            if (ans == 2 && level < DuelConfig.TrucoMaxLevel) { DuelTrucoModal(level + 1); return; }
+            DuelTrucoBanner(Duel.ResolveTruco(0, level, ans >= 1));
+            DuelAfterCanto();
+        }
+
+        static string DuelTrucoName(int level) =>
+            level >= 3 ? "¡VALE CUATRO!" : level == 2 ? "¡RETRUCO!" : "¡TRUCO!";
+
+        // La IA cantó `level` (por iniciativa o subiendo tu canto): respondés.
+        void DuelTrucoModal(int level)
+        {
+            _duelHand.SetDimmed(true);
+            int mult = DuelSim.TrucoMult(level);
+            var opts = level < DuelConfig.TrucoMaxLevel
+                ? new[] { "QUIERO", $"NO QUIERO  −{level + 1}", DuelTrucoName(level + 1) }
+                : new[] { "QUIERO", $"NO QUIERO  −{level + 1}" };
+            _duelCanto.ShowModal($"{Duel.Chr[1].Name} CANTA {DuelTrucoName(level)}",
+                $"El próximo intercambio ganado vale ×{mult}: el golpe o el agarre pegan ×{mult}, " +
+                $"la guardia que lo pare roba ×{mult}. Rechazarlo paga {level + 1} y se sigue jugando.",
+                opts, Duelo.Golpe, pick =>
+                {
+                    if (pick == 2) { DuelPlayerTruco(level + 1); return; }
+                    DuelTrucoBanner(Duel.ResolveTruco(1, level, pick == 0));
+                    DuelAfterCanto();
+                });
+        }
+
+        void DuelEnvidoBanner(DuelEnvidoResult er)
+        {
+            if (!er.Quiero && er.Chip == 0) return;   // canto inválido: silencio
+            if (!er.Quiero)
+            {
+                _duelCanto.Banner(er.Cantor == 0 ? $"NO QUISO — cobrás {er.Chip}" : $"NO QUISISTE — comés {er.Chip}",
+                    er.Cantor == 0 ? Duelo.Gold : Duelo.Mute);
+                return;
+            }
+            if (er.Winner < 0) { _duelCanto.Banner("ENVIDO PARDO — nadie cobra", Duelo.Mute); return; }
+            _duelCanto.Banner(er.Winner == 0
+                ? $"¡ENVIDO TUYO! Cantás {er.Tanto0} — son buenas · pega {er.Chip}"
+                : $"ENVIDO PERDIDO — te canta {er.Tanto1} · comés {er.Chip}",
+                er.Winner == 0 ? Duelo.Gold : Duelo.Golpe);
+        }
+
+        void DuelTrucoBanner(DuelTrucoResult tr)
+        {
+            if (!tr.Quiero && tr.Chip == 0) return;
+            if (!tr.Quiero)
+            {
+                _duelCanto.Banner(tr.Caller == 0 ? $"NO QUISO — cobrás {tr.Chip}" : $"NO QUISISTE — comés {tr.Chip}",
+                    tr.Caller == 0 ? Duelo.Gold : Duelo.Mute);
+                return;
+            }
+            _duelCanto.Banner($"¡QUIERO! — ×{DuelSim.TrucoMult(tr.Level)} EN JUEGO", Duelo.Gold);
+        }
+
+        // Después de cualquier canto: ¿el chip cerró el round o la partida?
+        void DuelAfterCanto()
+        {
+            _duelHand.SetDimmed(false);
+            if (Duel.Over) { DuelMatchEndByCanto(); return; }
+            if (Duel.Round != _duelRoundSeen) { DuelRoundCeremony(); return; }
+            UpdateDuelPrompt();
+            _duelCanto.ShowOffers(Duel.CanEnvido, Duel.CanTruco);
+        }
+
+        // El round terminó (por el KO del turno o por el chip de un canto):
+        // marcador, cartel, y la planificación arranca con todo fresco.
+        void DuelRoundCeremony()
+        {
+            int rw = Duel.RoundWins[0] > _duelRoundWinsSeen[0] ? 0
+                   : Duel.RoundWins[1] > _duelRoundWinsSeen[1] ? 1 : -1;
+            _duelRoundSeen = Duel.Round;
+            for (int i = 0; i < 2; i++)
+            {
+                _duelRoundWinsSeen[i] = Duel.RoundWins[i];
+                _wins[i] = Duel.RoundWins[i];
+                _duelWasDown[i] = false;
+            }
+            string t = rw < 0 ? "ROUND PARDO" : rw == 0 ? "¡ROUND TUYO!" : $"ROUND DE {Duel.Chr[1].Name}";
+            _hud.ShowBigMessage($"{t}\n<size=18>{Duel.RoundWins[0]} — {Duel.RoundWins[1]}</size>", Duelo.Gold);
+            Announcer.Play();
+            StartPlanning();
+        }
+
+        // La partida se cerró fuera del turno (el chip de un canto la mató).
+        void DuelMatchEndByCanto()
+        {
+            for (int i = 0; i < 2; i++) _wins[i] = Duel.RoundWins[i];
+            Sim.Over = true;
+            Sim.Winner = Duel.Winner;
+            _koTimer = 1.4f;
+            Time.timeScale = 0.25f;
+            _hud.ShowBigMessage("K.O.", new Color(1f, 0.3f, 0.25f));
+            Announcer.Play();
         }
 
         // El pick del humano cierra el turno: la IA ya eligió en secreto, la
@@ -1206,7 +1359,9 @@ namespace LagFighter
         public void DuelPick(int handIdx)
         {
             if (!SimConfig.DuelEnabled || State != Flow.Planning || _duelCombatOn) return;
+            if (_duelCanto.ModalOpen) return;   // primero respondé el canto
             if (handIdx < 0 || handIdx >= Duel.Hand[0].Count) return;
+            _duelCanto.HideOffers();
             for (int i = 0; i < 2; i++) _duelHpBefore[i] = Duel.Hp[i];
             int aiIdx = _ai.PickDuelCard(Duel, 1);
             _duelResult = Duel.Resolve(handIdx, aiIdx);
@@ -1468,7 +1623,7 @@ namespace LagFighter
             {
                 Sim.Over = true;
                 Sim.Winner = Duel.Winner;
-                if (Duel.Winner >= 0) _wins[Duel.Winner] = RoundsToWin - 1;
+                for (int i = 0; i < 2; i++) _wins[i] = Duel.RoundWins[i];
                 if (Duel.Hp[0] <= 0 || Duel.Hp[1] <= 0)
                 {
                     _koTimer = 1.4f;
@@ -1480,6 +1635,9 @@ namespace LagFighter
                 DuelTimeOver();
                 return;
             }
+            // ¿terminó un ROUND (sin terminar la partida)? Ceremonia y a
+            // repartir de nuevo — la sim ya dejó el round nuevo servido.
+            if (r.RoundEnd) { DuelRoundCeremony(); return; }
             StartPlanning();
         }
 
@@ -1512,7 +1670,7 @@ namespace LagFighter
             State = Flow.GameOver;
             Sim.Over = true;
             Sim.Winner = Duel.Winner;
-            if (Duel.Winner >= 0) _wins[Duel.Winner] = RoundsToWin - 1;
+            for (int i = 0; i < 2; i++) _wins[i] = Duel.RoundWins[i];
             _duelHand.Close();
             _duelHud.ShowResults(Duel.Winner, TurnNumber, _duelDmgDealt, _duelGuardsHit, _duelKdsDealt,
                 timeOver: true);

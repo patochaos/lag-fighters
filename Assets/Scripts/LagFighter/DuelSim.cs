@@ -158,7 +158,9 @@ namespace LagFighter
                 Tag = "Grappler: 5 agarres y su Roca AGUANTA el golpe y te agarra igual",
                 Cards = cards,
                 DeckCounts = Counts,
-                HpBonus = 8,
+                // 8→4 con los rounds (2026-07-26): el bonus es POR ROUND y
+                // 8 sobre 26 era +31% de vida (el lab lo mandó a 63%).
+                HpBonus = 4,
             };
         }
     }
@@ -167,16 +169,24 @@ namespace LagFighter
     {
         // Diales de balance. No son const a propósito: el lab los barre en
         // A/B (como SimConfig en el modo clásico) y los restaura después.
-        public static int MaxHp = 46;
+        // ROUNDS (2026-07-26, DUELO.md §12): MaxHp pasó a ser vida POR ROUND
+        // (46→26); se juega al mejor de 3 y cada round resetea todo menos
+        // la lectura.
+        public static int MaxHp = 26;
+        public static int RoundsToWin = 2;
+        // Ley 7 (dial anotado): true = solo el ESCAPE garantizado en la mano
+        // inicial, el resto al azar — más dispersión de fuerza entre manos.
+        public static bool LooseOpening = false;
         public static int HandLimit = 8;
         public static int DrawPerTurn = 1;   // ambos roban TODOS los turnos (no hay turno activo)
         public static int OpeningRandom = 2; // + guardia alta, baja, agarre y escape garantizados
-        public static int GuardDraw = 1;     // cartas que roba el que defiende BIEN (Ley 2: la defensa paga en economía).
-                                             // 2→1 (2026-07-25, Patricio): con el truco multiplicándolo, robar 2 de base era mucho.
+        public static int GuardDraw = 2;     // cartas que roba el que defiende BIEN (Ley 2: la defensa paga en economía).
+                                             // 1→2 (2026-07-26): el escenario de Patricio "bloquear roba 2, el truco
+                                             // daría 4" midió mejor que robo 1 en info y valor del canto (duelotune).
         public static int HardTurnCap = 40;  // red de seguridad; el mazo suele cerrar antes
 
         // ---- LOS CANTOS (DUELO.md §11) ----
-        public static int EnvidoChip = 6;     // lo que cobra el ganador del envido querido (barrido 2026-07-25: 3 no pesa, 15 define el 75% de las partidas)
+        public static int EnvidoChip = 4;     // lo que cobra el ganador del envido querido (6→4 con rounds: proporcional a la vida de 26)
         public static int EnvidoFoldChip = 1; // el "no quiero" al envido paga al cantor
         public static int TrucoMaxLevel = 3;  // 1=TRUCO ×2 · 2=RETRUCO ×3 · 3=VALE CUATRO ×4
         public static bool TrucoPrizeToo = false; // dial: el quiero multiplica también el premio +DAÑO
@@ -206,6 +216,8 @@ namespace LagFighter
         public int PunishSide = -1, PunishCard = -1;
         public int PunishDamage;
         public int Truco;                    // nivel de truco COBRADO este turno (0 = no había o no se cobró)
+        public bool RoundEnd;                // terminó un round este turno
+        public int RoundWinner = -1;         // quién lo ganó (-1 = doble KO parejo)
         public bool KdNext0, KdNext1;
         public bool Returned0, Returned1;    // la guardia volvió a la mano
         public int Drew0, Drew1;
@@ -259,16 +271,21 @@ namespace LagFighter
         public bool Over;
         public int Winner = -1;
 
-        // ---- los cantos ----
-        public bool EnvidoUsed;              // una vez por partida
-        public bool FirstBlood;              // cualquier daño cierra la ventana del envido
+        // ---- rounds (al mejor de 3, DUELO.md §12) ----
+        public readonly int[] RoundWins = new int[2];
+        public int Round = 1;
+
+        // ---- los cantos (todo POR ROUND) ----
+        public bool EnvidoUsed;              // un envido por round
+        public bool FirstBlood;              // cualquier daño del round cierra la ventana del envido
         public int PublicTanto = -1;         // el tanto del ganador del envido: PÚBLICO (siembra la lectura)
         public int PublicTantoSide = -1;
         public int TrucoLevel;               // multiplicador ARMADO hasta que alguien gane un intercambio (0 = nada)
         public int TrucoCaller = -1;
+        public bool TrucoChainUsed;          // UNA cadena de truco por round (como la mano del truco real)
 
         public bool CanEnvido => !Over && !EnvidoUsed && !FirstBlood;
-        public bool CanTruco => !Over && TrucoLevel == 0;
+        public bool CanTruco => !Over && TrucoLevel == 0 && !TrucoChainUsed;
         public static int TrucoMult(int level) => level + 1;   // 1→×2 · 2→×3 · 3→×4
 
         // ---- decisión pendiente (premio del ganador o castigo del defensor) ----
@@ -285,6 +302,7 @@ namespace LagFighter
         int _victim = -1;
         int _prizeMult = 1;   // el multiplicador del truco cobrado, por si el premio también dobla
         bool _finished;
+        bool _pendingTimeOver;
         public DuelTurnResult LastResult => _r;
 
         public DuelCard Def(int side, int card) => Chr[side].Cards[card];
@@ -297,23 +315,71 @@ namespace LagFighter
             for (int s = 0; s < 2; s++)
             {
                 Chr[s] = DuelCatalog.Chars[CharIdx[s]];
-                Hp[s] = DuelConfig.MaxHp + Chr[s].HpBonus;
-                for (int c = 0; c < DuelCatalog.CardsPerChar; c++)
-                    for (int n = 0; n < Chr[s].DeckCounts[c]; n++)
-                        Deck[s].Add(c);
+                DealSide(s);
+            }
+        }
+
+        // Reparto de un round: mazo completo, mano garantizada, vida llena.
+        void DealSide(int s)
+        {
+            Hp[s] = DuelConfig.MaxHp + Chr[s].HpBonus;
+            Deck[s].Clear(); Hand[s].Clear(); Discard[s].Clear(); Spent[s].Clear();
+            KnockedDown[s] = false;
+            DeckOuts[s] = 0;
+            for (int c = 0; c < DuelCatalog.CardsPerChar; c++)
+                for (int n = 0; n < Chr[s].DeckCounts[c]; n++)
+                    Deck[s].Add(c);
+            int guaranteed;
+            if (DuelConfig.LooseOpening)
+            {
+                // Ley 7: solo la válvula garantizada — el reparto dispersa fuerza
+                MoveDeckToHand(s, DuelCatalog.Escape);
+                guaranteed = 1;
+            }
+            else
+            {
                 // mano garantizada: las dos guardias, un agarre y el escape
                 MoveDeckToHand(s, DuelCatalog.GuardHigh);
                 MoveDeckToHand(s, DuelCatalog.GuardLow);
                 MoveDeckToHand(s, DuelCatalog.Throw);
                 MoveDeckToHand(s, DuelCatalog.Escape);
-                Shuffle(s);
-                for (int n = 0; n < DuelConfig.OpeningRandom; n++)
-                {
-                    int card = TopOfDeck(s);
-                    if (card >= 0) Hand[s].Add(card);
-                }
-                Hand[s].Sort();
+                guaranteed = 4;
             }
+            Shuffle(s);
+            int handSize = 4 + DuelConfig.OpeningRandom;   // 6 con los defaults, en ambos modos
+            for (int n = guaranteed; n < handSize; n++)
+            {
+                int card = TopOfDeck(s);
+                if (card >= 0) Hand[s].Add(card);
+            }
+            Hand[s].Sort();
+        }
+
+        // Round nuevo: TODO se resetea menos el marcador (y la lectura, que
+        // vive en los jugadores, no acá).
+        void ResetRound()
+        {
+            Round++;
+            for (int s = 0; s < 2; s++) DealSide(s);
+            EnvidoUsed = false;
+            FirstBlood = false;
+            PublicTanto = -1; PublicTantoSide = -1;
+            TrucoLevel = 0; TrucoCaller = -1; TrucoChainUsed = false;
+            _pendingTimeOver = false;
+        }
+
+        // Cierra el round: anota el marcador y, si el match no terminó,
+        // reparte el siguiente. rw = -1 (doble KO parejo): nadie anota.
+        void EndRound(int rw)
+        {
+            _r.RoundEnd = true;
+            _r.RoundWinner = rw;
+            if (rw >= 0)
+            {
+                RoundWins[rw]++;
+                if (RoundWins[rw] >= DuelConfig.RoundsToWin) { Over = true; Winner = rw; return; }
+            }
+            ResetRound();
         }
 
         void MoveDeckToHand(int side, int card)
@@ -416,6 +482,7 @@ namespace LagFighter
             if (!CanTruco || lastCaller < 0 || lastCaller > 1 || level < 1) return tr;
             if (level > DuelConfig.TrucoMaxLevel) level = DuelConfig.TrucoMaxLevel;
             tr.Level = level;
+            TrucoChainUsed = true;   // una cadena por round, querida o no
             if (quiero)
             {
                 TrucoLevel = level;
@@ -429,14 +496,14 @@ namespace LagFighter
             return tr;
         }
 
-        // Daño fuera del intercambio (chips de cantos). Puede cerrar la
-        // partida: rechazar un vale cuatro con 3 de vida ES la derrota.
+        // Daño fuera del intercambio (chips de cantos). Puede cerrar el
+        // ROUND: rechazar un vale cuatro con 3 de vida es perderlo.
         void DirectDamage(int side, int dmg)
         {
             if (dmg <= 0) return;
             Hp[side] = Math.Max(0, Hp[side] - dmg);
             FirstBlood = true;
-            if (Hp[side] <= 0 && !Over) { Over = true; Winner = 1 - side; }
+            if (Hp[side] <= 0 && !Over) EndRound(1 - side);
         }
 
         // ---- turno ----
@@ -747,16 +814,29 @@ namespace LagFighter
             SortHands();
             if (Hp[0] <= 0 || Hp[1] <= 0)
             {
-                Over = true;
-                Winner = Hp[0] <= 0 && Hp[1] <= 0
+                int rw = Hp[0] <= 0 && Hp[1] <= 0
                     ? (Hp[0] == Hp[1] ? -1 : (Hp[0] > Hp[1] ? 0 : 1))
                     : (Hp[0] <= 0 ? 1 : 0);
+                EndRound(rw);
             }
-            else if (Over) JudgeByHp();   // time over disparado durante el turno
-            else if (Turn >= DuelConfig.HardTurnCap) { Over = true; _r.TimeOver = true; JudgeByHp(); }
+            else if (_pendingTimeOver)   // el mazo del round se agotó dos veces
+            {
+                _pendingTimeOver = false;
+                _r.TimeOver = true;
+                EndRound(JudgeRound());
+            }
+            else if (Turn >= DuelConfig.HardTurnCap)
+            {
+                // red de seguridad global: cierra el MATCH por marcador y vida
+                Over = true;
+                _r.TimeOver = true;
+                Winner = RoundWins[0] != RoundWins[1]
+                    ? (RoundWins[0] > RoundWins[1] ? 0 : 1)
+                    : JudgeRound();
+            }
         }
 
-        void JudgeByHp() => Winner = Hp[0] == Hp[1] ? -1 : (Hp[0] > Hp[1] ? 0 : 1);
+        int JudgeRound() => Hp[0] == Hp[1] ? -1 : (Hp[0] > Hp[1] ? 0 : 1);
 
         // ---- mazo y mano ----
 
@@ -793,12 +873,12 @@ namespace LagFighter
             return true;
         }
 
+        // El time over del round se procesa al CERRAR el turno (marcarlo acá
+        // en medio de un robo dejaría el reparto del round nuevo a mitad de
+        // una resolución).
         void TimeOver()
         {
-            if (Over) return;
-            Over = true;
-            _r.TimeOver = true;
-            JudgeByHp();
+            if (!Over) _pendingTimeOver = true;
         }
     }
 }

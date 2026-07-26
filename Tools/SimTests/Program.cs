@@ -147,6 +147,7 @@ class Tests
         DueloValeCuatroCuadruplica();
         DueloElChipDeUnCantoPuedeCerrarLaPartida();
         DueloTrucoBloqueadoSePagaEnCartas();
+        DueloUnaCadenaDeTrucoPorRound();
         if (SimConfig.LimbsEnabled)
         {
             TresJabsArrancanElBrazo();
@@ -1718,10 +1719,14 @@ class Tests
         // 2ª vez: TIME OVER por vida
         d.Deck[0].Clear();
         d.Discard[0].Clear();
-        d.StartTurn();
-        Check(remezclo && d.Over && d.Winner == 0,
-            "duelo: remezcla ÚNICA y después TIME OVER por vida",
-            $"remezcló {remezclo}, over {d.Over}, winner {d.Winner}");
+        d.StartTurn();                       // el time over queda pendiente...
+        Mano(d, 0, DuelCatalog.GuardHigh);
+        Mano(d, 1, DuelCatalog.GuardHigh);
+        var r = d.Resolve(0, 0);             // ...y se procesa al cerrar el turno
+        Check(remezclo && r.TimeOver && r.RoundEnd && r.RoundWinner == 0 &&
+              d.RoundWins[0] == 1 && d.Round == 2 && !d.Over,
+            "duelo: remezcla ÚNICA y después TIME OVER — el round lo gana la vida",
+            $"remezcló {remezclo}, roundWins {d.RoundWins[0]}, round {d.Round}");
     }
 
     static void DueloKoTerminaLaPartida()
@@ -1730,9 +1735,21 @@ class Tests
         d.Hp[1] = 2;
         Mano(d, 0, DuelCatalog.AttackA);
         Mano(d, 1, DuelCatalog.Throw);
+        var r1 = d.Resolve(0, 0);
+        if (d.AwaitingChoice) d.ChoosePrize(DuelPrize.Knockdown);
+        // el KO gana el ROUND: marcador 1-0, todo repartido de nuevo
+        bool round1 = r1.RoundEnd && r1.RoundWinner == 0 && d.RoundWins[0] == 1 &&
+                      d.Round == 2 && !d.Over && d.Hp[1] == DuelConfig.MaxHp &&
+                      d.Hand[1].Contains(DuelCatalog.Escape);
+        d.StartTurn();
+        d.Hp[1] = 2;
+        Mano(d, 0, DuelCatalog.AttackA);
+        Mano(d, 1, DuelCatalog.Throw);
         d.Resolve(0, 0);
         if (d.AwaitingChoice) d.ChoosePrize(DuelPrize.Knockdown);
-        Check(d.Over && d.Winner == 0 && d.Hp[1] == 0, "duelo: KO termina la partida", $"hp1 {d.Hp[1]}, winner {d.Winner}");
+        Check(round1 && d.Over && d.Winner == 0 && d.RoundWins[0] == 2,
+            "duelo: el KO gana el round y DOS rounds ganan la partida",
+            $"round1 {round1}, over {d.Over}, marcador {d.RoundWins[0]}-{d.RoundWins[1]}");
     }
 
     static void DueloSinCartasNoRompe()
@@ -1754,9 +1771,9 @@ class Tests
         var g = DuelCatalog.Golem;
         int agarres = g.DeckCounts[DuelCatalog.Throw] + g.DeckCounts[DuelCatalog.Sig1];
         bool armor = g.Cards[DuelCatalog.Sig1].Armor && g.Cards[DuelCatalog.Sig1].Kind == DuelKind.Grab;
-        Check(agarres == 5 && armor && d.MaxHpOf(0) == DuelConfig.MaxHp + 8 &&
+        Check(agarres == 5 && armor && d.MaxHpOf(0) == DuelConfig.MaxHp + 4 &&
               d.MaxHpOf(1) == DuelConfig.MaxHp,
-            "duelo: el Golem es grappler (5 agarres, Roca con aguante, +8 de vida)",
+            "duelo: el Golem es grappler (5 agarres, Roca con aguante, +4 de vida por round)",
             $"agarres {agarres}, aguante {armor}, hp {d.MaxHpOf(0)}");
     }
 
@@ -1925,24 +1942,42 @@ class Tests
     static void DueloValeCuatroCuadruplica()
     {
         var d = NewDuelo();
+        d.Hp[1] = 46;                                           // que el ×4 no cierre el round
         d.ResolveTruco(0, level: 3, quiero: true);
         Mano(d, 0, DuelCatalog.AttackD);                        // 7 de daño, ALTO
         Mano(d, 1, DuelCatalog.GuardLow);
         var r = d.Resolve(0, 0);
         d.ChoosePrize(DuelPrize.Knockdown);
-        Check(r.Truco == 3 && d.Hp[1] == DuelConfig.MaxHp - 7 * 4,
+        Check(r.Truco == 3 && d.Hp[1] == 46 - 7 * 4,
             "duelo: VALE CUATRO — el intercambio ganado cobra ×4",
-            $"hp1 {d.Hp[1]} (esperado {DuelConfig.MaxHp - 28})");
+            $"hp1 {d.Hp[1]} (esperado {46 - 28})");
     }
 
     static void DueloElChipDeUnCantoPuedeCerrarLaPartida()
     {
         var d = NewDuelo();
         d.Hp[1] = 2;
-        d.ResolveTruco(0, level: 1, quiero: false);             // rechazar con 2 de vida ES la derrota
-        Check(d.Over && d.Winner == 0 && d.Hp[1] == 0,
-            "duelo: rechazar un canto con la vida justa cierra la partida",
-            $"over {d.Over}, winner {d.Winner}");
+        d.ResolveTruco(0, level: 1, quiero: false);             // rechazar con 2 de vida ES perder el round
+        Check(d.RoundWins[0] == 1 && d.Round == 2 && !d.Over && d.Hp[1] == DuelConfig.MaxHp,
+            "duelo: rechazar un canto con la vida justa cierra el ROUND",
+            $"marcador {d.RoundWins[0]}, round {d.Round}, hp1 {d.Hp[1]}");
+    }
+
+    static void DueloUnaCadenaDeTrucoPorRound()
+    {
+        var d = NewDuelo();
+        d.ResolveTruco(0, level: 1, quiero: false);             // la cadena del round, gastada
+        d.ResolveEnvido(0, quiero: false);                      // el envido del round, gastado
+        bool gastados = !d.CanTruco && !d.CanEnvido;
+        d.Hp[1] = 1;
+        Mano(d, 0, DuelCatalog.AttackA);
+        Mano(d, 1, DuelCatalog.Throw);
+        d.Resolve(0, 0);
+        if (d.AwaitingChoice) d.ChoosePrize(DuelPrize.Knockdown);
+        // round nuevo: los cantos vuelven (y la ventana del envido también)
+        Check(gastados && d.Round == 2 && d.CanTruco && d.CanEnvido,
+            "duelo: UNA cadena de truco y UN envido por round — el round nuevo los devuelve",
+            $"gastados {gastados}, round {d.Round}, truco {d.CanTruco}, envido {d.CanEnvido}");
     }
 
     static void DueloTrucoBloqueadoSePagaEnCartas()
@@ -1961,7 +1996,7 @@ class Tests
         Mano(d2, 1, DuelCatalog.GuardLow);
         var r2 = d2.Resolve(0, 0);
         Check(dobla && r2.Drew1 == DuelConfig.GuardDraw * 3 && d2.TrucoLevel == 0,
-            "duelo: la guardia acertada COBRA el truco en cartas (×2 roba 2, ×3 roba 3)",
+            "duelo: la guardia acertada COBRA el truco en cartas (el robo se multiplica)",
             $"robo x2 {r.Drew1}, robo x3 {r2.Drew1}");
     }
 
