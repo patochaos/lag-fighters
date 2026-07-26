@@ -229,7 +229,7 @@ namespace LagFighter
         public void SetVisible(bool on)
         {
             if (_root != null && _root.activeSelf != on) _root.SetActive(on);
-            if (!on) { HideReveal(); HideResults(); }
+            if (!on) { HideReveal(); HideResults(); HideRoundCard(); }
         }
 
         // ---- refresco ----
@@ -242,6 +242,7 @@ namespace LagFighter
             for (int i = 0; i < 2; i++) RefreshSide(i);
             _header.text = $"TURNO {_mc.TurnNumber}";
             if (_phase != Phase.Off && _phase != Phase.Docked) TickReveal();
+            if (_roundCard != null) TickRoundCard();
             if (_resultsRoot != null) TickResults();
         }
 
@@ -391,6 +392,19 @@ namespace LagFighter
 
         // El POR QUÉ, corto y grande. Es la clase de teoría que enseña sola.
         void ComputeVerdict(DuelTurnResult r)
+        {
+            ComputeVerdictCore(r);
+            // Si el truco se COBRÓ, es lo primero que hay que ver: la apuesta
+            // es lo que hace que este turno importe el triple que los demás.
+            if (r.Truco > 0)
+            {
+                int m = DuelSim.TrucoMult(r.Truco);
+                _verdictTxt = $"×{m}  ·  " + _verdictTxt;
+                _detailTxt += $"  ·  se cobró el truco: ×{m}";
+            }
+        }
+
+        void ComputeVerdictCore(DuelTurnResult r)
         {
             _winner = -1;
             var d0 = r.Card0 >= 0 ? S.Def(0, r.Card0) : default;
@@ -617,6 +631,56 @@ namespace LagFighter
             _t = 0f;
         }
 
+        // ================= CARTEL DE ROUND =================
+        //
+        // El cierre de round es el segundo momento más grande del juego después
+        // del KO (con rounds al mejor de 3, cada uno decide un tercio de la
+        // partida). Venía saliendo por `HudUI.ShowBigMessage`, que es el cromo
+        // del modo clásico: otra fuente, otra paleta, otro juego.
+
+        GameObject _roundCard;
+        float _roundCardT;
+
+        public void ShowRoundCard(string title, string score, Color accent)
+        {
+            HideRoundCard();
+            var rt = _root.GetComponent<RectTransform>();
+            _roundCard = new GameObject("RoundCard", typeof(RectTransform));
+            var cr = _roundCard.GetComponent<RectTransform>();
+            cr.SetParent(rt, false);
+            cr.anchorMin = cr.anchorMax = new Vector2(0.5f, 0.5f);
+            cr.anchoredPosition = new Vector2(0f, 90f);
+            cr.sizeDelta = new Vector2(760f, 210f);
+            var canvas = _roundCard.AddComponent<Canvas>();
+            canvas.overrideSorting = true;
+            canvas.sortingOrder = 38;
+
+            Img(cr, "Bg", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(760f, 210f),
+                Duelo.Alpha(Duelo.Void, 0.94f));
+            Img(cr, "Top", new Vector2(0.5f, 1f), new Vector2(0f, -3f), new Vector2(760f, 6f), accent);
+            DuelHandUI.Brackets(cr, 760f, 210f, Duelo.Alpha(accent, 0.85f), len: 24f);
+            Txt(cr, "T", title, new Vector2(0.5f, 1f), new Vector2(0f, -68f), new Vector2(720f, 56f),
+                40, accent, TextAnchor.MiddleCenter);
+            Txt(cr, "S", score, new Vector2(0.5f, 1f), new Vector2(0f, -134f), new Vector2(720f, 44f),
+                34, Duelo.Paper, TextAnchor.MiddleCenter);
+            _roundCardT = 1.9f;
+        }
+
+        public void HideRoundCard()
+        {
+            if (_roundCard != null) Destroy(_roundCard);
+            _roundCard = null;
+        }
+
+        void TickRoundCard()
+        {
+            _roundCardT -= Time.unscaledDeltaTime;
+            // entra de golpe y se va desvaneciendo
+            float s = _roundCardT > 1.75f ? Mathf.Lerp(1.35f, 1f, (1.9f - _roundCardT) / 0.15f) : 1f;
+            _roundCard.transform.localScale = Vector3.one * s;
+            if (_roundCardT <= 0f) HideRoundCard();
+        }
+
         // ================= RESULTADOS =================
         //
         // Hasta ahora DUELO cerraba con un cartel de "K.O." y nada más: quién
@@ -629,7 +693,8 @@ namespace LagFighter
 
         public bool ResultsVisible => _resultsRoot != null;
 
-        public void ShowResults(int winner, int turns, int[] dmg, int[] guards, int[] kds, bool timeOver = false)
+        public void ShowResults(int winner, int turns, int[] dmg, int[] guards, int[] kds, bool timeOver = false,
+            int[] roundWins = null)
         {
             HideResults();
             var rt = _root.GetComponent<RectTransform>();
@@ -651,30 +716,37 @@ namespace LagFighter
             Img(rr, "Veil", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(4000f, 2400f),
                 Duelo.Alpha(Duelo.Void, 0.88f));
 
+            float ph = roundWins != null ? 598f : 560f;
             var panel = Img(rr, "Panel", new Vector2(0.5f, 0.5f), new Vector2(0f, 20f),
-                new Vector2(880f, 560f), Duelo.Panel);
+                new Vector2(880f, ph), Duelo.Panel);
             var p = panel.rectTransform;
             var accent = winner < 0 ? Duelo.Gold : Duelo.Side(winner);
             Img(p, "Accent", new Vector2(0.5f, 1f), new Vector2(0f, -4f), new Vector2(880f, 8f), accent);
-            DuelHandUI.Brackets(p, 880f, 560f, Duelo.Alpha(accent, 0.7f));
+            DuelHandUI.Brackets(p, 880f, ph, Duelo.Alpha(accent, 0.7f));
 
             string big = winner < 0 ? "EMPATE" : winner == 0 ? "¡GANASTE!" : "PERDISTE";
             Txt(p, "Big", big, new Vector2(0.5f, 1f), new Vector2(0f, -66f), new Vector2(840f, 60f),
                 44, accent, TextAnchor.MiddleCenter);
+            // el marcador de rounds es el resultado de verdad: la partida es al
+            // mejor de 3, no un KO suelto
+            if (roundWins != null)
+                Txt(p, "Score", $"{roundWins[0]} — {roundWins[1]}", new Vector2(0.5f, 1f),
+                    new Vector2(0f, -114f), new Vector2(840f, 40f), 30, Duelo.Paper, TextAnchor.MiddleCenter);
             Txt(p, "How", timeOver ? "TIME OVER · decidió la vida" : "K.O.",
-                new Vector2(0.5f, 1f), new Vector2(0f, -114f), new Vector2(840f, 28f),
-                22, Duelo.Mute, TextAnchor.MiddleCenter, DuelHandUI.Face.Data);
+                new Vector2(0.5f, 1f), new Vector2(0f, roundWins != null ? -150f : -114f),
+                new Vector2(840f, 28f), 22, Duelo.Mute, TextAnchor.MiddleCenter, DuelHandUI.Face.Data);
 
             // la tabla: una fila por métrica, las dos columnas enfrentadas
             string[] rows = { "DAÑO HECHO", "GUARDIAS ACERTADAS", "DERRIBOS" };
             int[][] vals = { dmg, guards, kds };
-            Txt(p, "ColL", "VOS", new Vector2(0.5f, 1f), new Vector2(-286f, -168f), new Vector2(200f, 26f),
+            float off = roundWins != null ? 38f : 0f;   // el marcador ocupa su renglón
+            Txt(p, "ColL", "VOS", new Vector2(0.5f, 1f), new Vector2(-286f, -168f - off), new Vector2(200f, 26f),
                 17, Duelo.P1, TextAnchor.MiddleCenter);
-            Txt(p, "ColR", "RIVAL", new Vector2(0.5f, 1f), new Vector2(286f, -168f), new Vector2(200f, 26f),
+            Txt(p, "ColR", "RIVAL", new Vector2(0.5f, 1f), new Vector2(286f, -168f - off), new Vector2(200f, 26f),
                 17, Duelo.P2, TextAnchor.MiddleCenter);
             for (int i = 0; i < rows.Length; i++)
             {
-                float y = -214f - i * 54f;
+                float y = -214f - off - i * 54f;
                 Img(p, "Row" + i, new Vector2(0.5f, 1f), new Vector2(0f, y), new Vector2(820f, 44f),
                     i % 2 == 0 ? Duelo.Stage : Duelo.Alpha(Duelo.Stage, 0.45f));
                 Txt(p, "Lbl" + i, rows[i], new Vector2(0.5f, 1f), new Vector2(0f, y), new Vector2(420f, 26f),
@@ -684,7 +756,7 @@ namespace LagFighter
                 Txt(p, "V1" + i, vals[i][1].ToString(), new Vector2(0.5f, 1f), new Vector2(286f, y),
                     new Vector2(160f, 34f), 26, Duelo.Paper, TextAnchor.MiddleCenter);
             }
-            Txt(p, "Turns", $"{turns} TURNOS", new Vector2(0.5f, 1f), new Vector2(0f, -388f),
+            Txt(p, "Turns", $"{turns} TURNOS", new Vector2(0.5f, 1f), new Vector2(0f, -388f - off),
                 new Vector2(820f, 26f), 19, Duelo.Alpha(Duelo.Mute, 0.8f), TextAnchor.MiddleCenter,
                 DuelHandUI.Face.Data);
 

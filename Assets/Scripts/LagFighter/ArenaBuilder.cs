@@ -265,6 +265,32 @@ namespace LagFighter
                 new Color(Duelo.StageLit.r * 1.5f, Duelo.StageLit.g * 1.5f, Duelo.StageLit.b * 1.55f, 0.75f));
         }
 
+        // LA APUESTA SE VE EN LA LUZ. Con el truco armado el cuarto se pone
+        // dorado, y más fuerte con cada subida: ×2 tibio, ×4 incandescente.
+        // Es la señal más barata y más honesta que tiene el juego — no hay que
+        // leer un número para saber que este intercambio vale plata.
+        static Renderer _stakeInner, _stakeOuter;
+
+        public static void SetDuelStakes(int mult)
+        {
+            if (ArenaRefs.DuelLight == null) return;
+            if (_stakeInner == null)
+            {
+                var i = ArenaRefs.DuelLight.transform.Find("PoolInner");
+                var o = ArenaRefs.DuelLight.transform.Find("PoolOuter");
+                if (i != null) _stakeInner = i.GetComponent<Renderer>();
+                if (o != null) _stakeOuter = o.GetComponent<Renderer>();
+            }
+            // mult: 0/1 = sin apuesta · 2,3,4 = truco armado
+            float k = mult <= 1 ? 0f : Mathf.Clamp01((mult - 1) / 3f);
+            var baseIn = new Color(Duelo.StageLit.r * 1.5f, Duelo.StageLit.g * 1.5f, Duelo.StageLit.b * 1.55f, 0.75f);
+            var hot = new Color(Duelo.Gold.r, Duelo.Gold.g * 0.86f, Duelo.Gold.b * 0.35f, 0.8f);
+            if (_stakeInner != null) _stakeInner.material.color = Color.Lerp(baseIn, hot, k);
+            if (_stakeOuter != null)
+                _stakeOuter.material.color = Color.Lerp(Duelo.Alpha(Duelo.StageLit, 0.55f),
+                    Duelo.Alpha(hot, 0.4f), k);
+        }
+
         static void Disc(Transform parent, string name, float w, float d, float y, Color c)
         {
             var disc = GameObject.CreatePrimitive(PrimitiveType.Cylinder);

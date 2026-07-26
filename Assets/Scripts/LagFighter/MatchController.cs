@@ -1241,6 +1241,66 @@ namespace LagFighter
                 _views[i].ClearDuelMarks();
                 if (Duel.KnockedDown[i]) _views[i].SetDuelPose(DuelPose.Down, restart: false);
             }
+            // la luz del cuarto siempre dice cuánto vale este intercambio
+            ArenaBuilder.SetDuelStakes(Duel.TrucoLevel > 0 ? DuelSim.TrucoMult(Duel.TrucoLevel) : 0);
+        }
+
+        // ---- el canto también lo actúan los cuerpos ----
+        // Cantar es un acto físico: el que canta se planta y señala, el otro se
+        // abre de brazos. Sin esto el canto es un botón y un cartel, que es
+        // exactamente lo que el §11 NO quiere que sea ("el bluff cantado").
+        // Es una pose PRESTADA: al cerrar la negociación se devuelve la que
+        // había, porque la consecuencia del turno anterior sigue mandando.
+        readonly DuelPose[] _duelPoseBeforeCanto = { DuelPose.Idle, DuelPose.Idle };
+        bool _duelPosesLent;
+
+        void DuelCantoPoses(int cantor)
+        {
+            if (!SimConfig.DuelTheaterEnabled) return;
+            bool first = !_duelPosesLent;   // en un retruco ya están prestadas
+            _duelPosesLent = true;
+            _duelPoseHold = 0f;
+            for (int i = 0; i < 2; i++)
+            {
+                if (_views[i] == null) continue;
+                if (first) _duelPoseBeforeCanto[i] = _views[i].Pose;
+                // al derribado no lo levanta ni el orgullo
+                if (Duel.KnockedDown[i]) continue;
+                _views[i].SetDuelPose(i == cantor ? DuelPose.Canta : DuelPose.Aguanta);
+            }
+        }
+
+        // El teatro manda: si arranca el intercambio, la pose prestada del
+        // canto ya no tiene que volver.
+        void DuelDropLentPoses()
+        {
+            _duelPosesLent = false;
+            _duelPoseHold = 0f;
+        }
+
+        // La devolución NO es inmediata: contra la IA toda la negociación se
+        // resuelve en el mismo frame, así que sin este respiro las poses del
+        // canto no llegaban a verse ni un cuadro. Se quedan mientras dura el
+        // cartel del resultado, que es cuando el jugador está leyendo qué pasó.
+        void DuelReturnPoses(float hold = 1.5f)
+        {
+            if (!_duelPosesLent) return;
+            _duelPoseHold = hold;
+        }
+
+        float _duelPoseHold;
+
+        void TickDuelCantoPoses()
+        {
+            if (_duelPoseHold <= 0f) return;
+            _duelPoseHold -= Time.unscaledDeltaTime;
+            if (_duelPoseHold > 0f) return;
+            _duelPosesLent = false;
+            for (int i = 0; i < 2; i++)
+            {
+                if (_views[i] == null || Duel == null || Duel.KnockedDown[i]) continue;
+                _views[i].SetDuelPose(_duelPoseBeforeCanto[i]);
+            }
         }
 
         // La pose que le toca a una carta. La regla de oro sigue siendo la
@@ -1264,6 +1324,28 @@ namespace LagFighter
         bool DuelCardHigh(int side, int card) =>
             card >= 0 && Duel.Def(side, card).Height == DuelHeight.High;
 
+        // HOVER = PREVIEW EN EL CUERPO (DUELO-LOOK §7). Pasar por un GOLPE
+        // enciende la mitad del RIVAL que va a comer; pasar por una GUARDIA
+        // enciende la mitad TUYA que vas a cubrir. Las alturas dejan de
+        // aprenderse leyendo y pasan a aprenderse mirando, que es el único
+        // camino por el que un mixup entra de verdad.
+        public void DuelHoverCard(int handIdx)
+        {
+            if (!SimConfig.DuelEnabled || !SimConfig.DuelTheaterEnabled || Duel == null) return;
+            int hi = -1, hiSide = -1;
+            if (handIdx >= 0 && handIdx < Duel.Hand[0].Count)
+            {
+                var d = Duel.Def(0, Duel.Hand[0][handIdx]);
+                if (d.Height != DuelHeight.None)
+                {
+                    hi = d.Height == DuelHeight.High ? 1 : 0;
+                    hiSide = d.Kind == DuelKind.Guard ? 0 : 1;   // la guardia es tuya
+                }
+            }
+            for (int i = 0; i < 2; i++)
+                if (_views[i] != null) _views[i].PreviewZone(i == hiSide ? hi : -1);
+        }
+
         void UpdateDuelPrompt()
         {
             string kd = Duel.KnockedDown[0] ? "  ·  ESTÁS DERRIBADO: tu guardia no bloquea"
@@ -1282,6 +1364,7 @@ namespace LagFighter
             if (Duel.CanEnvido && _ai.CantaEnvido(Duel, 1))
             {
                 _duelHand.SetDimmed(true);
+                DuelCantoPoses(cantor: 1);
                 _duelCanto.ShowModal($"{Duel.Chr[1].Name} CANTA ¡ENVIDO!",
                     "El mejor par de golpes de la MISMA altura suma su daño. El que gana pega " +
                     $"{DuelConfig.EnvidoChip} y CANTA su número; el que pierde no muestra nada.",
@@ -1310,6 +1393,7 @@ namespace LagFighter
                 DnTryDeclare();
                 return;
             }
+            DuelCantoPoses(cantor: 0);
             DuelEnvidoBanner(Duel.ResolveEnvido(0, _ai.QuiereEnvido(Duel, 1)));
             DuelAfterCanto();
         }
@@ -1327,6 +1411,7 @@ namespace LagFighter
                 DnTryDeclare();
                 return;
             }
+            DuelCantoPoses(cantor: 0);
             DuelPlayerTruco(level: 1);
         }
 
@@ -1347,6 +1432,7 @@ namespace LagFighter
         void DuelTrucoModal(int level)
         {
             _duelHand.SetDimmed(true);
+            DuelCantoPoses(cantor: 1);
             int mult = DuelSim.TrucoMult(level);
             var opts = level < DuelConfig.TrucoMaxLevel
                 ? new[] { "QUIERO", $"NO QUIERO  −{level + 1}", DuelTrucoName(level + 1) }
@@ -1394,6 +1480,9 @@ namespace LagFighter
         void DuelAfterCanto()
         {
             _duelHand.SetDimmed(false);
+            DuelReturnPoses();
+            // la apuesta se ve en la LUZ del cuarto, no en un número
+            ArenaBuilder.SetDuelStakes(Duel.TrucoLevel > 0 ? DuelSim.TrucoMult(Duel.TrucoLevel) : 0);
             if (Duel.Over) { DuelMatchEndByCanto(); return; }
             if (Duel.Round != _duelRoundSeen) { DuelRoundCeremony(); return; }
             UpdateDuelPrompt();
@@ -1413,8 +1502,17 @@ namespace LagFighter
                 _wins[i] = Duel.RoundWins[i];
                 _duelWasDown[i] = false;
             }
+            // el estado MUERE con el round (DUELO.md §12): los cuerpos también
+            // vuelven a cero — nadie sigue tambaleado de un round que ya cerró
+            DuelDropLentPoses();
+            ArenaBuilder.SetDuelStakes(0);
+            if (SimConfig.DuelTheaterEnabled)
+                for (int i = 0; i < 2; i++)
+                    if (_views[i] != null) { _views[i].ClearDuelMarks(); _views[i].SetDuelPose(DuelPose.Idle); }
+
             string t = rw < 0 ? "ROUND PARDO" : rw == 0 ? "¡ROUND TUYO!" : $"ROUND DE {Duel.Chr[1].Name}";
-            _hud.ShowBigMessage($"{t}\n<size=18>{Duel.RoundWins[0]} — {Duel.RoundWins[1]}</size>", Duelo.Gold);
+            _duelHud.ShowRoundCard(t, $"{Duel.RoundWins[0]} — {Duel.RoundWins[1]}",
+                rw < 0 ? Duelo.Mute : Duelo.Side(rw));
             Announcer.Play();
             StartPlanning();
         }
@@ -1427,7 +1525,7 @@ namespace LagFighter
             Sim.Winner = Duel.Winner;
             _koTimer = 1.4f;
             Time.timeScale = 0.25f;
-            _hud.ShowBigMessage("K.O.", new Color(1f, 0.3f, 0.25f));
+            _duelHud.ShowRoundCard("K.O.", $"{Duel.RoundWins[0]} — {Duel.RoundWins[1]}", Duelo.Golpe);
             Announcer.Play();
         }
 
@@ -1762,6 +1860,7 @@ namespace LagFighter
 
         void BeginDuelTheater()
         {
+            DuelDropLentPoses();
             StartDuelReveal(_duelResult, awaitChoice: false);
             _duelBeat = 0f;
             _duelStage = 0;
@@ -1773,6 +1872,7 @@ namespace LagFighter
             for (int i = 0; i < 2; i++)
             {
                 if (_views[i] == null) continue;
+                _views[i].PreviewZone(-1);   // se acabó el hover: ahora pasa de verdad
                 _views[i].PlaceDuel(i == 0 ? -DuelSlot : DuelSlot);
                 _views[i].ClearDuelMarks();
                 // el derribado no se carga: está en el piso
@@ -1966,7 +2066,7 @@ namespace LagFighter
                 {
                     _koTimer = 1.4f;
                     Time.timeScale = 0.25f;
-                    _hud.ShowBigMessage("K.O.", new Color(1f, 0.3f, 0.25f));
+                    _duelHud.ShowRoundCard("K.O.", $"{Duel.RoundWins[0]} — {Duel.RoundWins[1]}", Duelo.Golpe);
                     Announcer.Play();
                     return;
                 }
@@ -1988,7 +2088,10 @@ namespace LagFighter
             State = Flow.GameOver;
             _duelHand.Close();
             _duelHud.HideReveal();
-            _duelHud.ShowResults(Duel.Winner, TurnNumber, _duelDmgDealt, _duelGuardsHit, _duelKdsDealt);
+            _duelHud.HideRoundCard();
+            ArenaBuilder.SetDuelStakes(0);
+            _duelHud.ShowResults(Duel.Winner, TurnNumber, _duelDmgDealt, _duelGuardsHit, _duelKdsDealt,
+                roundWins: Duel.RoundWins);
         }
 
         public void DuelRematch()
@@ -2017,7 +2120,7 @@ namespace LagFighter
             for (int i = 0; i < 2; i++) _wins[i] = Duel.RoundWins[i];
             _duelHand.Close();
             _duelHud.ShowResults(Duel.Winner, TurnNumber, _duelDmgDealt, _duelGuardsHit, _duelKdsDealt,
-                timeOver: true);
+                timeOver: true, roundWins: Duel.RoundWins);
         }
 
         // ---------- modo CARTAS v2 (copia completa de Yomi 2) ----------
@@ -2583,6 +2686,7 @@ namespace LagFighter
 
             if (State == Flow.ModeSelect) return;
             EnforceDuelStage();
+            TickDuelCantoPoses();
 
             // framing suave según la distancia entre los peleadores
             if (Sim != null) CamFx()?.SetDistance(Mathf.Abs(Sim.Fighters[1].X - Sim.Fighters[0].X));

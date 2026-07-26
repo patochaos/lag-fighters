@@ -109,8 +109,12 @@ namespace LagFighter
             _offersRoot = new GameObject("Offers", typeof(RectTransform));
             var rt = _offersRoot.GetComponent<RectTransform>();
             rt.SetParent(_canvasRt, false);
+            // Al borde izquierdo y ARRIBA del abanico: a (−640, 150) los
+            // botones caían encima de la primera carta de la mano y tapaban su
+            // velocidad. La franja libre es la que queda entre el piso de los
+            // paneles y el techo de las cartas.
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
-            rt.anchoredPosition = new Vector2(-640f, 150f);
+            rt.anchoredPosition = new Vector2(-800f, 424f);
             rt.sizeDelta = Vector2.zero;
             float y = 0f;
             if (envido)

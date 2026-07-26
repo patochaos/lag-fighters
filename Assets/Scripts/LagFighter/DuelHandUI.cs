@@ -390,6 +390,8 @@ namespace LagFighter
         public void Close()
         {
             _active = false;
+            _hover = -1;
+            if (_mc != null) _mc.DuelHoverCard(-1);
             if (_root != null) _root.SetActive(false);
         }
 
@@ -481,6 +483,9 @@ namespace LagFighter
                 _hover = hover;
                 if (hover >= 0) { SfxLib.Play(SfxLib.Kind.UiTick, 0.25f); FillDetail(hover); }
                 _infoBg.gameObject.SetActive(hover >= 0);
+                // la carta también se previsualiza EN EL CUERPO, no solo en el
+                // panel de detalle
+                _mc.DuelHoverCard(_mode == Mode.Pick ? hover : -1);
                 LayoutHand();
             }
 

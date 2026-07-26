@@ -15,18 +15,49 @@
 | **L-1 Cromo** | ✅ paleta `Duelo` en `UIKit.cs` (verbos fuera del celeste/naranja), Barlow Condensed para datos y párrafos, escala mínima 14, paneles opacos con brackets, texto que se auto-achica en vez de desbordar, y los cuatro restos del clásico borrados |
 | **L-2 El feed** | ✅ `ArenaBuilder.SetDuelStage()`: fuera skyline, paredes y líneas de distancia; público en negro puro; dos discos de luz en el piso; cámara a (0, 0.85, −6) y `DuelSlot` 0.62 → 1.7 |
 | **L-3 Los cuerpos** | ✅ `FighterViewDuel.cs`: 12 poses propias, tres tiempos con la consecuencia que PERSISTE, ticks del eje alto/bajo, zona golpeada que se enciende, placa de guardia que se parte |
-| **L-4 Foco por fase** | ⚠️ parcial: la mano se **atenúa** en vez de cerrarse durante la revelación. Falta el slot de compromiso y el hover = preview en el cuerpo |
+| **L-4 Foco por fase** | ⚠️ casi: la mano se **atenúa** en vez de cerrarse, y el **hover enciende la zona en el cuerpo** (la del rival si es golpe, la tuya si es guardia). Falta el slot de compromiso |
 | **L-5 Ceremonia** | ✅ pantalla de resultados con daño hecho, guardias acertadas, derribos y turnos, con REVANCHA / SALIR clickeables |
 | **L-6 Personajes** | ✅ proporciones por personaje (Jaina alta y flaca, Golem bajo y ancho) — gratis, el rig es procedural |
 
 Pendiente de la propuesta original, por orden de valor:
 
 1. **Slot de compromiso** (click = la carta sale boca abajo, ENTER confirma).
-2. **Hover = preview de la zona** en el cuerpo del rival.
-3. **Outline** de los peleadores (inverted hull) — con el fondo oscuro se
+   Ojo: ahora se cruza con la máquina de fases del online (`DnPhase`), donde
+   la carta ya es provisoria hasta que se resuelve el canto — hay que hacerlo
+   ahí adentro, no en paralelo.
+2. **Outline** de los peleadores (inverted hull) — con el fondo oscuro se
    despegan bastante bien, así que bajó de prioridad.
-4. **Scanline** sobre el cromo y el glitch del SYNC.
-5. El **menú de modos**, que sigue con el panel gris translúcido sobre la foto.
+3. **Scanline** sobre el cromo y el glitch del SYNC.
+4. El **menú de modos**, que sigue con el panel gris translúcido sobre la foto.
+
+## Adaptación a los CANTOS y los ROUNDS (2026-07-25, noche)
+
+El diseño se movió abajo del look: entraron el **envido y el truco**
+(DUELO.md §11), los **rounds al mejor de 3** (§12) y el modo **online**. Lo
+que hubo que reconectar:
+
+- **Colisión de layout**: los botones ¡ENVIDO! / ¡TRUCO! nacían a (−640, 150)
+  y caían **encima de la primera carta de la mano**, tapándole la velocidad.
+  Se mudaron a la franja libre del borde izquierdo, entre el piso de los
+  paneles y el techo del abanico.
+- **El canto lo actúan los cuerpos.** Dos poses nuevas: `Canta` (plantado,
+  señalando al rival) y `Aguanta` (pecho afuera, brazos atrás, piernas
+  abiertas). Son **prestadas**: al cerrar la negociación se devuelve la pose
+  que había, porque la consecuencia del turno anterior sigue mandando. Y no
+  se devuelven al instante — contra la IA toda la negociación se resuelve en
+  un frame, así que sin un respiro de 1.5s no se veían nunca.
+- **La apuesta se ve en la LUZ.** Con el truco armado el cuarto se pone
+  dorado, y más fuerte con cada subida (`ArenaBuilder.SetDuelStakes`). No hay
+  que leer un número para saber que este intercambio vale plata.
+- **El veredicto canta el ×N**: si el truco se cobró, el fallo abre con
+  "×2 · " y el detalle lo explica. Es lo primero que hay que ver.
+- **La ceremonia de round** dejó de salir por `HudUI.ShowBigMessage` (el
+  cromo del modo clásico: otra fuente, otra paleta) y pasó a un cartel propio
+  con el marcador. El **K.O.** también.
+- **El estado muere con el round**: los cuerpos vuelven a `Idle` y la luz se
+  apaga en cada cambio de round, como manda el §12.
+- **Resultados con marcador**: la partida es al mejor de 3, así que el
+  resultado de verdad es "2 — 1", no el KO suelto.
 
 ## 0. Qué se ve hoy (diagnóstico con la pantalla adelante)
 

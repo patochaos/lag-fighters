@@ -19,6 +19,11 @@ namespace LagFighter
         GuardBroken, // cubriste la mitad equivocada
         Down,        // en el piso, TODO el turno siguiente
         Win,         // sostiene el golpe que conectó
+        // EL CANTO (DUELO.md §11): cantar es un acto FÍSICO, no un botón.
+        // El que canta se planta y señala; el otro tiene que contestar
+        // mirándolo. Es la mitad "bluff cantado" de la fantasía del juego.
+        Canta,       // yo canté: plantado, señalando al rival
+        Aguanta,     // me cantaron: me abro de brazos, "¿ah sí?"
     }
 
     // ---- LOS CUERPOS EN DUELO (DUELO-LOOK.md §5) ----
@@ -48,6 +53,7 @@ namespace LagFighter
         float _dShieldBreak;             // animación de la placa partiéndose
         float _dFace = 1f;               // +1 mira a la derecha, −1 a la izquierda
         Vector3 _dBuild = Vector3.one;   // proporciones del personaje
+        int _dPreview = -1;              // zona previsualizada por el hover
 
         Transform _dWaist, _dWaist2, _dZoneHiT, _dZoneLoT, _dPlateT, _dChalkT;
         Renderer _dWaistR, _dWaistR2, _dZoneHiR, _dZoneLoR, _dPlateR, _dChalkR;
@@ -189,6 +195,17 @@ namespace LagFighter
             _dShieldHigh = high;
             _dShieldBroken = broken;
             _dShieldBreak = broken ? 0f : -1f;
+        }
+
+        // PREVIEW DE ZONA (DUELO-LOOK §7): al pasar el mouse por una carta se
+        // enciende, suave y latiendo, la mitad del cuerpo que esa carta toca —
+        // la zona del RIVAL si es un golpe, la tuya si es una guardia. Es Into
+        // the Breach: la altura deja de ser una palabra y pasa a ser un lugar.
+        // Late para no confundirse con el flash del impacto, que es seco.
+        public void PreviewZone(int zone)   // -1 nada · 0 baja · 1 alta
+        {
+            BuildDuelBits();
+            _dPreview = zone;
         }
 
         public void ClearDuelMarks()
@@ -342,6 +359,29 @@ namespace LagFighter
                     zoff = 0.10f;
                     breathe *= 2.2f;
                     break;
+
+                case DuelPose.Canta:
+                    // el dedo en la cara: brazo estirado horizontal al rival,
+                    // el otro en la cadera, todo el cuerpo tirado adelante
+                    aF = -4f; aB = 62f;
+                    lF = -18f; lB = 20f;
+                    torsoRot = Quaternion.Euler(0f, 22f, 0f);
+                    pitch = 13f;
+                    zoff = 0.16f;
+                    breathe *= 3.2f;   // late: está caliente
+                    break;
+
+                case DuelPose.Aguanta:
+                    // "¿ah sí?": pecho afuera, brazos abajo y atrás, piernas
+                    // abiertas. No puede ABRIRSE de brazos (el hueso solo rota
+                    // en X), así que la bravuconada se dice con el pecho: es la
+                    // pose más plantada del set y no se parece a ninguna otra.
+                    aF = 74f; aB = 66f;
+                    lF = 26f; lB = -26f;
+                    pitch = -13f;
+                    zoff = 0.05f;
+                    breathe *= 2.6f;
+                    break;
             }
 
             float k = _dSnap;
@@ -384,8 +424,26 @@ namespace LagFighter
             // zonas: se encienden de golpe y decaen
             _dZoneHi = Mathf.Max(0f, _dZoneHi - dt * 1.5f);
             _dZoneLo = Mathf.Max(0f, _dZoneLo - dt * 1.5f);
-            SetAlpha(_dZoneHiR, _dZoneHi * 0.42f);
-            SetAlpha(_dZoneLoR, _dZoneLo * 0.42f);
+            float aHi = _dZoneHi * 0.42f, aLo = _dZoneLo * 0.42f;
+
+            // el preview del hover late por debajo del flash del impacto: si
+            // los dos están vivos gana el impacto (pasó de verdad)
+            if (_dPreview >= 0 && _dPose != DuelPose.Down)
+            {
+                float pulse = 0.10f + Mathf.Abs(Mathf.Sin(Time.time * 3.4f)) * 0.11f;
+                if (_dPreview == 1 && _dZoneHi <= 0f)
+                {
+                    SetAlpha(_dZoneHiR, pulse, new Color(1f, 0.86f, 0.35f));
+                    aHi = -1f;
+                }
+                else if (_dPreview == 0 && _dZoneLo <= 0f)
+                {
+                    SetAlpha(_dZoneLoR, pulse, new Color(1f, 0.86f, 0.35f));
+                    aLo = -1f;
+                }
+            }
+            if (aHi >= 0f) SetAlpha(_dZoneHiR, aHi);
+            if (aLo >= 0f) SetAlpha(_dZoneLoR, aLo);
 
             // los ticks del eje: siempre, pero se apagan si está en el piso
             float wa = _dPose == DuelPose.Down ? 0f : 0.22f;
