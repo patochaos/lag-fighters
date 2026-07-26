@@ -740,6 +740,70 @@ lujo). Diales anotados si el vendido queda: que el escape del vendido
 también se vea venir (responde al escenario §12.1), y re-precio del
 premio (derribar debería tentar más que 14%).
 
+## 14. PODERES Cosmic — la primera camada (2026-07-26)
+
+Decisiones de Patricio: la fantasía es **"Fighting Truco con poderes
+raros — Cthulhu meets truco"**; ruptura DELIBERADA de la Ley 11 (el juego
+es casual, los rounds cortos absorben el caos); pocos arquetipos de mazo
+× poderes de una línea estilo Cosmic Encounter; y una **regla de diseño
+nueva: ningún poder le SACA mecánicas al rival** ("es aburrido no poder
+jugar" — murió El Pombero por esto). La seña actuada quedó descartada
+("no tiene depth"); los canales de mentira entran como poderes (el
+Gambler de CE, pendiente).
+
+### Los tres implementados (`DuelPower`, en el ctor de `DuelSim`)
+
+- **Oracle (LA LECHUZA)** — este turno el rival juega BOCA ARRIBA y vos
+  elegís viendo. Puro flujo de información: la sim solo registra; el
+  reveal-primero vive en harness/UI/protocolo (la misma maquinaria del
+  VENDIDO del §13, `PickDuelCounter`).
+- **Sorcerer (EL BRUJO)** — las cartas se CRUZAN: cada uno EJECUTA la del
+  otro. La carta física vuelve al descarte de su DUEÑO (los mazos no se
+  contaminan) y la guardia embrujada no vuelve a la mano. **El ESCAPE no
+  se embruja** (quemarle la válvula al rival = sacarle una mecánica).
+- **Loser (EL PERDEDOR)** — declarado antes del reveal: el intercambio se
+  da vuelta — el que perdía, gana. La guardia acertada PIERDE y la errada
+  cobra como guardia buena; el golpe pesado gana las carreras. Dos
+  declaraciones el mismo turno se anulan. Sin ganador limpio (trade,
+  tech, guardia-guardia, escape) no hay nada que dar vuelta.
+
+Declaración PÚBLICA en la planificación (como los cantos), se gasta al
+declarar. Todo detrás de flags: personajes actuales siguen con
+`DuelPower.None`, la UI no cambió. 169 tests.
+
+### Lo que midió el lab (`duelopoderes 5000`, poder vs sin-poder)
+
+| recarga | Lechuza | Brujo | Perdedor |
+|---|---|---|---|
+| 1×round | **69.9% — ROTA** | 48.2% | **55.8% — la joya** |
+| 1×partida | 56.1% | 49.4% | 52.1% |
+
+- **La recarga es POR PODER, no global** (respuesta a la pregunta de
+  Patricio "¿1×round o 1×partida?"): la información pura escala con los
+  usos — la Lechuza queda **1×PARTIDA**; Brujo y Perdedor **por round**.
+  `DuelConfig.PowerPerMatch(p)` codifica el default; `PowerEveryRound` /
+  `PowerOncePerMatch` son los diales del lab.
+- **El Perdedor es el poder perfecto de primera camada**: 55.8% sin
+  romper nada, 1.77 activaciones/partida, y da vuelta la psicología
+  entera del turno (conviene ERRAR la guardia — muy Cthulhu).
+- **El Brujo pierde entre IAs (48.2%)**: cruzar cartas pierde los
+  retornos de guardia y la IA no sabe elegir el momento. Se dejó la
+  basura correcta (el golpe más LENTO — el jab era regalo: 45.2→48.2).
+  Contra humanos el caos vale distinto; dial anotado: que la guardia
+  embrujada sí vuelva a la mano de su dueño.
+- Espejos 49-50% (sin asimetrías escondidas) · KO 100% · el juego base
+  sin poderes no se movió.
+
+### Cola anotada de poderes (del saqueo de los 148 aliens de CE)
+
+Trader (El Cambalachero) · Gambler (La Mentirosa — el canal de mentira
+con desafío) · Mirror (El Espejado: vel↔daño) · Anti-Matter (El
+Contramano: gana el lento, primo del Perdedor) · Chronos (El Tata Viejo:
+rollback del turno — el guiño al LAG) · Filch (El Cuervo: roba del
+descarte rival) · Zombie (El Aparecido: la primera muerte del round lo
+deja en 1) · Warrior (El Rencoroso: +1 vel por intercambio perdido) ·
+Seeker (El Confesor: pregunta sí/no que se responde con verdad).
+
 ### Escenarios anotados por Patricio (2026-07-26, a revisar jugando)
 
 1. **Escape vs truco armado**: hoy el ESCAPE congela el turno pero el

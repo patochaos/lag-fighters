@@ -121,6 +121,11 @@ class Tests
         DueloDerriboApagaLaGuardiaRival();
         DueloElDerriboDuraUnSoloTurno();
         DueloVendidoLaGuardiaBloqueaDerribado();
+        DueloPoderLoserDaVueltaElAgarreVsGuardia();
+        DueloPoderLoserDaVueltaLaCarrera();
+        DueloPoderBrujoCruzaLasCartas();
+        DueloPoderBrujoNoEmbrujaElEscape();
+        DueloPoderesRecargaPorPoder();
         DueloEscapeCongelaElTurno();
         DueloEscapeSeGastaParaSiempre();
         DueloChipPegaAunqueDefiendas();
@@ -1635,6 +1640,109 @@ class Tests
         Check(blocked && kdOn && kdOff,
             "duelo: VENDIDO — derribado la guardia SÍ bloquea (el castigo es el reveal)",
             $"guard {r.Guarded1}, drew {r.Drew1}, hp1 {d.Hp[1]}, kd {kdOn}→{!kdOff}");
+    }
+
+    // ---- PODERES Cosmic (DUELO.md §14) ----
+
+    static DuelSim NewDueloPoder(DuelPower p0, DuelPower p1, int seed = 7)
+    {
+        var d = new DuelSim(seed, DuelCatalog.GraveIdx, DuelCatalog.GraveIdx, 0, 1, p0, p1);
+        d.StartTurn();
+        return d;
+    }
+
+    // El ejemplo de Patricio: "yo jugué bloqueo, vos agarre — si antes usé el
+    // poder del LOSER, gané yo, porque lo di vuelta".
+    static void DueloPoderLoserDaVueltaElAgarreVsGuardia()
+    {
+        var d = NewDueloPoder(DuelPower.None, DuelPower.Loser);
+        bool used = d.UsePower(1);
+        Mano(d, 0, DuelCatalog.Throw);
+        Mano(d, 1, DuelCatalog.GuardLow);
+        var r = d.Resolve(0, 0);
+        Check(used && r.UpsetSide == 1 && r.Guarded1 && r.Winner < 0 && d.Hp[1] == DuelConfig.MaxHp &&
+              r.Drew1 == DuelConfig.GuardDraw && r.Returned1,
+            "duelo: PODER Loser (El Perdedor) — el agarre que ganaba pierde y la guardia cobra",
+            $"upset {r.UpsetSide}, guarded {r.Guarded1}, hp1 {d.Hp[1]}, drew {r.Drew1}");
+    }
+
+    static void DueloPoderLoserDaVueltaLaCarrera()
+    {
+        var d = NewDueloPoder(DuelPower.Loser, DuelPower.None);
+        d.UsePower(0);
+        Mano(d, 0, DuelCatalog.AttackD);   // vel 4, daño 7: perdía TODA carrera
+        Mano(d, 1, DuelCatalog.AttackA);   // vel 8, daño 3
+        var r = d.Resolve(0, 0);
+        Check(r.UpsetSide == 0 && r.Winner == 0 && d.Hp[1] == DuelConfig.MaxHp - 7 && d.Hp[0] == DuelConfig.MaxHp,
+            "duelo: PODER Loser — el golpe lento gana la carrera dada vuelta",
+            $"winner {r.Winner}, hp0 {d.Hp[0]}, hp1 {d.Hp[1]}");
+    }
+
+    static void DueloPoderBrujoCruzaLasCartas()
+    {
+        var d = NewDueloPoder(DuelPower.Sorcerer, DuelPower.None);
+        d.UsePower(0);
+        Mano(d, 0, DuelCatalog.GuardHigh);
+        Mano(d, 1, DuelCatalog.AttackC);   // golpe ALTO
+        var r = d.Resolve(0, 0);
+        // cruzado: el lado 0 EJECUTA el golpe del rival y el lado 1 la guardia
+        // del lado 0 — bloquea y roba. Las cartas vuelven al descarte de su
+        // DUEÑO y la guardia embrujada no vuelve a la mano.
+        Check(r.Swapped && r.BrujoSide == 0 && r.Guarded1 && !r.Returned1 &&
+              d.Hp[0] == DuelConfig.MaxHp && d.Hp[1] == DuelConfig.MaxHp &&
+              r.Drew1 == DuelConfig.GuardDraw &&
+              d.Discard[0].Contains(DuelCatalog.GuardHigh) && d.Discard[1].Contains(DuelCatalog.AttackC),
+            "duelo: PODER Sorcerer (El Brujo) — cada uno ejecuta la carta del otro",
+            $"swapped {r.Swapped}, guarded1 {r.Guarded1}, desc0 [{string.Join(",", d.Discard[0])}], desc1 [{string.Join(",", d.Discard[1])}]");
+    }
+
+    static void DueloPoderBrujoNoEmbrujaElEscape()
+    {
+        var d = NewDueloPoder(DuelPower.Sorcerer, DuelPower.None);
+        d.UsePower(0);
+        Mano(d, 0, DuelCatalog.AttackD);
+        Mano(d, 1, DuelCatalog.Escape);
+        var r = d.Resolve(0, 0);
+        Check(!r.Swapped && r.Escaped1 && d.Hp[1] == DuelConfig.MaxHp && d.Spent[1].Contains(DuelCatalog.Escape),
+            "duelo: PODER Sorcerer — el ESCAPE no se embruja (no se le quema la válvula al rival)",
+            $"swapped {r.Swapped}, escaped {r.Escaped1}");
+    }
+
+    // La recarga es POR PODER (medida en `duelopoderes`): la Lechuza es
+    // 1×PARTIDA (a 1×round ganaba 69.9% — información pura escala con los
+    // usos), Brujo y Perdedor recargan por round.
+    static void DueloPoderesRecargaPorPoder()
+    {
+        // Perdedor (lado 0, recarga por round) + Lechuza (lado 1, 1×partida).
+        var d = NewDueloPoder(DuelPower.Loser, DuelPower.Oracle);
+        bool cantan = d.UsePower(0) && d.UsePower(1);
+        bool gastados = !d.CanUsePower(0) && !d.CanUsePower(1);
+        // upset activo: A (lado 0) vs Agarre (lado 1) → el agarre "que
+        // perdía" conecta y cierra el round del lado 0.
+        d.Hp[0] = 3;
+        Mano(d, 0, DuelCatalog.AttackA);
+        Mano(d, 1, DuelCatalog.Throw);
+        var r = d.Resolve(0, 0);
+        if (d.AwaitingChoice) d.ChoosePrize(DuelPrize.Knockdown);
+        r = d.LastResult;
+        bool refills = r.RoundEnd && d.PowerUses[0] == 1 && d.CanUsePower(0) &&
+                       d.PowerUses[1] == 0 && !d.CanUsePower(1);
+
+        // dial del lab: PowerEveryRound fuerza TODO por round (la Lechuza recarga)
+        bool every0 = DuelConfig.PowerEveryRound;
+        DuelConfig.PowerEveryRound = true;
+        var d2 = NewDueloPoder(DuelPower.Oracle, DuelPower.None);
+        d2.UsePower(0);
+        d2.Hp[1] = 3;
+        Mano(d2, 0, DuelCatalog.AttackA);
+        Mano(d2, 1, DuelCatalog.Throw);
+        var r2 = d2.Resolve(0, 0);
+        bool forzado = r2.RoundEnd && d2.PowerUses[0] == 1;
+        DuelConfig.PowerEveryRound = every0;
+
+        Check(cantan && gastados && refills && forzado,
+            "duelo: PODERES — la Lechuza es 1×partida, el resto recarga por round",
+            $"refills {refills} (usos {d.PowerUses[0]}/{d.PowerUses[1]}), forzado {forzado}");
     }
 
     static void DueloEscapeCongelaElTurno()

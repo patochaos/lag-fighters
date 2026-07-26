@@ -21,6 +21,21 @@ namespace LagFighter
     public enum DuelHeight { High = 0, Low = 1, None = 2 }
     public enum DuelPrize { None = 0, Damage = 1, Knockdown = 2 }
 
+    // ---- PODERES estilo Cosmic Encounter (2026-07-26) ----
+    // Cada personaje puede llevar UN poder de una línea que rompe UNA regla
+    // de la resolución (ruptura deliberada de la Ley 11: el juego es casual
+    // y los rounds cortos absorben el caos — decisión de Patricio). Se
+    // declaran en la PLANIFICACIÓN, son PÚBLICOS (como los cantos) y valen
+    // para ese turno. Regla de diseño: ningún poder le SACA mecánicas al
+    // rival ("es aburrido no poder jugar") — rompen la resolución, no al jugador.
+    public enum DuelPower
+    {
+        None = 0,
+        Oracle = 1,    // Oracle (LA LECHUZA): este turno el rival juega BOCA ARRIBA y vos elegís viendo
+        Sorcerer = 2,  // Sorcerer (EL BRUJO): las cartas se CRUZAN — cada uno EJECUTA la del otro
+        Loser = 3,     // Loser (EL PERDEDOR): la mano se da vuelta — el que perdía el intercambio, lo gana
+    }
+
     public struct DuelCard
     {
         public string Name;
@@ -201,6 +216,17 @@ namespace LagFighter
         // de la sim (IA/UI/protocolo), igual que la negociación de los cantos;
         // acá solo cambia que la guardia del derribado sigue bloqueando.
         public static bool KdVendido = false;
+
+        // ---- PODERES ----
+        // Recarga POR PODER (medido 2026-07-26, `duelopoderes`): la Lechuza
+        // a 1×round ganaba 69.9% — rota, porque la información pura escala
+        // con los usos; queda 1×PARTIDA (56.1%, fuerte y sana). Brujo y
+        // Perdedor recargan por round (48.2% y 55.8%). Los dos flags fuerzan
+        // una regla global: son diales del lab, no del juego.
+        public static bool PowerOncePerMatch = false;  // fuerza TODO 1×partida
+        public static bool PowerEveryRound = false;    // fuerza TODO 1×round
+        public static bool PowerPerMatch(DuelPower p) =>
+            !PowerEveryRound && (PowerOncePerMatch || p == DuelPower.Oracle);
     }
 
     // Todo lo que pasó en un turno, para el teatro, el log y los tests.
@@ -226,6 +252,10 @@ namespace LagFighter
         public int PunishSide = -1, PunishCard = -1;
         public int PunishDamage;
         public int Truco;                    // nivel de truco COBRADO este turno (0 = no había o no se cobró)
+        public bool Swapped;                 // el BRUJO cruzó las cartas (Card0/Card1 son las EJECUTADAS)
+        public int BrujoSide = -1;           // quién declaró el brujo
+        public int UpsetSide = -1;           // quién declaró EL PERDEDOR
+        public int OracleSide = -1;          // quién usó LA LECHUZA (el rival jugó boca arriba)
         public bool RoundEnd;                // terminó un round este turno
         public int RoundWinner = -1;         // quién lo ganó (-1 = doble KO parejo)
         public bool KdNext0, KdNext1;
@@ -294,6 +324,34 @@ namespace LagFighter
         public int TrucoCaller = -1;
         public bool TrucoChainUsed;          // UNA cadena de truco por round (como la mano del truco real)
 
+        // ---- poderes (declarados en la planificación, valen ESE turno) ----
+        public readonly DuelPower[] Power = { DuelPower.None, DuelPower.None };
+        public readonly int[] PowerUses = new int[2];    // usos restantes (round o partida, según config)
+        public readonly bool[] OracleNow = new bool[2];  // armados para el turno que viene
+        public readonly bool[] SorcererNow = new bool[2];
+        public readonly bool[] UpsetNow = new bool[2];
+
+        public bool CanUsePower(int side) =>
+            !Over && Power[side] != DuelPower.None && PowerUses[side] > 0 &&
+            !OracleNow[side] && !SorcererNow[side] && !UpsetNow[side];
+
+        // La declaración es pública y se gasta al declarar (aunque el turno
+        // salga rana: cantaste el poder, pagaste el poder).
+        public bool UsePower(int side)
+        {
+            if (!CanUsePower(side)) return false;
+            PowerUses[side]--;
+            switch (Power[side])
+            {
+                case DuelPower.Oracle: OracleNow[side] = true; break;
+                case DuelPower.Sorcerer: SorcererNow[side] = true; break;
+                case DuelPower.Loser: UpsetNow[side] = true; break;
+            }
+            return true;
+        }
+
+        int PowerRefill(int side) => Power[side] == DuelPower.None ? 0 : 1;
+
         public bool CanEnvido => !Over && !EnvidoUsed && !FirstBlood;
         public bool CanTruco => !Over && TrucoLevel == 0 && !TrucoChainUsed;
         public static int TrucoMult(int level) => level + 1;   // 1→×2 · 2→×3 · 3→×4
@@ -313,9 +371,17 @@ namespace LagFighter
         int _prizeMult = 1;   // el multiplicador del truco cobrado, por si el premio también dobla
         bool _finished;
         bool _pendingTimeOver;
+        bool _swapTurn;       // EL BRUJO: este turno cada lado EJECUTA la carta del otro
+        bool _upsetTurn;      // EL PERDEDOR: este turno el intercambio se da vuelta
         public DuelTurnResult LastResult => _r;
 
         public DuelCard Def(int side, int card) => Chr[side].Cards[card];
+
+        // La carta que un lado EJECUTA este turno: con el Brujo activo las
+        // cartas están cruzadas, así que hay que mirar el catálogo del DUEÑO
+        // (los índices de firma difieren entre personajes). Solo el camino
+        // de combate usa esto; la mano/descarte/premio siguen con Def.
+        DuelCard EDef(int side, int card) => Chr[_swapTurn ? 1 - side : side].Cards[card];
         public int MaxHpOf(int side) => DuelConfig.MaxHp + Chr[side].HpBonus;
 
         // ONLINE (lockstep ESPEJADO): cada cliente construye la sim con él
@@ -325,15 +391,18 @@ namespace LagFighter
         // las dos sims espejadas barajan idéntico y quedan en lockstep sin
         // tocar una línea de la UI (que asume "vos = lado 0").
         public DuelSim(int seed, int char0 = DuelCatalog.GraveIdx, int char1 = DuelCatalog.GraveIdx,
-            int streamTag0 = 0, int streamTag1 = 1)
+            int streamTag0 = 0, int streamTag1 = 1,
+            DuelPower power0 = DuelPower.None, DuelPower power1 = DuelPower.None)
         {
             _rng[0] = Mix((uint)seed * 0x9E3779B9u + (uint)(streamTag0 + 1) * 0x85EBCA6Bu);
             _rng[1] = Mix((uint)seed * 0x9E3779B9u + (uint)(streamTag1 + 1) * 0x85EBCA6Bu);
             CharIdx[0] = char0; CharIdx[1] = char1;
+            Power[0] = power0; Power[1] = power1;
             for (int s = 0; s < 2; s++)
             {
                 Chr[s] = DuelCatalog.Chars[CharIdx[s]];
                 DealSide(s);
+                PowerUses[s] = PowerRefill(s);
             }
         }
 
@@ -384,6 +453,12 @@ namespace LagFighter
             PublicTanto = -1; PublicTantoSide = -1;
             TrucoLevel = 0; TrucoCaller = -1; TrucoChainUsed = false;
             _pendingTimeOver = false;
+            for (int s = 0; s < 2; s++)
+            {
+                // un poder declarado no cruza rounds (como todo estado)
+                OracleNow[s] = SorcererNow[s] = UpsetNow[s] = false;
+                if (!DuelConfig.PowerPerMatch(Power[s])) PowerUses[s] = PowerRefill(s);
+            }
         }
 
         // Cierra el round: anota el marcador y, si el match no terminó,
@@ -553,10 +628,38 @@ namespace LagFighter
             _prizeMult = 1;
             PendingSide = -1; PendingIsPunish = false;
             _finished = false;
+            _swapTurn = false; _upsetTurn = false;
             if (Over) { _r.TimeOver = true; return _r; }
 
             _r.Card0 = TakeCard(0, handIdx0);
             _r.Card1 = TakeCard(1, handIdx1);
+
+            // ---- poderes declarados para este turno ----
+            // Oracle (LA LECHUZA) no toca la resolución: es puro flujo de
+            // información (el rival eligió boca arriba) — vive afuera, acá
+            // solo queda registrado para la UI/stats.
+            if (OracleNow[0] || OracleNow[1]) _r.OracleSide = OracleNow[0] ? 0 : 1;
+            // Sorcerer (EL BRUJO): las cartas se CRUZAN. El ESCAPE no se
+            // embruja (quemarle la válvula al rival sería sacarle una
+            // mecánica — regla de diseño), y sin dos cartas no hay cruce.
+            bool sorc = SorcererNow[0] || SorcererNow[1];
+            bool escInvolved =
+                (_r.Card0 >= 0 && Def(0, _r.Card0).Kind == DuelKind.Escape) ||
+                (_r.Card1 >= 0 && Def(1, _r.Card1).Kind == DuelKind.Escape);
+            if (sorc && !escInvolved && _r.Card0 >= 0 && _r.Card1 >= 0)
+            {
+                _swapTurn = true;
+                _r.Swapped = true;
+                _r.BrujoSide = SorcererNow[0] ? 0 : 1;
+                (_r.Card0, _r.Card1) = (_r.Card1, _r.Card0);
+            }
+            // Loser (EL PERDEDOR): dos declaraciones se anulan (muy Cosmic).
+            _upsetTurn = UpsetNow[0] ^ UpsetNow[1];
+            if (UpsetNow[0] || UpsetNow[1]) _r.UpsetSide = UpsetNow[0] ? 0 : 1;
+            OracleNow[0] = OracleNow[1] = false;
+            SorcererNow[0] = SorcererNow[1] = false;
+            UpsetNow[0] = UpsetNow[1] = false;
+
             Fight(_r.Card0, _r.Card1);
             if (!AwaitingChoice) FinishTurn();
             else SortHands();
@@ -577,8 +680,8 @@ namespace LagFighter
         {
             // el ESCAPE congela el turno: no pasa nada. Es la válvula (una por
             // partida) y por eso es la respuesta al derribo.
-            bool e0 = c0 >= 0 && Def(0, c0).Kind == DuelKind.Escape;
-            bool e1 = c1 >= 0 && Def(1, c1).Kind == DuelKind.Escape;
+            bool e0 = c0 >= 0 && EDef(0, c0).Kind == DuelKind.Escape;
+            bool e1 = c1 >= 0 && EDef(1, c1).Kind == DuelKind.Escape;
             if (e0) _r.Escaped0 = true;
             if (e1) _r.Escaped1 = true;
             if (e0 || e1) return;
@@ -587,13 +690,14 @@ namespace LagFighter
             if (c0 < 0) { Unopposed(1, c1); return; }
             if (c1 < 0) { Unopposed(0, c0); return; }
 
-            var k0 = Def(0, c0).Kind; var k1 = Def(1, c1).Kind;
+            var k0 = EDef(0, c0).Kind; var k1 = EDef(1, c1).Kind;
 
             if (k0 == DuelKind.Strike && k1 == DuelKind.Strike)
             {
-                int s0 = Def(0, c0).Speed, s1 = Def(1, c1).Speed;
+                int s0 = EDef(0, c0).Speed, s1 = EDef(1, c1).Speed;
                 if (s0 == s1) { Trade(c0, c1); return; }
                 int w = s0 > s1 ? 0 : 1;
+                if (_upsetTurn) w = 1 - w;   // EL PERDEDOR: el lento gana la carrera
                 Land(w, w == 0 ? c0 : c1);
                 return;
             }
@@ -610,15 +714,18 @@ namespace LagFighter
             // tiene un SEGUNDO agarre más rápido, es quien usa esta rama.
             if (k0 == DuelKind.Grab && k1 == DuelKind.Grab)
             {
-                int g0 = Def(0, c0).Speed, g1 = Def(1, c1).Speed;
+                int g0 = EDef(0, c0).Speed, g1 = EDef(1, c1).Speed;
                 if (g0 == g1) { _r.Tech = true; return; }
                 int gw = g0 > g1 ? 0 : 1;
+                if (_upsetTurn) gw = 1 - gw;
                 Land(gw, gw == 0 ? c0 : c1);
                 return;
             }
 
-            if (k0 == DuelKind.Grab) { Land(0, c0); return; }   // vs guardia
-            if (k1 == DuelKind.Grab) { Land(1, c1); return; }
+            // agarre vs guardia: el agarre gana... salvo EL PERDEDOR, que da
+            // vuelta la mano — la guardia "que perdía" cobra como guardia buena.
+            if (k0 == DuelKind.Grab) { if (_upsetTurn) GuardSuccess(1, EDef(0, c0)); else Land(0, c0); return; }
+            if (k1 == DuelKind.Grab) { if (_upsetTurn) GuardSuccess(0, EDef(1, c1)); else Land(1, c1); return; }
 
             // guardia vs guardia: no pasa nada (vuelven a la mano, sin robo)
         }
@@ -626,37 +733,48 @@ namespace LagFighter
         void StrikeVsGrab(int strikeSide, int strikeCard, int grabCard)
         {
             int grabSide = 1 - strikeSide;
-            if (!Def(grabSide, grabCard).Armor) { Land(strikeSide, strikeCard); return; }
-            // aguante: los dos cobran, nadie cobra premio (es un cambio)
+            if (!EDef(grabSide, grabCard).Armor)
+            {
+                // EL PERDEDOR: el agarre que perdía contra el golpe, conecta
+                if (_upsetTurn) Land(grabSide, grabCard);
+                else Land(strikeSide, strikeCard);
+                return;
+            }
+            // aguante: los dos cobran, nadie cobra premio (es un cambio).
+            // Sin ganador limpio, el PERDEDOR no tiene nada que dar vuelta.
             _r.Armor = true;
             _r.Trade = true;
-            Damage(grabSide, Def(strikeSide, strikeCard).Damage, chip: false);
-            Damage(strikeSide, Def(grabSide, grabCard).Damage, chip: false);
+            Damage(grabSide, EDef(strikeSide, strikeCard).Damage, chip: false);
+            Damage(strikeSide, EDef(grabSide, grabCard).Damage, chip: false);
         }
 
         // El rival no tenía cartas: si atacaste, conecta.
         void Unopposed(int side, int card)
         {
-            if (Def(side, card).IsAttack) Land(side, card);
+            if (_upsetTurn) return;   // sin rival que "pierda", nadie cobra
+            if (EDef(side, card).IsAttack) Land(side, card);
         }
 
         void Trade(int c0, int c1)
         {
             _r.Trade = true;
-            Damage(0, Def(1, c1).Damage, chip: false);
-            Damage(1, Def(0, c0).Damage, chip: false);
+            Damage(0, EDef(1, c1).Damage, chip: false);
+            Damage(1, EDef(0, c0).Damage, chip: false);
             // sin ganador limpio: nadie cobra premio
         }
 
         void StrikeVsGuard(int atkSide, int card)
         {
-            var atk = Def(atkSide, card);
+            var atk = EDef(atkSide, card);
             int def = 1 - atkSide;
-            var guard = Def(def, _r.Card(def));
+            var guard = EDef(def, _r.Card(def));
             // derribado: la guardia NO bloquea (dura un solo turno).
             // En modo VENDIDO sí bloquea: el castigo es el reveal, no la guardia.
             bool down = !DuelConfig.KdVendido && KnockedDown[def];
             bool blocks = !down && guard.Height == atk.Height;
+            // EL PERDEDOR: la mano se da vuelta — la guardia acertada pierde
+            // y la errada gana. Sí: con el poder declarado conviene ERRAR.
+            if (_upsetTurn) blocks = !blocks;
             if (!blocks)
             {
                 if (def == 0) { _r.WrongGuard0 = true; _r.GuardWasDown0 = down; }
@@ -664,6 +782,14 @@ namespace LagFighter
                 Land(atkSide, card);
                 return;
             }
+            GuardSuccess(def, atk);
+        }
+
+        // La guardia que GANA el intercambio cobra en SU moneda: cartas
+        // (robo, multiplicado si había truco armado) y el castigo si aplica.
+        // La usan la guardia acertada de siempre y la vuelta del PERDEDOR.
+        void GuardSuccess(int def, in DuelCard atk)
+        {
             if (def == 0) _r.Guarded0 = true; else _r.Guarded1 = true;
             if (atk.Chip > 0) Damage(def, atk.Chip, chip: true);
             // El truco también se cobra BLOQUEANDO (Patricio, 2026-07-25):
@@ -688,7 +814,7 @@ namespace LagFighter
 
         void Land(int side, int card)
         {
-            var d = Def(side, card);
+            var d = EDef(side, card);
             int victim = 1 - side;
             // el truco armado se COBRA acá: multiplica el golpe que ganó el
             // intercambio, sea de quien sea (el riesgo del canto es simétrico).
@@ -811,7 +937,16 @@ namespace LagFighter
             if (_finished) return;
             _finished = true;
 
-            for (int s = 0; s < 2; s++)
+            if (_r.Swapped)
+            {
+                // BRUJO: cada carta vuelve al descarte de su DUEÑO (el otro
+                // lado la ejecutó — _r.Card0 es físicamente del lado 1) y la
+                // guardia embrujada NO vuelve a la mano: los mazos no se
+                // contaminan y no hay retorno de cartas ajenas.
+                if (_r.Card0 >= 0) Discard[1].Add(_r.Card0);
+                if (_r.Card1 >= 0) Discard[0].Add(_r.Card1);
+            }
+            else for (int s = 0; s < 2; s++)
             {
                 int card = _r.Card(s);
                 if (card < 0) continue;

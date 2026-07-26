@@ -637,6 +637,33 @@ namespace LagFighter
                 return _rng.NextDouble() < 0.5 ? gHigh : gLow;
             }
             int AnyStrike() => fast >= 0 ? fast : strong;
+
+            // DECLARÉ EL BRUJO: el rival va a EJECUTAR mi carta — comprometer
+            // la peor ("mi mano mala es tu mano mala") y ejecutar la suya.
+            // La basura correcta es el golpe más LENTO (pierde toda carrera);
+            // el más débil era el jab, que es el más rápido: regalo, no basura.
+            if (s.SorcererNow[me])
+            {
+                int junk = -1;
+                for (int i = 0; i < hand.Count; i++)
+                {
+                    var d = s.Def(me, hand[i]);
+                    if (d.Kind != DuelKind.Strike) continue;
+                    if (junk < 0 || d.Speed < s.Def(me, hand[junk]).Speed) junk = i;
+                }
+                if (junk >= 0) return junk;
+                if (grab >= 0) return grab;
+            }
+
+            // EL PERDEDOR anda dado vuelta (lo declaró cualquiera de los dos):
+            // el golpe lento gana carreras y la guardia acertada PIERDE — se
+            // juega pesado y, si se defiende, a la altura equivocada a propósito.
+            if (s.UpsetNow[0] || s.UpsetNow[1])
+            {
+                if (strong >= 0 && s.Def(me, hand[strong]).Speed <= 5) return strong;
+                if (grab >= 0 && _rng.NextDouble() < 0.35) return grab;
+                if (strong >= 0) return strong;
+            }
             // Un golpe muy lento es una LECTURA (le gana a agarres y a la
             // guardia equivocada), no una jugada de default: si el más fuerte
             // de la mano es lentísimo, la mitad de las veces se juega el
@@ -800,6 +827,49 @@ namespace LagFighter
                     break;
             }
             return PickDuelCard(s, me);
+        }
+
+        // ---- PODERES (doctrina Cosmic, DUELO.md §14): cuándo declarar ----
+        // Oracle (LA LECHUZA): ver la carta rival vale más cuando hay plata en
+        // la mesa (truco armado) o al rematar. Sorcerer (EL BRUJO): cuando mi
+        // mano es mala, cruzarla la vuelve mala PARA ÉL. Loser (EL PERDEDOR):
+        // cuando tengo el golpe pesado que pierde toda carrera — dado vuelta,
+        // las gana — o cuando estoy derribado y todo me pega.
+        public bool WantsDuelPower(DuelSim s, int me)
+        {
+            if (!s.CanUsePower(me)) return false;
+            var hand = s.Hand[me];
+            switch (s.Power[me])
+            {
+                case DuelPower.Oracle:
+                    if (s.TrucoLevel > 0) return true;
+                    if (s.Hp[1 - me] <= 8) return true;
+                    return _rng.NextDouble() < 0.15;
+                case DuelPower.Sorcerer:
+                {
+                    bool tengoGuardia = false, tengoRapido = false;
+                    foreach (int c in hand)
+                    {
+                        var d = s.Def(me, c);
+                        if (d.Kind == DuelKind.Guard) tengoGuardia = true;
+                        if (d.Kind == DuelKind.Strike && d.Speed >= 7) tengoRapido = true;
+                    }
+                    if (!tengoGuardia && !tengoRapido && hand.Count > 0) return true;
+                    return _rng.NextDouble() < 0.08;
+                }
+                case DuelPower.Loser:
+                {
+                    if (s.KnockedDown[me] && _rng.NextDouble() < 0.5) return true;
+                    foreach (int c in hand)
+                    {
+                        var d = s.Def(me, c);
+                        if (d.Kind == DuelKind.Strike && d.Speed <= 4 && d.Damage >= 7)
+                            return _rng.NextDouble() < 0.45;
+                    }
+                    return _rng.NextDouble() < 0.05;
+                }
+            }
+            return false;
         }
 
         // +1 = le pega ALTO seguido · −1 = ABAJO · 0 = no hay sesgo legible.

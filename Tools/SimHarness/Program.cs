@@ -64,6 +64,13 @@ class Program
             RunDueloVendido(args.Length > 1 ? int.Parse(args[1]) : 4000);
             return;
         }
+        // Poderes Cosmic: cada poder vs sin-poder, con la regla de recarga
+        // barrida (1×round vs 1×partida — la pregunta de Patricio).
+        if (args.Length > 0 && args[0] == "duelopoderes")
+        {
+            RunDueloPoderes(args.Length > 1 ? int.Parse(args[1]) : 4000);
+            return;
+        }
         int matches = args.Length > 0 ? int.Parse(args[0]) : 3000;
         RunLab(matches, carryover: false);
         Console.WriteLine();
@@ -172,6 +179,13 @@ class Program
             return pick;
         }
 
+        // PODERES: ¿declaro el mío este turno? El random declara por caos.
+        public bool WantsPower(DuelSim d, int me)
+        {
+            if (_ai != null) return _ai.WantsDuelPower(d, me);
+            return d.CanUsePower(me) && _rand.NextDouble() < 0.25;
+        }
+
         // VENDIDO: contra-elegir viendo la carta del derribado. El bot
         // random no explota nada (elige igual que siempre) — la brecha
         // entre ambos mide cuánto vale saber explotar el reveal.
@@ -208,7 +222,8 @@ class Program
     }
 
     // Juega una partida entera. Devuelve el ganador (−1 empate).
-    static int PlayDuel(int seed, int c0, int c1, DuelBot b0, DuelBot b1, DuelStats st = null)
+    static int PlayDuel(int seed, int c0, int c1, DuelBot b0, DuelBot b1, DuelStats st = null,
+        DuelPower pw0 = DuelPower.None, DuelPower pw1 = DuelPower.None)
     {
         // Seeds HASHEADAS por lado: System.Random correlaciona seeds que
         // difieren en un offset constante, y eso sesga el head-to-head sin
@@ -216,7 +231,7 @@ class Program
         // cartas; acá se veía como "P0 gana 52% con bots random").
         var p0 = new DuelPlayer(HashSeed(seed, 0), b0);
         var p1 = new DuelPlayer(HashSeed(seed, 1), b1);
-        var d = new DuelSim(seed, c0, c1);
+        var d = new DuelSim(seed, c0, c1, 0, 1, pw0, pw1);
         // envido→round: el ganador del envido de cada round vs quién ganó
         // ESE round (los rounds pueden terminar por KO, chip de canto o
         // time over — se detecta por el marcador, no por el turno).
@@ -288,6 +303,11 @@ class Program
             RoundTick();               // el chip de un canto pudo cerrar el round
             if (d.Over) break;
 
+            // ---- poderes (declaración pública en la planificación) ----
+            for (int side = 0; side < 2; side++)
+                if (d.CanUsePower(side) && (side == 0 ? p0 : p1).WantsPower(d, side))
+                    d.UsePower(side);
+
             // kdSide = quién arranca el turno derribado (el turno de oki).
             int kdSide = d.KnockedDown[0] == d.KnockedDown[1] ? -1 : (d.KnockedDown[0] ? 0 : 1);
             int h0, h1;
@@ -300,6 +320,19 @@ class Program
                 int ho = (kdSide == 0 ? p1 : p0).PickCounter(d, 1 - kdSide, revealed);
                 h0 = kdSide == 0 ? hs : ho;
                 h1 = kdSide == 0 ? ho : hs;
+            }
+            else if (d.OracleNow[0] != d.OracleNow[1])
+            {
+                // Oracle (LA LECHUZA): el marcado juega primero, boca arriba,
+                // y la lechuza contra-elige viéndolo. Dos lechuzas el mismo
+                // turno se anulan (ambos a ciegas).
+                int seer = d.OracleNow[0] ? 0 : 1;
+                int mark = 1 - seer;
+                int hs = (mark == 0 ? p0 : p1).Pick(d, mark);
+                int revealed = hs >= 0 && hs < d.Hand[mark].Count ? d.Hand[mark][hs] : -1;
+                int ho = (seer == 0 ? p0 : p1).PickCounter(d, seer, revealed);
+                h0 = mark == 0 ? hs : ho;
+                h1 = mark == 0 ? ho : hs;
             }
             else { h0 = p0.Pick(d, 0); h1 = p1.Pick(d, 1); }
             var r = d.Resolve(h0, h1);
@@ -359,8 +392,14 @@ class Program
 
         public long TrucoGuardCobros;   // trucos cobrados BLOQUEANDO (en cartas)
 
+        // ---- poderes ----
+        public long PowerOracle, PowerBrujo, PowerLoser;
+
         public void Turn(DuelSim d, DuelTurnResult r, int c0, int c1)
         {
+            if (r.OracleSide >= 0) PowerOracle++;
+            if (r.Swapped) PowerBrujo++;
+            if (r.UpsetSide >= 0) PowerLoser++;
             if (r.Truco > 0) TrucoCobrados++;
             if (r.Truco > 0 && (r.Guarded0 || r.Guarded1)) TrucoGuardCobros++;
             // la siembra: ¿el que defiende CONTRA el ganador del envido
@@ -630,6 +669,73 @@ class Program
         }
         DuelConfig.KdVendido = v0;
         Console.WriteLine("  [oki-atk% = el que derribó gana el intercambio siguiente · oki-esc% = el derribado escapa]");
+    }
+
+    // ---- PODERES Cosmic (DUELO.md §14) ------------------------------------
+    // Cada poder contra el mismo bot SIN poder, alternando lados. La columna
+    // que decide: win% (>50 = el poder vale · >60 = probablemente roto) bajo
+    // las dos reglas de recarga. También el espejo poder-vs-poder como
+    // control de simetría.
+    static void RunDueloPoderes(int matches)
+    {
+        bool once0 = DuelConfig.PowerOncePerMatch, every0 = DuelConfig.PowerEveryRound;
+        var poderes = new[] { DuelPower.Oracle, DuelPower.Sorcerer, DuelPower.Loser };
+        string Nombre(DuelPower p) => p == DuelPower.Oracle ? "Oracle (La Lechuza)" :
+                                      p == DuelPower.Sorcerer ? "Sorcerer (El Brujo)" : "Loser (El Perdedor)";
+        Console.WriteLine($"=== DUELO: poderes Cosmic — poder vs sin poder ({matches} partidas por celda) ===");
+        Console.WriteLine("  regla      poder                | win%  activ/partida  turnos  rounds   KO%");
+        foreach (var regla in new[] { "por-poder", "1×round  ", "1×partida" })
+        {
+            DuelConfig.PowerEveryRound = regla.StartsWith("1×round");
+            DuelConfig.PowerOncePerMatch = regla == "1×partida";
+            foreach (var pw in poderes)
+            {
+                var st = new DuelStats();
+                double win = DuelPower1v1(matches, pw, st);
+                long activ = pw == DuelPower.Oracle ? st.PowerOracle :
+                             pw == DuelPower.Sorcerer ? st.PowerBrujo : st.PowerLoser;
+                Console.WriteLine($"  {regla}  {Nombre(pw),-20} | {win * 100,5:0.0} {(double)activ / Math.Max(1, st.Matches),13:0.00} " +
+                                  $"{(double)st.Turns / Math.Max(1, st.Matches),7:0.0} {(double)st.RoundsSum / Math.Max(1, st.Matches),6:0.0} {100.0 * st.Kos / Math.Max(1, st.Matches),5:0.0}");
+            }
+        }
+        DuelConfig.PowerOncePerMatch = once0;
+        DuelConfig.PowerEveryRound = every0;
+        Console.WriteLine("  [win% = el lado CON poder · >50 vale · >60 probablemente roto · activ = veces que el poder tocó un turno]");
+        Console.WriteLine("  [por-poder = los defaults del juego: Lechuza 1×partida, Brujo y Perdedor por round]");
+
+        // control: espejos poder-vs-poder (deben dar ~50, si no hay asimetría escondida)
+        Console.Write("  espejos (~50%): ");
+        foreach (var pw in poderes)
+        {
+            double esp = 0; int n = 0;
+            for (int m = 0; m < matches; m++)
+            {
+                int nc = DuelCatalog.Chars.Length;
+                int w = PlayDuel(m + 1, (m / nc) % nc, m % nc, DuelBot.Full, DuelBot.Full, null, pw, pw);
+                if (w == 0) esp += 1; else if (w < 0) esp += 0.5;
+                n++;
+            }
+            Console.Write($"{Nombre(pw)} {esp / n * 100:0.0}%  ");
+        }
+        Console.WriteLine();
+    }
+
+    static double DuelPower1v1(int matches, DuelPower pw, DuelStats st = null)
+    {
+        double score = 0;
+        for (int m = 0; m < matches; m++)
+        {
+            int nc = DuelCatalog.Chars.Length;
+            int c0 = (m / nc) % nc, c1 = m % nc;
+            bool aFirst = (m & 1) == 0;
+            int aSide = aFirst ? 0 : 1;
+            int w = aFirst
+                ? PlayDuel(m + 1, c0, c1, DuelBot.Full, DuelBot.Full, st, pw, DuelPower.None)
+                : PlayDuel(m + 1, c0, c1, DuelBot.Full, DuelBot.Full, st, DuelPower.None, pw);
+            if (w == aSide) score += 1;
+            else if (w < 0) score += 0.5;
+        }
+        return score / Math.Max(1, matches);
     }
 
     static double Duel1v1(int matches, DuelBot a, DuelBot b, DuelStats[] porLado = null)
