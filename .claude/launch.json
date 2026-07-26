@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "truco-fighter-proto",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8734", "--directory", "D:/Lag Fighters/truco-fighter-proto"],
+      "port": 8734
+    }
+  ]
+}
