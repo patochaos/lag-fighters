@@ -50,6 +50,11 @@ class Program
             RunDueloTune(args.Length > 1 ? int.Parse(args[1]) : 3000);
             return;
         }
+        if (args.Length > 0 && args[0] == "duelocantos")
+        {
+            RunDueloCantos(args.Length > 1 ? int.Parse(args[1]) : 3000);
+            return;
+        }
         int matches = args.Length > 0 ? int.Parse(args[0]) : 3000;
         RunLab(matches, carryover: false);
         Console.WriteLine();
@@ -80,20 +85,66 @@ class Program
     // abajo. Es el sparring que hace falta para medir si la información
     // sirve — contra un random no hay nada que leer, y contra un bot tonto
     // el resultado se lo come el techo.
-    enum DuelBot { Full, NoReads, Random, Predictable }
+    // Para los CANTOS (DUELO.md §11): NoCantos = juega Full pero nunca canta
+    // (sí responde) · RandomCantos = juega Full pero canta a frecuencia
+    // parecida SIN mirar nada. El par mide si cantar BIEN es una habilidad.
+    enum DuelBot { Full, NoReads, Random, Predictable, NoCantos, RandomCantos }
 
     class DuelPlayer
     {
         readonly SimpleAI _ai;
         readonly System.Random _rand;
         readonly bool _tellBajo;
+        readonly bool _sings = true;        // NoCantos: responde pero no canta
+        readonly System.Random _cantoRand;  // RandomCantos: canta a ciegas
 
         public DuelPlayer(int seed, DuelBot kind)
         {
-            if (kind == DuelBot.Random) { _rand = new System.Random(seed); return; }
+            if (kind == DuelBot.Random)
+            {
+                _rand = new System.Random(seed);
+                _cantoRand = new System.Random(seed ^ 0x5bd1e995);
+                return;
+            }
             _ai = new SimpleAI(seed);
-            _ai.ReadsHabits = kind == DuelBot.Full;
+            _ai.ReadsHabits = kind == DuelBot.Full || kind == DuelBot.NoCantos || kind == DuelBot.RandomCantos;
             _tellBajo = kind == DuelBot.Predictable;
+            _sings = kind != DuelBot.NoCantos;
+            if (kind == DuelBot.RandomCantos) _cantoRand = new System.Random(seed ^ 0x5bd1e995);
+        }
+
+        // ---- cantos ----
+        // Frecuencias del random calibradas a ojo contra las del smart
+        // (verificar en la salida del lab que queden comparables).
+        public bool CantaEnvido(DuelSim d, int me)
+        {
+            if (!_sings) return false;
+            if (_cantoRand != null) return _cantoRand.NextDouble() < 0.30;
+            return _ai.CantaEnvido(d, me);
+        }
+
+        public bool QuiereEnvido(DuelSim d, int me)
+        {
+            if (_cantoRand != null) return _cantoRand.NextDouble() < 0.55;
+            return _ai != null ? _ai.QuiereEnvido(d, me) : true;
+        }
+
+        public bool CantaTruco(DuelSim d, int me)
+        {
+            if (!_sings) return false;
+            if (_cantoRand != null) return _cantoRand.NextDouble() < 0.10;
+            return _ai.CantaTruco(d, me);
+        }
+
+        public int RespondeTruco(DuelSim d, int me, int level)
+        {
+            if (_cantoRand != null)
+            {
+                double r = _cantoRand.NextDouble();
+                if (r < 0.12 && level < DuelConfig.TrucoMaxLevel) return 2;
+                return r < 0.75 ? 1 : 0;
+            }
+            return _ai != null ? _ai.RespondeTruco(d, me, level) : 1;
         }
 
         public int Pick(DuelSim d, int me)
@@ -148,11 +199,61 @@ class Program
         var p0 = new DuelPlayer(HashSeed(seed, 0), b0);
         var p1 = new DuelPlayer(HashSeed(seed, 1), b1);
         var d = new DuelSim(seed, c0, c1);
+        int envidoWinner = -1;
         int guard = 0;
         while (!d.Over && guard++ < 80)
         {
             d.StartTurn();
             if (d.Over) break;
+
+            // ---- cantos, en la planificación: primero envido, después truco.
+            // Quién habla primero alterna por turno (determinista por seed).
+            bool canto = false;
+            if (d.CanEnvido)
+            {
+                int first = d.Turn & 1;
+                for (int k = 0; k < 2 && d.CanEnvido; k++)
+                {
+                    int side = k == 0 ? first : 1 - first;
+                    if (!(side == 0 ? p0 : p1).CantaEnvido(d, side)) continue;
+                    bool quiero = (side == 0 ? p1 : p0).QuiereEnvido(d, 1 - side);
+                    var er = d.ResolveEnvido(side, quiero);
+                    if (er.Winner >= 0) envidoWinner = er.Winner;
+                    st?.Envido(er);
+                    canto = true;
+                    break;
+                }
+            }
+            if (!d.Over && d.CanTruco)
+            {
+                int first = 1 - (d.Turn & 1);
+                for (int k = 0; k < 2 && d.CanTruco; k++)
+                {
+                    int caller = k == 0 ? first : 1 - first;
+                    if (!(caller == 0 ? p0 : p1).CantaTruco(d, caller)) continue;
+                    int level = 1, lastCaller = caller;
+                    bool quiero;
+                    while (true)
+                    {
+                        int resp = 1 - lastCaller;
+                        int ans = (resp == 0 ? p0 : p1).RespondeTruco(d, resp, level);
+                        if (ans == 2 && level < DuelConfig.TrucoMaxLevel) { level++; lastCaller = resp; continue; }
+                        quiero = ans >= 1;
+                        break;
+                    }
+                    // OJO: ResolveTruco en variable propia — dentro de
+                    // st?.Truco(...) el null-condicional se saltea el
+                    // argumento y el truco NO SE RESUELVE cuando st es null
+                    // (todas las corridas 1v1). Costó una tarde de números.
+                    var tr = d.ResolveTruco(lastCaller, level, quiero);
+                    st?.Truco(tr);
+                    canto = true;
+                    break;
+                }
+            }
+            if (canto && st != null) st.TurnosConCanto++;
+            if (d.Over) break;   // el chip de un canto puede cerrar la partida
+
             int h0 = p0.Pick(d, 0), h1 = p1.Pick(d, 1);
             var r = d.Resolve(h0, h1);
             if (d.AwaitingChoice) (d.PendingSide == 0 ? p0 : p1).Choice(d);
@@ -160,7 +261,7 @@ class Program
             if (r.Card0 >= 0) p1.Observe(d.Def(0, r.Card0));
             st?.Turn(d, r, c0, c1);
         }
-        st?.Match(d);
+        st?.Match(d, envidoWinner);
         return d.Winner;
     }
 
@@ -182,8 +283,42 @@ class Program
         public long HandSum, HandSamples;
         public readonly long[,] Uses = new long[DuelCatalog.Chars.Length, DuelCatalog.CardsPerChar];
 
+        // ---- cantos ----
+        public long TurnosConCanto;
+        public long EnvCantados, EnvQueridos, EnvEmpates, EnvTantoSum, EnvChipTotal;
+        public long EnvGanadorGanaPartida, EnvConGanador;
+        public long TrucoCantados, TrucoQueridos, TrucoFolds, TrucoChipTotal, TrucoCobrados;
+        public readonly long[] TrucoNivel = new long[4];   // nivel aceptado 1..3
+        public long PostEnvGuardOk, PostEnvGuardMal;       // la siembra: guardias contra el ganador del envido
+
+        public void Envido(DuelEnvidoResult er)
+        {
+            EnvCantados++;
+            if (!er.Quiero) { EnvChipTotal += er.Chip; return; }
+            EnvQueridos++;
+            if (er.Winner < 0) { EnvEmpates++; return; }
+            EnvTantoSum += er.Winner == 0 ? er.Tanto0 : er.Tanto1;
+            EnvChipTotal += er.Chip;
+        }
+
+        public void Truco(DuelTrucoResult tr)
+        {
+            TrucoCantados++;
+            if (tr.Quiero) { TrucoQueridos++; TrucoNivel[tr.Level]++; }
+            else { TrucoFolds++; TrucoChipTotal += tr.Chip; }
+        }
+
         public void Turn(DuelSim d, DuelTurnResult r, int c0, int c1)
         {
+            if (r.Truco > 0) TrucoCobrados++;
+            // la siembra: ¿el que defiende CONTRA el ganador del envido
+            // acierta más la altura? (los derribos no cuentan: no adivinaron)
+            if (d.PublicTantoSide >= 0)
+            {
+                int reader = 1 - d.PublicTantoSide;
+                if (r.Guarded(reader)) PostEnvGuardOk++;
+                if (r.WrongGuard(reader) && !r.GuardWasDown(reader)) PostEnvGuardMal++;
+            }
             if (r.Card0 >= 0) Uses[c0, r.Card0]++; else Empty++;
             if (r.Card1 >= 0) Uses[c1, r.Card1]++; else Empty++;
             if (r.Guarded0) { GuardOk++; GuardOkSide[0]++; }
@@ -202,12 +337,17 @@ class Program
             HandSum += d.Hand[0].Count + d.Hand[1].Count; HandSamples += 2;
         }
 
-        public void Match(DuelSim d)
+        public void Match(DuelSim d, int envidoWinner = -1)
         {
             Matches++;
             Turns += d.Turn;
             if (d.Hp[0] <= 0 || d.Hp[1] <= 0) Kos++; else TimeOvers++;
             if (d.Winner < 0) Draws++;
+            if (envidoWinner >= 0)
+            {
+                EnvConGanador++;
+                if (d.Winner == envidoWinner) EnvGanadorGanaPartida++;
+            }
         }
     }
 
@@ -230,6 +370,11 @@ class Program
         Console.WriteLine($"turnos/partida: {(double)st.Turns / matches:0.0} · mano promedio {(double)st.HandSum / Math.Max(1, st.HandSamples):0.0}/{DuelConfig.HandLimit} · manos vacías {st.Empty}");
         Console.WriteLine($"guardias bien {st.GuardOk} · altura equivocada {st.GuardMal} ({100.0 * st.GuardOk / Math.Max(1, st.GuardOk + st.GuardMal):0}% acierto) · chips {st.Chips}");
         Console.WriteLine($"premio: +DAÑO {st.PrizeDmg} vs DERRIBO {st.PrizeKd} · derribos {st.Kds} · castigos {st.Punishes} · trades {st.Trades} · techs {st.Techs} · escapes {st.Escapes}");
+        Console.WriteLine($"cantos: {100.0 * st.TurnosConCanto / Math.Max(1, st.Turns):0.0}% de los turnos");
+        Console.WriteLine($"  envido: {st.EnvCantados} cantados ({100.0 * st.EnvCantados / Math.Max(1, matches):0}% de partidas) · queridos {st.EnvQueridos} · empates {st.EnvEmpates} · tanto ganador prom {(double)st.EnvTantoSum / Math.Max(1, st.EnvQueridos - st.EnvEmpates):0.0}");
+        Console.WriteLine($"  envido→partida: el ganador del envido gana el {100.0 * st.EnvGanadorGanaPartida / Math.Max(1, st.EnvConGanador):0.0}% de esas partidas [~50% = no la define]");
+        Console.WriteLine($"  siembra: acierto de guardia contra el CANTADO {100.0 * st.PostEnvGuardOk / Math.Max(1, st.PostEnvGuardOk + st.PostEnvGuardMal):0.0}% vs global {100.0 * st.GuardOk / Math.Max(1, st.GuardOk + st.GuardMal):0.0}%");
+        Console.WriteLine($"  truco: {st.TrucoCantados} cantados · queridos {st.TrucoQueridos} (×2 {st.TrucoNivel[1]} · ×3 {st.TrucoNivel[2]} · ×4 {st.TrucoNivel[3]}) · no quiero {st.TrucoFolds} · cobrados {st.TrucoCobrados}");
         Console.WriteLine("  winrate global por personaje (los dos lados juntos):");
         for (int a = 0; a < nc; a++)
         {
@@ -270,7 +415,11 @@ class Program
         double sinLectura = Duel1v1(matches, DuelBot.NoReads, DuelBot.Predictable);
         Console.WriteLine($"brecha de habilidad (heurística vs random): {gap * 100:0.0}%   [objetivo ≥75%]");
         Console.WriteLine($"contra un rival CON HÁBITO — leyendo: {conLectura * 100:0.0}% · sin leer: {sinLectura * 100:0.0}%");
-        Console.WriteLine($"valor de la información: +{(conLectura - sinLectura) * 100:0.0} pp   [0 = la info pública es decorativa]");
+        Console.WriteLine($"valor de la información: +{(conLectura - sinLectura) * 100:0.0} pp   [0 = la info pública es decorativa · objetivo >+5 con cantos]");
+        double vsNoCanta = Duel1v1(matches, DuelBot.Full, DuelBot.NoCantos);
+        double vsCantaRandom = Duel1v1(matches, DuelBot.Full, DuelBot.RandomCantos);
+        Console.WriteLine($"valor de los cantos: contra el que NO canta {vsNoCanta * 100:0.0}% · contra el que canta AL AZAR {vsCantaRandom * 100:0.0}%");
+        Console.WriteLine($"  [si ambos dan ~50%, el canto es moneda decorativa y se mata con datos]");
         Console.WriteLine($"(control: leyendo vs sin leer, ambos impredecibles: {espejo * 100:0.0}% — debe dar ~50%)");
         // Invariante: con reveal SIMULTÁNEO ningún lado tiene prioridad, así
         // que dos bots iguales sin alternar lados deben dar 50/50. Si no da,
@@ -311,6 +460,61 @@ class Program
             }
         DuelConfig.MaxHp = hp0;
         DuelConfig.GuardDraw = gd0;
+    }
+
+    // Barrido del dial del envido (DUELO.md §11): la intuición de Patricio
+    // es que 3 de chip es poco contra 46 de vida pero 10-15 define el
+    // combate. Las columnas que deciden: cuánto gana la partida el ganador
+    // del envido (¿la define?) y el valor de cantar bien.
+    static void RunDueloCantos(int matches)
+    {
+        int chip0 = DuelConfig.EnvidoChip;
+        Console.WriteLine($"=== DUELO: barrido del chip de envido ({matches} partidas por celda) ===");
+        Console.WriteLine("  chip | turnos   KO%   env→partida%   vsNoCanta   vsCantaRandom   info");
+        foreach (int chip in new[] { 3, 6, 10, 15 })
+        {
+            DuelConfig.EnvidoChip = chip;
+            var st = new DuelStats();
+            int nc = DuelCatalog.Chars.Length;
+            for (int m = 0; m < matches; m++)
+                PlayDuel(m + 1, (m / nc) % nc, m % nc, DuelBot.Full, DuelBot.Full, st);
+            double noCanta = Duel1v1(matches, DuelBot.Full, DuelBot.NoCantos);
+            double cantaRandom = Duel1v1(matches, DuelBot.Full, DuelBot.RandomCantos);
+            double con = Duel1v1(matches, DuelBot.Full, DuelBot.Predictable);
+            double sin = Duel1v1(matches, DuelBot.NoReads, DuelBot.Predictable);
+            Console.WriteLine($"  {chip,4} | {(double)st.Turns / matches,6:0.0} {100.0 * st.Kos / matches,5:0.0} " +
+                              $"{100.0 * st.EnvGanadorGanaPartida / Math.Max(1, st.EnvConGanador),13:0.0} " +
+                              $"{noCanta * 100,10:0.0} {cantaRandom * 100,14:0.0} {(con - sin) * 100,7:+0.0;-0.0}");
+        }
+        DuelConfig.EnvidoChip = chip0;
+
+        // Los diales del TRUCO: que el quiero multiplique también el premio
+        // (el intercambio ganado duele de verdad) y que el no quiero pague
+        // más caro (el peaje del cobarde). La pregunta: ¿alguna combinación
+        // hace que cantar BIEN gane partidas?
+        bool prize0 = DuelConfig.TrucoPrizeToo; int fold0 = DuelConfig.TrucoFoldBonus;
+        Console.WriteLine();
+        Console.WriteLine($"=== DUELO: diales del truco ({matches} partidas por celda) ===");
+        Console.WriteLine("  premioX  fold+ | turnos   KO%   vsNoCanta   vsCantaRandom   info   brecha");
+        foreach (bool prize in new[] { false, true })
+            foreach (int fold in new[] { 0, 2 })
+            {
+                DuelConfig.TrucoPrizeToo = prize;
+                DuelConfig.TrucoFoldBonus = fold;
+                var st = new DuelStats();
+                int nc = DuelCatalog.Chars.Length;
+                for (int m = 0; m < matches; m++)
+                    PlayDuel(m + 1, (m / nc) % nc, m % nc, DuelBot.Full, DuelBot.Full, st);
+                double noCanta = Duel1v1(matches, DuelBot.Full, DuelBot.NoCantos);
+                double cantaRandom = Duel1v1(matches, DuelBot.Full, DuelBot.RandomCantos);
+                double con = Duel1v1(matches, DuelBot.Full, DuelBot.Predictable);
+                double sin = Duel1v1(matches, DuelBot.NoReads, DuelBot.Predictable);
+                double gap = Duel1v1(matches, DuelBot.Full, DuelBot.Random);
+                Console.WriteLine($"  {(prize ? "sí" : "no"),7} {fold,6} | {(double)st.Turns / matches,6:0.0} {100.0 * st.Kos / matches,5:0.0} " +
+                                  $"{noCanta * 100,10:0.0} {cantaRandom * 100,14:0.0} {(con - sin) * 100,7:+0.0;-0.0} {gap * 100,8:0.0}");
+            }
+        DuelConfig.TrucoPrizeToo = prize0;
+        DuelConfig.TrucoFoldBonus = fold0;
     }
 
     static double Duel1v1(int matches, DuelBot a, DuelBot b, DuelStats[] porLado = null)

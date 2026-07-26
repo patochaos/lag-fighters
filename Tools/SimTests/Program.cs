@@ -136,6 +136,16 @@ class Tests
         DueloAgarreVsAgarreDesempataLaVelocidad();
         DueloAguanteComeElGolpeYAgarraIgual();
         DueloAguanteNoAplicaSinLaCarta();
+        DueloTantoEsElParDeLaMismaAltura();
+        DueloEnvidoQueridoCobraYPublicaElTanto();
+        DueloEnvidoNoQueridoPagaAlCantor();
+        DueloEnvidoVentanaSeCierraConLaSangre();
+        DueloEnvidoEmpateNoCobraNiPublica();
+        DueloTrucoQueridoMultiplicaElIntercambio();
+        DueloTrucoArmadoPersisteSinGanador();
+        DueloTrucoNoQueridoPagaChip();
+        DueloValeCuatroCuadruplica();
+        DueloElChipDeUnCantoPuedeCerrarLaPartida();
         if (SimConfig.LimbsEnabled)
         {
             TresJabsArrancanElBrazo();
@@ -1793,6 +1803,145 @@ class Tests
         Check(!r.Armor && r.Winner == 1 && d.Hp[1] == DuelConfig.MaxHp,
             "duelo: sin la carta de aguante, el golpe le gana al agarre como siempre",
             $"armor {r.Armor}, winner {r.Winner}");
+    }
+
+    // ---- LOS CANTOS (DUELO.md §11): envido y truco ----
+
+    static void DueloTantoEsElParDeLaMismaAltura()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackC, DuelCatalog.AttackD, DuelCatalog.AttackA); // altos 5+7, bajo 3
+        Mano(d, 1, DuelCatalog.AttackA, DuelCatalog.AttackB);                      // bajos 3+4
+        int t0 = d.Tanto(0), t1 = d.Tanto(1);
+        Mano(d, 0, DuelCatalog.AttackD);                                           // un solo golpe
+        Mano(d, 1, DuelCatalog.Throw, DuelCatalog.GuardHigh);                      // sin golpes (el agarre no cuenta)
+        Check(t0 == 12 && t1 == 7 && d.Tanto(0) == 7 && d.Tanto(1) == 0,
+            "duelo: el tanto son los dos golpes de la MISMA altura (el palo es la altura)",
+            $"par alto {t0}, par bajo {t1}, single {d.Tanto(0)}, sin golpes {d.Tanto(1)}");
+    }
+
+    static void DueloEnvidoQueridoCobraYPublicaElTanto()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackC, DuelCatalog.AttackD);   // tanto 12
+        Mano(d, 1, DuelCatalog.AttackA, DuelCatalog.AttackB);   // tanto 7
+        var er = d.ResolveEnvido(1, quiero: true);              // el 1 canta de bluff y pierde
+        Check(er.Winner == 0 && er.Chip == DuelConfig.EnvidoChip &&
+              d.Hp[1] == DuelConfig.MaxHp - DuelConfig.EnvidoChip && d.Hp[0] == DuelConfig.MaxHp &&
+              d.PublicTanto == 12 && d.PublicTantoSide == 0 && d.EnvidoUsed && !d.CanEnvido,
+            "duelo: envido querido — el tanto mayor cobra y queda CANTADO (público)",
+            $"winner {er.Winner}, hp1 {d.Hp[1]}, público {d.PublicTanto}/{d.PublicTantoSide}");
+    }
+
+    static void DueloEnvidoNoQueridoPagaAlCantor()
+    {
+        var d = NewDuelo();
+        var er = d.ResolveEnvido(0, quiero: false);
+        Check(er.Winner == -1 && er.Chip == DuelConfig.EnvidoFoldChip &&
+              d.Hp[1] == DuelConfig.MaxHp - DuelConfig.EnvidoFoldChip &&
+              d.PublicTanto == -1 && d.EnvidoUsed,
+            "duelo: envido NO querido — el cantor cobra chico y nadie muestra nada",
+            $"hp1 {d.Hp[1]}, público {d.PublicTanto}");
+    }
+
+    static void DueloEnvidoVentanaSeCierraConLaSangre()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackC);      // ALTO
+        Mano(d, 1, DuelCatalog.GuardLow);     // guardia equivocada: sangre
+        d.Resolve(0, 0);
+        d.ChoosePrize(DuelPrize.Knockdown);
+        int hp0 = d.Hp[0], hp1 = d.Hp[1];
+        var er = d.ResolveEnvido(0, quiero: true);
+        Check(d.FirstBlood && !d.CanEnvido && er.Chip == 0 && er.Winner == -1 &&
+              d.Hp[0] == hp0 && d.Hp[1] == hp1,
+            "duelo: la primera sangre cierra la ventana del envido",
+            $"blood {d.FirstBlood}, canEnvido {d.CanEnvido}");
+    }
+
+    static void DueloEnvidoEmpateNoCobraNiPublica()
+    {
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackA, DuelCatalog.AttackB);   // 7
+        Mano(d, 1, DuelCatalog.AttackA, DuelCatalog.AttackB);   // 7
+        var er = d.ResolveEnvido(0, quiero: true);
+        Check(er.Winner == -1 && er.Tanto0 == 7 && er.Tanto1 == 7 && er.Chip == 0 &&
+              d.Hp[0] == DuelConfig.MaxHp && d.Hp[1] == DuelConfig.MaxHp &&
+              d.PublicTanto == -1 && d.EnvidoUsed,
+            "duelo: envido empatado — nadie cobra, nada se publica, el canto se gastó",
+            $"tantos {er.Tanto0}/{er.Tanto1}");
+    }
+
+    static void DueloTrucoQueridoMultiplicaElIntercambio()
+    {
+        var d = NewDuelo();
+        var tr = d.ResolveTruco(0, level: 1, quiero: true);
+        Mano(d, 0, DuelCatalog.AttackC, DuelCatalog.AttackA);   // C conecta, A es el combustible
+        Mano(d, 1, DuelCatalog.GuardLow);                       // guardia equivocada
+        var r = d.Resolve(0, 0);
+        d.ChoosePrize(DuelPrize.Damage, 0);                     // quema el A: premio a valor NORMAL
+        Check(tr.Quiero && r.Truco == 1 && d.TrucoLevel == 0 &&
+              d.Hp[1] == DuelConfig.MaxHp - 5 * 2 - 3 && r.PrizeDamage == 3,
+            "duelo: truco querido — el golpe que gana cobra ×2 (el premio, normal) y se consume",
+            $"hp1 {d.Hp[1]}, truco {r.Truco}, premio {r.PrizeDamage}");
+    }
+
+    static void DueloTrucoArmadoPersisteSinGanador()
+    {
+        var d = NewDuelo();
+        d.ResolveTruco(1, level: 1, quiero: true);
+        Mano(d, 0, DuelCatalog.GuardHigh);
+        Mano(d, 1, DuelCatalog.GuardHigh);
+        var r1 = d.Resolve(0, 0);                               // guardia vs guardia: nada
+        bool armadoTrasNada = d.TrucoLevel == 1 && r1.Truco == 0;
+        Mano(d, 0, DuelCatalog.AttackA);
+        Mano(d, 1, DuelCatalog.AttackA);
+        var r2 = d.Resolve(0, 0);                               // trade: tampoco hay ganador
+        bool armadoTrasTrade = d.TrucoLevel == 1 && r2.Truco == 0 &&
+                               r2.Dmg0 == 3 && r2.Dmg1 == 3;    // el trade NO multiplica
+        Mano(d, 0, DuelCatalog.AttackB);                        // BAJO
+        Mano(d, 1, DuelCatalog.GuardHigh);                      // guardia equivocada: ahora sí hay ganador
+        var r3 = d.Resolve(0, 0);
+        d.ChoosePrize(DuelPrize.Knockdown);
+        Check(armadoTrasNada && armadoTrasTrade && r3.Truco == 1 && d.TrucoLevel == 0 &&
+              r3.Dmg1 == 4 * 2,
+            "duelo: el truco armado PERSISTE hasta que alguien gane un intercambio",
+            $"nada {armadoTrasNada}, trade {armadoTrasTrade}, cobro {r3.Dmg1}");
+    }
+
+    static void DueloTrucoNoQueridoPagaChip()
+    {
+        var d = NewDuelo();
+        var tr = d.ResolveTruco(1, level: 1, quiero: false);    // P1 cantó, P0 no quiso
+        var d2 = NewDuelo();
+        var tr2 = d2.ResolveTruco(0, level: 2, quiero: false);  // retruco rechazado
+        Check(tr.Chip == 2 && d.Hp[0] == DuelConfig.MaxHp - 2 && d.TrucoLevel == 0 &&
+              tr2.Chip == 3 && d2.Hp[1] == DuelConfig.MaxHp - 3,
+            "duelo: el NO QUIERO siempre paga — truco 2, retruco 3 (anti cheap-talk)",
+            $"chips {tr.Chip}/{tr2.Chip}");
+    }
+
+    static void DueloValeCuatroCuadruplica()
+    {
+        var d = NewDuelo();
+        d.ResolveTruco(0, level: 3, quiero: true);
+        Mano(d, 0, DuelCatalog.AttackD);                        // 7 de daño, ALTO
+        Mano(d, 1, DuelCatalog.GuardLow);
+        var r = d.Resolve(0, 0);
+        d.ChoosePrize(DuelPrize.Knockdown);
+        Check(r.Truco == 3 && d.Hp[1] == DuelConfig.MaxHp - 7 * 4,
+            "duelo: VALE CUATRO — el intercambio ganado cobra ×4",
+            $"hp1 {d.Hp[1]} (esperado {DuelConfig.MaxHp - 28})");
+    }
+
+    static void DueloElChipDeUnCantoPuedeCerrarLaPartida()
+    {
+        var d = NewDuelo();
+        d.Hp[1] = 2;
+        d.ResolveTruco(0, level: 1, quiero: false);             // rechazar con 2 de vida ES la derrota
+        Check(d.Over && d.Winner == 0 && d.Hp[1] == 0,
+            "duelo: rechazar un canto con la vida justa cierra la partida",
+            $"over {d.Over}, winner {d.Winner}");
     }
 
     static void DueloMismaSeedMismaPartida()

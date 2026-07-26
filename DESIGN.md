@@ -537,6 +537,20 @@ roba 2 y la guardia vuelve a la mano · robás 1 por turno, mano 8, remezcla
   se iba a 65.8% en el lab; ahora Grave 49.8 · Jaina 48.1 · Golem 52.1.
 - **Falta**: verificación EN VIVO en el editor (no estaba abierto) y el
   onboarding guionado. Ver DUELO.md §10.
+- **LOS CANTOS — envido y truco** (spec 2026-07-25 noche, sesión de diseño
+  — **sim y lab HECHOS**, falta la UI): la capa de apuestas del truco sobre el core.
+  Una gramática (cantar/quiero/no quiero/subir) y dos cantos: **ENVIDO**
+  (solo hasta la primera sangre; tanto = tus dos golpes de la misma altura
+  — el palo ES la altura; ganar cobra 3 de chip pero tu tanto se hace
+  público y siembra la lectura de alturas) y **TRUCO** (el intercambio vale
+  ×2, escalable a retruco ×3 y vale cuatro ×4; el no quiero siempre paga).
+  Ataca el valor de la información flaco (+1.9 pp): la lectura no cambia
+  qué jugás, cambia CUÁNDO y CUÁNTO apostás. Conceptos 8-10 de 10 — tope
+  de la Ley 14 tocado. Primera pasada del lab: cantar PAGA (53.2% vs el
+  que no canta), el chip de envido quedó en 6 (pesa sin definir: 58.8%
+  env→partida), la siembra del tanto mejora el acierto de guardia +1.8 pp,
+  y el timing del canto aún no es habilidad (pendiente: respondedor
+  adaptativo en la IA). Diales, métricas y descartes en DUELO.md §11.
 
 ## Historial de pivots
 

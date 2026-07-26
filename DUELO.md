@@ -216,6 +216,9 @@ y [YomiSim.cs](Assets/Scripts/LagFighter/YomiSim.cs)):
 1. ~~`DuelSim.cs` + tests~~ **HECHO** (2026-07-25): 974→ `DuelSim.cs`, 27
    tests nuevos (146 en total, `pwsh Tools/verify.ps1` en verde).
 2. ~~Lab + métricas~~ **HECHO**: `duelo N`, `duelogap N`, `duelotune N`.
+2b. ~~LOS CANTOS en sim + lab~~ **HECHO** (2026-07-25 noche, ver §11):
+   `duelocantos N` para los diales. Falta la UI del canto (y el
+   respondedor adaptativo de la IA).
 3. UI: reuso de `CardHandUI` + botón binario + HUD (vida, mano, mazo,
    descarte público de ambos, derribo).
 4. Teatro y presentación (reveal de las dos cartas + el fallo cantado).
@@ -338,3 +341,147 @@ El editor de Unity no estaba abierto en esta sesión, así que **la UI está
 compile-checked y con los tests verdes, pero NO vista en vivo**. Falta la
 pasada de layout real (que los paneles no se pisen con el HUD clásico, los
 tamaños de fuente y el ritmo del teatro).
+
+## 11. LOS CANTOS — envido y truco (spec 2026-07-25, noche — pendiente de sim y lab)
+
+Sesión de diseño con Patricio sobre el hallazgo pendiente del §9: el valor
+de la información es positivo pero chico (+1.9 pp), porque leer bien no
+cambia lo que jugás (la respuesta sigue siendo un 50/50 de altura). Las dos
+fantasías que el juego tiene que servir, en sus palabras: **la lectura dura**
+("sabía exactamente qué ibas a hacer") y **el bluff cantado** ("te hice
+creer una cosa e hice otra en tu cara"). Referencias elegidas: el truco, el
+snap de Marvel Snap, Cosmic Encounter (poderes alien + reveal boca abajo),
+los fighting reales.
+
+> Evolución dentro de la misma sesión: la primera versión de este § era
+> **EL DOBLO** solo (snap sin contenido). Patricio trajo su idea original
+> — el envido como fase de información y el truco con su escalada — y el
+> doblo quedó absorbido como el canto de TRUCO. La identidad completa:
+> **el fighting del truco**. El experimento truco-fighter archivado murió
+> porque el truco era el CORE y la fuerza quedaba plana (anti-patrón 5);
+> acá es al revés — el core es el triángulo con alturas que ya midió 77.5%
+> de brecha, y el truco entra como capa de apuestas ENCIMA.
+
+### La gramática (un concepto, dos cantos)
+
+Todo canto es **público, al empezar a planificar, antes de que nadie elija
+carta**, y el rival responde antes de seguir: **QUIERO** (se juega lo
+apostado) · **NO QUIERO** (concedés: el cantor cobra chico sin jugarse
+nada) · **SUBIR** (escalás la apuesta, y la pregunta vuelve). El canto
+rechazado SIEMPRE cobra — anti-patrón 6 (cheap talk) resuelto de raíz,
+igual que en el truco de verdad.
+
+### ENVIDO — la apuesta de INFORMACIÓN
+
+- **Ventana**: solo mientras **nadie cobró daño** (la fase de estudio — el
+  "neutral" del fighting, que es el rol que el envido tiene en el truco:
+  antes de la primera carta). Primera sangre = ventana cerrada. Una vez
+  por partida.
+- **El tanto**: la suma de daño de **tus dos golpes de la MISMA altura**
+  (el palo ES la altura). Con un solo golpe, ese daño; sin golpes, 0.
+- **QUIERO** → se comparan los tantos en secreto y el juego anuncia:
+  el ganador cobra **3 de chip** y su tanto se hace PÚBLICO (número
+  verificado por el juego, no declarable en falso); del perdedor solo se
+  sabe que es menor — "son buenas": confesó un techo, no su mano.
+- **NO QUIERO** → el cantor cobra 1 de chip, nadie muestra nada.
+- **Por qué es LA pieza**: el pozo es asimétrico en dos monedas — el
+  ganador cobra vida pero PAGA EN INFORMACIÓN. Y por la correlación
+  rápido=BAJO/lento=ALTO del mazo, un tanto de 12 grita "tiene los ALTOS
+  pesados" y uno de 7 dice "anda con los bajitos": **la declaración
+  siembra la lectura de alturas de toda la partida**. El envido fabrica
+  la materia de lectura (Ley 5) que al +1.9 pp le faltaba, voluntariamente
+  y con precio.
+- **Subidas** (REAL ENVIDO / FALTA): anotadas, NO en v0.
+
+### TRUCO — la apuesta de SANGRE (el ex-DOBLO, ahora con respuesta)
+
+- Cualquier turno, en la planificación: **TRUCO** → el próximo intercambio
+  ganado vale **×2** (daño y premio para quien lo gane, sea quien sea —
+  el riesgo es simétrico: la apuesta es tu confianza en tu lectura).
+- Respuesta: QUIERO · NO QUIERO (el cantor cobra 2 de chip y el turno se
+  juega normal) · **RETRUCO** (×3) → QUIERO · NO QUIERO (cobra 3) ·
+  **VALE CUATRO** (×4) → QUIERO · NO QUIERO (cobra 4).
+- El multiplicador queda **ARMADO hasta que alguien gane un intercambio**
+  (guardia vs guardia o trade no lo disipan: la apuesta queda en el aire,
+  como el truco pendiente de la última carta). *Dial: si la persistencia
+  degenera, la alternativa es que valga solo ese turno.*
+- **Por qué ataca el +1.9 pp**: la lectura no puede cambiar QUÉ jugás
+  (techo medido) — el truco hace que cambie **cuánto vale el turno donde
+  tenés razón**. Es un multiplicador sobre la calidad de lectura: cantás
+  cuando LE QUEDAN y los hábitos dicen que este intercambio es tuyo. La
+  habilidad del snap: no la carta, el CUÁNDO. Y siendo público, miente —
+  cantar con mano mala para comprar respeto es el bluff cantado.
+
+### Presupuesto Ley 14
+
+Gramática de cantos (1) + envido (1) + truco (1) = **conceptos 8, 9 y 10
+de 10**. El tope queda TOCADO: no entra nada más al sistema sin sacar
+algo. Cero keywords nuevas en cartas, la tabla no se toca.
+
+### Cómo se mide
+
+- **Valor de cada canto** = IA que canta informada (tanto propio, LE
+  QUEDAN, hábitos) vs la misma IA cantando al azar con igual frecuencia
+  vs IA que nunca canta. Si informada ≈ azar, ese canto es moneda y se
+  mata con datos.
+- **La siembra del envido**: % de acierto de altura al defender POST
+  envido querido vs partidas sin envido. Si no sube, el tanto no está
+  filtrando lo que creemos.
+- **Objetivo global**: el valor de la información del §6 sube de +1.9 pp
+  a **>+5 pp** con los cantos en juego. Ese número justifica las 3 reglas.
+- **Vigilar**: (a) bola de nieve — el envido paga vida al que ya ganó el
+  sorteo de mano; el contrapeso es que queda cantado (la info filtrada es
+  el impuesto al ganador). Si no alcanza, el dial de respaldo es premio
+  económico (robar 2) en vez de chip. (b) TRUCO sobre rival derribado =
+  oki doblado, puede ser demasiado gratis. (c) % de turnos con canto
+  ≤ ~25% — si se canta siempre, no es un momento. (d) Que el flujo
+  canto→respuesta no duela en el ritmo del turno (UI) ni en el protocolo
+  online (agrega un sub-round-trip al lockstep).
+- **Ley 11 / Cosmic Encounter**: personajes futuros re-pesan los cantos
+  con una carta firma (el Apostador, el Mentiroso). Anotado, no ahora.
+
+### Lo que dijo el lab (2026-07-25, noche — primera pasada de cantos)
+
+**IMPLEMENTADO** en `DuelSim.cs` (sim pura: `Tanto`, `ResolveEnvido`,
+`ResolveTruco`, multiplicador armado en `Land`) + 10 tests (170 en total) +
+heurísticas en `SimpleAI` + negociación y métricas en el harness. Comandos:
+`duelo N` (bloque de cantos en el reporte) y `duelocantos N` (barrido de
+diales). **La UI del canto NO existe todavía** — contra humano aún no se
+canta; es el próximo bloque.
+
+Números con los defaults elegidos (envido 6 · fold sin bonus · premio
+normal, 8000 partidas): KO 100% · 12.2 turnos · **cantos en el 21.8% de los
+turnos** (bajo el techo del 25%) · personajes siguen parejos (±1) ·
+brecha 78.6%.
+
+- **Cantar PAGA**: la IA que canta le gana **53.2%** (con fold+2: 56.6%) a
+  la misma IA que nunca canta. La agresión del canto es +EV por sí misma —
+  muy truco — porque el que foldea correctamente igual sangra chips.
+- **El chip del envido, calibrado** (la intuición de Patricio era exacta:
+  "3 es poco, 15 define demasiado"): con 3 el ganador del envido gana el
+  54% de las partidas (no pesa), con 15 el **75.6%** (la define). Quedó
+  **6** → 58.8%: pesa sin definir.
+- **La siembra funciona, chiquita**: acierto de guardia contra el CANTADO
+  48.6% vs 46.8% global (+1.8 pp). El tanto público filtra de verdad.
+- **Lo que FALTA — el timing del canto aún no es habilidad**: cantar
+  informado empata (~50%) con cantar al azar a la misma frecuencia. Causa
+  raíz medida: la respuesta del rival (foldear débil, aceptar fuerte) es
+  correcta mire lo que mire, y el intercambio sigue siendo ~50/50 de
+  altura, así que "cantar cuando estoy confiado" apenas predice. **PERO**:
+  el respondedor de la IA no explota al spammer (no traquea la frecuencia
+  de cantos del rival). Contra humanos el spam SE LEE y se castiga
+  aceptando más. Próxima iteración de IA: respondedor adaptativo que
+  traquea el hábito de canto rival — recién ahí sabremos si el timing
+  puede ser skill o si hace falta un dial de diseño.
+- **Descartado con datos**: multiplicar también el premio (`TrucoPrizeToo`)
+  solo agrega varianza — la brecha de habilidad baja de 78.5 a 77.1 y no
+  mejora nada. El `TrucoFoldBonus` (+2: no quiero paga 4/5/6) premia más
+  al cantor (56.6%) sin volverlo más hábil: queda en 0, anotado como dial
+  si el canto se siente débil contra humanos.
+- **La escalada casi no aparece** entre IAs (×3: 38 veces en 8000, ×4: 3).
+  El RETRUCO necesita al respondedor adaptativo (o humanos) para vivir.
+- **Trampa de método** (para la colección del §9): el primer barrido dio
+  números idénticos en las 4 celdas — `st?.Truco(d.ResolveTruco(...))`
+  con `st` null **se saltea el argumento** (null-condicional), así que el
+  truco no se resolvía en NINGUNA corrida 1v1. Media sesión de conclusiones
+  sobre datos con el truco apagado. Resultado en variable propia, siempre.

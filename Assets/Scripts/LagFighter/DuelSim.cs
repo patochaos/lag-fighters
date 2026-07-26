@@ -167,6 +167,13 @@ namespace LagFighter
         public static int OpeningRandom = 2; // + guardia alta, baja, agarre y escape garantizados
         public static int GuardDraw = 2;     // cartas que roba el que defiende BIEN (Ley 2: la defensa paga en economía)
         public static int HardTurnCap = 40;  // red de seguridad; el mazo suele cerrar antes
+
+        // ---- LOS CANTOS (DUELO.md §11) ----
+        public static int EnvidoChip = 6;     // lo que cobra el ganador del envido querido (barrido 2026-07-25: 3 no pesa, 15 define el 75% de las partidas)
+        public static int EnvidoFoldChip = 1; // el "no quiero" al envido paga al cantor
+        public static int TrucoMaxLevel = 3;  // 1=TRUCO ×2 · 2=RETRUCO ×3 · 3=VALE CUATRO ×4
+        public static bool TrucoPrizeToo = false; // dial: el quiero multiplica también el premio +DAÑO
+        public static int TrucoFoldBonus = 0;     // dial: chip extra del no quiero (el peaje del cobarde)
     }
 
     // Todo lo que pasó en un turno, para el teatro, el log y los tests.
@@ -191,6 +198,7 @@ namespace LagFighter
         public int PrizeDamage;              // daño extra cobrado por +DAÑO
         public int PunishSide = -1, PunishCard = -1;
         public int PunishDamage;
+        public int Truco;                    // nivel de truco COBRADO este turno (0 = no había o no se cobró)
         public bool KdNext0, KdNext1;
         public bool Returned0, Returned1;    // la guardia volvió a la mano
         public int Drew0, Drew1;
@@ -208,6 +216,27 @@ namespace LagFighter
         public int Drew(int i) => i == 0 ? Drew0 : Drew1;
     }
 
+    // ---- LOS CANTOS (DUELO.md §11): la capa de apuestas del truco ----
+    // La negociación (quién canta, quién sube, quién acepta) vive AFUERA de
+    // la sim (IA/UI/protocolo); la sim valida y aplica el RESULTADO.
+
+    public struct DuelEnvidoResult
+    {
+        public int Cantor;
+        public bool Quiero;
+        public int Winner;          // -1 = no quiero o empate
+        public int Tanto0, Tanto1;  // -1 = no se compararon (no quiero)
+        public int Chip;            // daño cobrado (por ganar o por el fold)
+    }
+
+    public struct DuelTrucoResult
+    {
+        public int Caller;          // quién cantó el ÚLTIMO nivel
+        public int Level;           // 1..3 (×2/×3/×4)
+        public bool Quiero;
+        public int Chip;            // lo que cobró el caller si no quisieron
+    }
+
     public class DuelSim
     {
         public readonly DuelChar[] Chr = new DuelChar[2];
@@ -223,6 +252,18 @@ namespace LagFighter
         public bool Over;
         public int Winner = -1;
 
+        // ---- los cantos ----
+        public bool EnvidoUsed;              // una vez por partida
+        public bool FirstBlood;              // cualquier daño cierra la ventana del envido
+        public int PublicTanto = -1;         // el tanto del ganador del envido: PÚBLICO (siembra la lectura)
+        public int PublicTantoSide = -1;
+        public int TrucoLevel;               // multiplicador ARMADO hasta que alguien gane un intercambio (0 = nada)
+        public int TrucoCaller = -1;
+
+        public bool CanEnvido => !Over && !EnvidoUsed && !FirstBlood;
+        public bool CanTruco => !Over && TrucoLevel == 0;
+        public static int TrucoMult(int level) => level + 1;   // 1→×2 · 2→×3 · 3→×4
+
         // ---- decisión pendiente (premio del ganador o castigo del defensor) ----
         public int PendingSide = -1;
         public bool PendingIsPunish;
@@ -235,6 +276,7 @@ namespace LagFighter
         readonly uint[] _rng = new uint[2];
         DuelTurnResult _r = new DuelTurnResult();
         int _victim = -1;
+        int _prizeMult = 1;   // el multiplicador del truco cobrado, por si el premio también dobla
         bool _finished;
         public DuelTurnResult LastResult => _r;
 
@@ -302,6 +344,94 @@ namespace LagFighter
 
         void SortHands() { Hand[0].Sort(); Hand[1].Sort(); }
 
+        // ---- los cantos (DUELO.md §11) ----
+
+        // El TANTO: tus dos golpes de la MISMA altura suman su daño (el palo
+        // ES la altura). Con un solo golpe, ese daño; sin golpes, 0. Por la
+        // correlación rápido=BAJO/lento=ALTO, un tanto pesado FILTRA que la
+        // mano tiene los ALTOS — la declaración siembra la lectura.
+        public int Tanto(int side)
+        {
+            int bestPair = 0, bestSingle = 0;
+            for (int h = 0; h < 2; h++)
+            {
+                int a = 0, b = 0;
+                foreach (int c in Hand[side])
+                {
+                    var d = Def(side, c);
+                    if (d.Kind != DuelKind.Strike || (int)d.Height != h) continue;
+                    if (d.Damage >= a) { b = a; a = d.Damage; }
+                    else if (d.Damage > b) b = d.Damage;
+                    if (d.Damage > bestSingle) bestSingle = d.Damage;
+                }
+                if (b > 0 && a + b > bestPair) bestPair = a + b;
+            }
+            return bestPair > 0 ? bestPair : bestSingle;
+        }
+
+        // ENVIDO (apuesta de INFORMACIÓN, solo hasta la primera sangre, una
+        // por partida). Querido: gana el tanto mayor, cobra EnvidoChip y su
+        // tanto se hace público; del perdedor solo se sabe que es menor
+        // ("son buenas"). No querido: el cantor cobra EnvidoFoldChip y nadie
+        // muestra nada. Empate: nadie cobra, nada se publica.
+        public DuelEnvidoResult ResolveEnvido(int cantor, bool quiero)
+        {
+            var er = new DuelEnvidoResult { Cantor = cantor, Quiero = quiero, Winner = -1, Tanto0 = -1, Tanto1 = -1 };
+            if (!CanEnvido || cantor < 0 || cantor > 1) return er;
+            EnvidoUsed = true;
+            if (!quiero)
+            {
+                er.Chip = DuelConfig.EnvidoFoldChip;
+                DirectDamage(1 - cantor, er.Chip);
+                return er;
+            }
+            er.Tanto0 = Tanto(0); er.Tanto1 = Tanto(1);
+            int w = er.Tanto0 > er.Tanto1 ? 0 : er.Tanto1 > er.Tanto0 ? 1 : -1;
+            er.Winner = w;
+            if (w >= 0)
+            {
+                PublicTanto = w == 0 ? er.Tanto0 : er.Tanto1;
+                PublicTantoSide = w;
+                er.Chip = DuelConfig.EnvidoChip;
+                DirectDamage(1 - w, er.Chip);
+            }
+            return er;
+        }
+
+        // TRUCO (apuesta de SANGRE). level = nivel ALCANZADO en la
+        // negociación (1..3), lastCaller = quién cantó ese último nivel.
+        // Querido: el multiplicador queda ARMADO hasta que alguien gane un
+        // intercambio (guardia-guardia o trade no lo disipan). No querido:
+        // el caller cobra nivel+1 de chip y no se arma nada.
+        public DuelTrucoResult ResolveTruco(int lastCaller, int level, bool quiero)
+        {
+            var tr = new DuelTrucoResult { Caller = lastCaller, Level = level, Quiero = quiero };
+            if (!CanTruco || lastCaller < 0 || lastCaller > 1 || level < 1) return tr;
+            if (level > DuelConfig.TrucoMaxLevel) level = DuelConfig.TrucoMaxLevel;
+            tr.Level = level;
+            if (quiero)
+            {
+                TrucoLevel = level;
+                TrucoCaller = lastCaller;
+            }
+            else
+            {
+                tr.Chip = level + 1 + DuelConfig.TrucoFoldBonus;   // TRUCO no querido 2 · RETRUCO 3 · VALE CUATRO 4
+                DirectDamage(1 - lastCaller, tr.Chip);
+            }
+            return tr;
+        }
+
+        // Daño fuera del intercambio (chips de cantos). Puede cerrar la
+        // partida: rechazar un vale cuatro con 3 de vida ES la derrota.
+        void DirectDamage(int side, int dmg)
+        {
+            if (dmg <= 0) return;
+            Hp[side] = Math.Max(0, Hp[side] - dmg);
+            FirstBlood = true;
+            if (Hp[side] <= 0 && !Over) { Over = true; Winner = 1 - side; }
+        }
+
         // ---- turno ----
 
         public void StartTurn()
@@ -324,6 +454,7 @@ namespace LagFighter
         {
             _r = new DuelTurnResult();
             _victim = -1;
+            _prizeMult = 1;
             PendingSide = -1; PendingIsPunish = false;
             _finished = false;
             if (Over) { _r.TimeOver = true; return _r; }
@@ -450,7 +581,19 @@ namespace LagFighter
         {
             var d = Def(side, card);
             int victim = 1 - side;
-            Damage(victim, d.Damage, chip: false);
+            // el truco armado se COBRA acá: multiplica el golpe que ganó el
+            // intercambio, sea de quien sea (el riesgo del canto es simétrico).
+            // Solo el golpe: el premio va a valor normal (dial anotado en §11).
+            int mult = 1;
+            if (TrucoLevel > 0)
+            {
+                mult = TrucoMult(TrucoLevel);
+                _r.Truco = TrucoLevel;
+                if (DuelConfig.TrucoPrizeToo) _prizeMult = mult;
+                TrucoLevel = 0;
+                TrucoCaller = -1;
+            }
+            Damage(victim, d.Damage * mult, chip: false);
             _r.Winner = side;
             _victim = victim;
             if (d.FreeKnockdown) SetKd(victim);
@@ -500,9 +643,9 @@ namespace LagFighter
                 if (!d.IsAttack) return false;
                 Hand[side].RemoveAt(handIdx);
                 Discard[side].Add(card);
-                Damage(_victim, d.Damage, chip: false);
+                Damage(_victim, d.Damage * _prizeMult, chip: false);
                 _r.PrizeCard = card;
-                _r.PrizeDamage = d.Damage;
+                _r.PrizeDamage = d.Damage * _prizeMult;
             }
             else
             {
@@ -580,6 +723,7 @@ namespace LagFighter
 
             Hp[0] = Math.Max(0, Hp[0] - _r.Dmg0);
             Hp[1] = Math.Max(0, Hp[1] - _r.Dmg1);
+            if (_r.Dmg0 + _r.Dmg1 > 0) FirstBlood = true;   // cierra la ventana del envido
 
             SortHands();
             if (Hp[0] <= 0 || Hp[1] <= 0)

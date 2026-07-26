@@ -620,6 +620,15 @@ namespace LagFighter
             {
                 if (gHigh < 0) return gLow;
                 if (gLow < 0) return gHigh;
+                // LA SIEMBRA DEL ENVIDO (Ley 5): el tanto público del ganador
+                // filtra su mano — pesado = tiene los ALTOS, liviano = anda
+                // con los bajitos. Es una lectura, no una certeza (la K de
+                // Jaina hace 10 siendo baja), y envejece a medida que gasta.
+                if (ReadsHabits && s.PublicTantoSide == opp)
+                {
+                    if (s.PublicTanto >= 10 && _rng.NextDouble() < 0.65) return gHigh;
+                    if (s.PublicTanto <= 7 && s.PublicTanto > 0 && _rng.NextDouble() < 0.65) return gLow;
+                }
                 int skew = HeightSkew();
                 if (skew > 0) return gHigh;
                 if (skew < 0) return gLow;
@@ -766,6 +775,77 @@ namespace LagFighter
                 if (d.Damage > bestDmg) { bestDmg = d.Damage; best = i; }
             }
             return best;
+        }
+
+        // ---- LOS CANTOS (DUELO.md §11) ----
+        // El envido se juega con el tanto PROPIO (mirar tu mano no es
+        // lectura); el truco sí es lectura pura: se canta cuando lo público
+        // dice que el próximo intercambio es nuestro.
+
+        public bool CantaEnvido(DuelSim s, int me)
+        {
+            if (!s.CanEnvido) return false;
+            int t = s.Tanto(me);
+            if (t >= 10) return true;                          // el par pesado canta por valor
+            return t >= 7 && _rng.NextDouble() < 0.15;         // el bluff barato, de vez en cuando
+        }
+
+        public bool QuiereEnvido(DuelSim s, int me)
+            => s.Tanto(me) >= 8 || _rng.NextDouble() < 0.20;
+
+        // La confianza en ganar el próximo intercambio, de lo PÚBLICO:
+        // derribo (su guardia no bloquea), guardias agotadas en el descarte,
+        // mano corta. Regla aprendida en la primera pasada del lab: cantar
+        // el HUECO sin tener la CARTA que lo castiga es cantar por cantar —
+        // cada señal solo suma si mi mano puede cobrarla. Las partes de
+        // lectura se apagan con ReadsHabits para que el lab pueda medir
+        // cuánto vale cantar INFORMADO.
+        int TrucoScore(DuelSim s, int me)
+        {
+            int opp = 1 - me;
+            bool fast = false, alto = false, bajo = false;
+            foreach (int c in s.Hand[me])
+            {
+                var d = s.Def(me, c);
+                if (d.Kind != DuelKind.Strike) continue;
+                if (d.Speed >= 8) fast = true;
+                if (d.Height == DuelHeight.High) alto = true; else bajo = true;
+            }
+            int score = 0;
+            // el casi-lock: derribado no bloquea, y mi golpe rápido gana la
+            // carrera contra casi todo lo que puede jugar desde el piso
+            if (s.KnockedDown[opp]) score += fast ? 3 : 2;
+            if (s.KnockedDown[me]) score -= 2;                 // desde el piso no se canta
+            if (ReadsHabits)
+            {
+                int cupo = s.Chr[opp].DeckCounts[DuelCatalog.GuardHigh];
+                bool sinAlta = GuardiasEnDescarte(s, opp, DuelCatalog.GuardHigh) >= cupo;
+                bool sinBaja = GuardiasEnDescarte(s, opp, DuelCatalog.GuardLow) >= cupo;
+                if (sinAlta && sinBaja && (alto || bajo)) score += 2;
+                else if ((sinAlta && alto) || (sinBaja && bajo)) score += 2;
+                if (s.Hand[opp].Count <= 2) score += 1;
+            }
+            if (fast) score += 1;
+            return score;
+        }
+
+        public bool CantaTruco(DuelSim s, int me)
+        {
+            if (!s.CanTruco) return false;
+            int score = TrucoScore(s, me);
+            if (score >= 3) return true;
+            if (score == 2 && _rng.NextDouble() < 0.30) return true;
+            return _rng.NextDouble() < 0.02;                   // el canto con nada, para que exista
+        }
+
+        // 0 = no quiero · 1 = quiero · 2 = subir. Foldear cuesta chip seguro,
+        // así que solo se rechaza estando realmente débil.
+        public int RespondeTruco(DuelSim s, int me, int level)
+        {
+            int score = TrucoScore(s, me);
+            if (score >= 3 && level < DuelConfig.TrucoMaxLevel && _rng.NextDouble() < 0.50) return 2;
+            if (score <= 0 && _rng.NextDouble() < 0.55) return 0;
+            return 1;
         }
 
         int PickUnfocused(float dist)
