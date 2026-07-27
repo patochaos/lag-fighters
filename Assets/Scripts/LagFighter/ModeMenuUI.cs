@@ -14,13 +14,18 @@ namespace LagFighter
         // DUELO (2026-07-25) es EL juego: primera tarjeta, seleccionada por
         // defecto. El resto queda detrás como modos EXPERTO.
         const int DueloIdx = 0;
-        const int QuickAIIdx = 2;
+        // DUELO LIMPIO (2026-07-26): el mismo juego SIN los poderes de la
+        // Salamanca — accesible directo del menú (pedido de Patricio). En
+        // online manda el más limpio: si cualquiera entró por acá, sin poderes.
+        const int DueloLimpioIdx = 1;
+        const int QuickAIIdx = 3;
         // CARTAS (2026-07-21): la copia de Yomi 2 — mazo, mano y combate por
         // tabla contra la IA. Usa GameMode.VsAI + el flag cards de StartMatch.
-        const int CardsIdx = 3;
+        const int CardsIdx = 4;
         static readonly (string label, string desc, GameMode mode)[] Modes =
         {
             ("JUGAR — DUELO", "El juego: una carta secreta por turno. GOLPE gana a AGARRE, AGARRE gana a GUARDIA, GUARDIA gana a GOLPE — y cada golpe es ALTO o BAJO. Siete reglas, se aprende en una partida.", GameMode.VsAI),
+            ("DUELO LIMPIO", "El mismo DUELO sin los poderes de la Salamanca: cantos, alturas y velocidades peladas. Para aprender las 7 reglas — o para medirse parejo. Online: si uno entra por acá, se juega limpio.", GameMode.VsAI),
             ("PRÁCTICA", "EXPERTO · Solo vos y un dummy quieto. Probá comandos, distancias y framedata.", GameMode.Practice),
             ("VS IA", "EXPERTO · Directo a pelear: la IA adaptativa en dificultad normal planifica en secreto, igual que vos.", GameMode.VsAI),
             ("CARTAS", "EXPERTO · El combate como cartas (copia de Yomi 2): robá, cambiá con el descarte y jugá tu opener contra la IA.", GameMode.VsAI),
@@ -295,11 +300,16 @@ namespace LagFighter
 
         // CARTAS: elegir personaje (paso 8) — las cartas y los números salen
         // del catálogo real, así el menú nunca miente
-        static readonly (string label, string desc)[] DuelChars =
+        // desc + power separados: en DUELO LIMPIO el poder no existe y la
+        // tarjeta no tiene por qué prometerlo
+        static readonly (string label, string desc, string power)[] DuelChars =
         {
-            ("LA LECHUZA", "Te ve. Su Luz Mala es el golpe más rápido del mazo y quema 2 aunque te tapes. PODER — ORACLE (1 por partida): el rival juega BOCA ARRIBA y elegís viendo."),
-            ("EL BRUJO", "Salió de la Salamanca. Su Facón del Pacto gana casi toda carrera, pero si se lo paran el pacto se cobra. PODER — SORCERER (1 por round): tras elegir tu carta, CRUZÁS las cartas — cada uno ejecuta la del otro."),
-            ("EL LOBIZÓN", "Séptimo hijo. CINCO agarres, más vida, y su Tarascón muerde aunque le pegues. PODER — LOSER (1 por round): cantás la vuelta ANTES de elegir — el que pierde el intercambio, lo gana."),
+            ("LA LECHUZA", "Te ve. Su Luz Mala es el golpe más rápido del mazo y quema 2 aunque te tapes.",
+                "PODER — ORACLE (1 por partida): el rival juega BOCA ARRIBA y elegís viendo."),
+            ("EL BRUJO", "Salió de la Salamanca. Su Facón del Pacto gana casi toda carrera, pero si se lo paran el pacto se cobra.",
+                "PODER — SORCERER (1 por round): tras elegir tu carta, CRUZÁS las cartas — cada uno ejecuta la del otro."),
+            ("EL LOBIZÓN", "Séptimo hijo. CINCO agarres, más vida, y su Tarascón muerde aunque le pegues.",
+                "PODER — LOSER (1 por round): cantás la vuelta ANTES de elegir — el que pierde el intercambio, lo gana."),
         };
 
         static readonly (string label, string desc)[] CardChars =
@@ -319,6 +329,7 @@ namespace LagFighter
         };
         int _duelCharChoice;
         bool _duelOnline;
+        bool _duelPowers = true;   // false = entró por DUELO LIMPIO
 
         int OptionCount => _step == 1 ? Modes.Length :
             _step == 3 ? AIProfiles.Length :
@@ -333,8 +344,9 @@ namespace LagFighter
             _active = true;
             _step = 1;
             _duelOnline = false;
+            _duelPowers = true;
             _lagChoice = false; // NORMAL siempre: LAG MODE quedó fuera del menú
-            _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_mode", 1), 0, Modes.Length - 1); // arranca donde quedaste
+            _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_mode", DueloIdx), 0, Modes.Length - 1); // arranca donde quedaste
             SimConfig.YomiEnabled = false; // el modo YOMI lo prende StartMatch; acá se apaga al volver
             SimConfig.CardsEnabled = false; // ídem CARTAS
             SimConfig.DuelEnabled = false;  // ídem DUELO
@@ -362,14 +374,14 @@ namespace LagFighter
                               _step == 5 ? "ONLINE — SALA CON CÓDIGO" :
                               _step == 6 ? "ESCRIBÍ EL CÓDIGO DE LA SALA" :
                               _step == 8 ? "CARTAS — ELEGÍ TU PERSONAJE" :
-                              _step == 9 ? "DUELO — ELEGÍ TU PERSONAJE" :
-                              _step == 10 ? "DUELO — ¿CONTRA QUIÉN?" :
+                              _step == 9 ? (_duelPowers ? "DUELO — ELEGÍ TU PERSONAJE" : "DUELO LIMPIO — ELEGÍ TU PERSONAJE") :
+                              _step == 10 ? (_duelPowers ? "DUELO — ¿CONTRA QUIÉN?" : "DUELO LIMPIO — ¿CONTRA QUIÉN?") :
                               "ESPERANDO AL RIVAL…";
 
             _bigCode.gameObject.SetActive(_step >= 6);
             // la línea de ACTION POINTS es del modo clásico: no tiene por qué
             // estar en la portada. Aparece solo si estás mirando un EXPERTO.
-            if (_carryLine != null) _carryLine.gameObject.SetActive(_step == 1 && _sel != DueloIdx);
+            if (_carryLine != null) _carryLine.gameObject.SetActive(_step == 1 && _sel != DueloIdx && _sel != DueloLimpioIdx);
             if (_step == 6)
             {
                 _bigCode.text = _codeInput.PadRight(4, '_');
@@ -427,7 +439,9 @@ namespace LagFighter
                 _cardLabels[i].rectTransform.sizeDelta = new Vector2(size.x - 26f, big ? 56f : 34f);
 
                 // el rótulo EXPERTO vive en la tarjeta, no en la descripción
+                // (DUELO LIMPIO no es experto: es el juego sin poderes)
                 _cardTag[i].text = big ? "el juego"
+                    : modeStep && i == DueloLimpioIdx ? "SIN PODERES"
                     : modeStep && i != DueloIdx ? "EXPERTO"
                     : _step == 10 ? DuelDest[i].tag : "";
                 _cardTag[i].rectTransform.anchoredPosition = new Vector2(0f, big ? -18f : chars ? -34f : -32f);
@@ -466,10 +480,10 @@ namespace LagFighter
             for (int i = 0; i < OptionCount; i++)
             {
                 bool sel = i == _sel;
-                // DUELO se acentúa en DORADO (es la ceremonia, el juego); el
-                // resto en el celeste del lado propio. Sin seleccionar, la
-                // tarjeta es cromo puro y no compite.
-                var acc = _step == 1 && i == DueloIdx ? Duelo.Gold : Duelo.P1;
+                // DUELO se acentúa en DORADO (es la ceremonia, el juego — el
+                // LIMPIO también, que es el mismo juego); el resto en el
+                // celeste del lado propio. Sin seleccionar, cromo puro.
+                var acc = _step == 1 && (i == DueloIdx || i == DueloLimpioIdx) ? Duelo.Gold : Duelo.P1;
                 _cards[i].color = sel ? Duelo.Stage : Duelo.Panel;
                 _cardAccent[i].color = sel ? acc : Duelo.Line;
                 _cardLabels[i].color = sel ? Duelo.Paper : Duelo.Alpha(Duelo.Paper, 0.62f);
@@ -478,12 +492,12 @@ namespace LagFighter
                 foreach (var b in _cardBrackets[i]) b.color = bc;
                 _cards[i].rectTransform.localScale = Vector3.one * (sel ? 1.03f : 1f);
             }
-            if (_carryLine != null) _carryLine.gameObject.SetActive(_step == 1 && _sel != DueloIdx);
+            if (_carryLine != null) _carryLine.gameObject.SetActive(_step == 1 && _sel != DueloIdx && _sel != DueloLimpioIdx);
             _desc.text = _step == 1 ? Modes[_sel].desc :
                 _step == 3 ? AIProfiles[_sel].desc :
                 _step == 5 ? OnlineOptions[_sel].desc :
                 _step == 8 ? CardChars[_sel].desc :
-                _step == 9 ? DuelChars[_sel].desc :
+                _step == 9 ? DuelChars[_sel].desc + (_duelPowers ? " " + DuelChars[_sel].power : "") :
                 _step == 10 ? DuelDest[_sel].desc : AIDifficulties[_sel].desc;
         }
 
@@ -493,8 +507,9 @@ namespace LagFighter
             if (_step == 1)
             {
                 PlayerPrefs.SetInt("lf_menu_mode", idx);
-                if (idx == DueloIdx) // DUELO: primero elegí tu personaje
+                if (idx == DueloIdx || idx == DueloLimpioIdx) // DUELO: primero elegí tu personaje
                 {
+                    _duelPowers = idx == DueloIdx;
                     _step = 9;
                     _sel = Mathf.Clamp(PlayerPrefs.GetInt("lf_menu_duelchar", 0), 0, DuelChars.Length - 1);
                     Layout();
@@ -548,7 +563,8 @@ namespace LagFighter
                 if (idx == 0)
                 {
                     _mc.StartMatch(GameMode.VsAI, false, 0, AIProfile.Adaptive, AIDifficulty.Normal,
-                        yomi: false, cards: false, cardsChar: 0, duel: true, duelChar: _duelCharChoice);
+                        yomi: false, cards: false, cardsChar: 0, duel: true, duelChar: _duelCharChoice,
+                        duelPowers: _duelPowers);
                     return;
                 }
                 _duelOnline = true;
@@ -594,7 +610,8 @@ namespace LagFighter
                         if (!_active || _step != 7) return;
                         if (_duelOnline)
                             _mc.StartMatch(GameMode.Online, false, 0, AIProfile.Adaptive, AIDifficulty.Normal,
-                                yomi: false, cards: false, cardsChar: 0, duel: true, duelChar: _duelCharChoice);
+                                yomi: false, cards: false, cardsChar: 0, duel: true, duelChar: _duelCharChoice,
+                                duelPowers: _duelPowers);
                         else
                             _mc.StartMatch(GameMode.Online, _lagChoice, 0);
                     });
@@ -626,7 +643,8 @@ namespace LagFighter
                             if (!_active) return;
                             if (_duelOnline)
                                 _mc.StartMatch(GameMode.Online, false, 1, AIProfile.Adaptive, AIDifficulty.Normal,
-                                    yomi: false, cards: false, cardsChar: 0, duel: true, duelChar: _duelCharChoice);
+                                    yomi: false, cards: false, cardsChar: 0, duel: true, duelChar: _duelCharChoice,
+                                    duelPowers: _duelPowers);
                             else
                                 _mc.StartMatch(GameMode.Online, lagMode, 1);
                         },

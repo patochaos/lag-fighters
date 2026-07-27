@@ -887,6 +887,23 @@ salvo la vida del Lobizón), nombres nuevos + el poder de cada uno:
   dos cartas en juego (tu escape o una mano vacía): era tirar el poder
   a la basura garantizado.
 
+### DUELO LIMPIO (2026-07-26, noche — pedido de Patricio)
+
+Segunda entrada en el menú principal: **DUELO LIMPIO** — el mismo juego
+SIN los poderes de la Salamanca (cantos, alturas y velocidades peladas).
+Tarjeta propia con tag "SIN PODERES" y acento dorado (no es un modo
+EXPERTO: es el juego base, para aprender o medirse parejo).
+
+- Por dentro es el camino del lab: `DuelSim` con `DuelPower.None`
+  explícito en los dos lados. El botón de poder no aparece solo
+  (`Power[0] == None` ya lo escondía) y las tarjetas del selector dejan
+  de prometer el poder.
+- **Online, manda el más limpio**: la elección viaja en el HELLO
+  (`H2L` = personaje 2, vengo limpio) y cada cliente hace el AND de las
+  dos elecciones — misma cuenta en las dos máquinas, sims espejadas
+  idénticas sin negociación extra. Si vos venías con poderes y el rival
+  limpio, banner: "DUELO LIMPIO — el rival vino sin poderes".
+
 ### Cola anotada de poderes (del saqueo de los 148 aliens de CE)
 
 Trader (El Cambalachero) · Gambler (La Mentirosa — el canal de mentira

@@ -78,6 +78,7 @@ namespace LagFighter
         DuelTurnResult _duelResult;
         readonly int[] _duelHpBefore = new int[2];
         int _duelPlayerChar, _duelAiChar;
+        bool _duelPowersChoice = true;   // false = DUELO LIMPIO (online: manda el más limpio)
         DuelHandUI _duelHand;
         DuelHudUI _duelHud;
         DuelCantoUI _duelCanto;
@@ -312,7 +313,7 @@ namespace LagFighter
         public void StartMatch(GameMode mode, bool lagMode, int localSide = 0,
             AIProfile aiProfile = AIProfile.Random, AIDifficulty aiDifficulty = AIDifficulty.Normal,
             bool yomi = false, bool cards = false, int cardsChar = 0,
-            bool duel = false, int duelChar = 0)
+            bool duel = false, int duelChar = 0, bool duelPowers = true)
         {
             Mode = mode;
             LagMode = lagMode;
@@ -327,6 +328,9 @@ namespace LagFighter
             SimConfig.DuelEnabled = duel;
             _duelPlayerChar = Mathf.Clamp(duelChar, 0, DuelCatalog.Chars.Length - 1);
             _duelAiChar = Random.Range(0, DuelCatalog.Chars.Length);
+            // DUELO LIMPIO: sin poderes (DuelPower.None explícito, el mismo
+            // camino que usa el lab para el baseline)
+            _duelPowersChoice = duelPowers;
             _duelHud.SetVisible(duel);
             _duelCanto.SetVisible(duel);
             _hud.SetDuelChrome(duel);
@@ -397,12 +401,17 @@ namespace LagFighter
                     _dnMySeq = _dnTheirSeq = 0;
                     _dnQueue.Clear();
                     _dnPumping = false;   // el poll viejo murió con Generation al salir de la sala anterior
-                    NetLobby.I.PushTurn(_dnMySeq++, LocalSide, $"H{_duelPlayerChar}");
+                    // el HELLO lleva el personaje y, si entraste por DUELO
+                    // LIMPIO, la 'L' — online manda el más limpio de los dos
+                    NetLobby.I.PushTurn(_dnMySeq++, LocalSide, $"H{_duelPlayerChar}" + (_duelPowersChoice ? "" : "L"));
                     DnPump();
                 }
                 else
                 {
-                    Duel = new DuelSim(seed: _seed++, _duelPlayerChar, _duelAiChar);
+                    Duel = _duelPowersChoice
+                        ? new DuelSim(seed: _seed++, _duelPlayerChar, _duelAiChar)
+                        : new DuelSim(seed: _seed++, _duelPlayerChar, _duelAiChar,
+                            power0: DuelPower.None, power1: DuelPower.None);
                     _dn = DnPhase.Off;
                 }
                 _duelRoundSeen = 1;
@@ -1713,10 +1722,23 @@ namespace LagFighter
             {
                 case 'H':
                     if (Duel != null) return true;   // duplicado
-                    int theirChar = Mathf.Clamp(int.Parse(m.Substring(1)), 0, DuelCatalog.Chars.Length - 1);
-                    _duelAiChar = theirChar;
-                    Duel = new DuelSim(RoomSeed(NetLobby.I.Room), _duelPlayerChar, theirChar,
-                        streamTag0: LocalSide, streamTag1: 1 - LocalSide);
+                    {
+                        // sufijo 'L': el rival entró por DUELO LIMPIO. Manda
+                        // el más limpio de los dos — la misma cuenta en las
+                        // dos máquinas, así que las sims espejadas coinciden.
+                        string hello = m.Substring(1);
+                        bool theirLimpio = hello.EndsWith("L");
+                        if (theirLimpio) hello = hello.Substring(0, hello.Length - 1);
+                        int theirChar = Mathf.Clamp(int.Parse(hello), 0, DuelCatalog.Chars.Length - 1);
+                        _duelAiChar = theirChar;
+                        bool powers = _duelPowersChoice && !theirLimpio;
+                        DuelPower? off = powers ? (DuelPower?)null : DuelPower.None;
+                        Duel = new DuelSim(RoomSeed(NetLobby.I.Room), _duelPlayerChar, theirChar,
+                            streamTag0: LocalSide, streamTag1: 1 - LocalSide,
+                            power0: off, power1: off);
+                        if (_duelPowersChoice && theirLimpio)
+                            _duelCanto.Banner("DUELO LIMPIO — el rival vino sin poderes", Duelo.Mute);
+                    }
                     StartDuelPlanning();
                     return true;
 
