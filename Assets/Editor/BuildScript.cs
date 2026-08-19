@@ -8,8 +8,10 @@ using UnityEngine;
 //    Unity.exe -batchmode -projectPath "..." -executeMethod BuildScript.Build -logFile build.log
 public static class BuildScript
 {
-    const string OutputPath = "D:/Lag Fighters/Builds/LagFighters/LagFighters.exe";
-    const string WebOutputPath = "D:/Lag Fighters/Builds/LagFightersWeb";
+    // Repository-relative outputs keep local, CI and future contributors on
+    // the same build layout instead of depending on one machine's D: drive.
+    const string OutputPath = "Builds/LagFightersWindows/LagFighters.exe";
+    const string WebOutputPath = "Builds/LagFightersWeb";
 
     [MenuItem("Lag Fighters/Build para compartir")]
     public static void BuildFromMenu()

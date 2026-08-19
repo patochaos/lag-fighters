@@ -1,0 +1,87 @@
+name: Test, build and publish
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: publish-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  simulation-tests:
+    name: Deterministic simulation tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.0.x
+      - run: dotnet run --project Tools/SimTests -c Release
+
+  publish:
+    name: Build and publish ${{ matrix.name }}
+    needs: simulation-tests
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: HTML5
+            target: WebGL
+            method: BuildScript.BuildWebGL
+            directory: Builds/LagFightersWeb
+            channel: html5
+          - name: Windows
+            target: StandaloneWindows64
+            method: BuildScript.Build
+            directory: Builds/LagFightersWindows
+            channel: windows
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+      - uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-${{ matrix.target }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-${{ matrix.target }}-
+      - name: Require Unity license credentials
+        shell: bash
+        run: |
+          test -n "$UNITY_LICENSE" || { echo "Missing UNITY_LICENSE repository secret"; exit 1; }
+          test -n "$UNITY_EMAIL" || { echo "Missing UNITY_EMAIL repository secret"; exit 1; }
+          test -n "$UNITY_PASSWORD" || { echo "Missing UNITY_PASSWORD repository secret"; exit 1; }
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+      - uses: game-ci/unity-builder@v5.0.0
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: ${{ matrix.target }}
+          buildMethod: ${{ matrix.method }}
+          manualExit: true
+          gitPrivateToken: ${{ secrets.GITHUB_TOKEN }}
+          versioning: Semantic
+      - uses: remarkablegames/setup-butler@v3
+      - name: Publish to itch.io
+        run: >-
+          butler push "${{ matrix.directory }}"
+          "patochaos/lag-fighters:${{ matrix.channel }}"
+          --userversion "${{ github.sha }}"
+          --if-changed
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
