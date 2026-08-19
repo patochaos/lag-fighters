@@ -28,7 +28,7 @@ jobs:
   publish:
     name: Build and publish ${{ matrix.name }}
     needs: simulation-tests
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && vars.UNITY_CI_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
