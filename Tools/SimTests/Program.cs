@@ -121,6 +121,10 @@ class Tests
         DueloDerriboApagaLaGuardiaRival();
         DueloElDerriboDuraUnSoloTurno();
         DueloVendidoLaGuardiaBloqueaDerribado();
+        DueloGuardiaQueCastigaContragolpea();
+        DueloGuardiaQueCastigaRespetaElTope();
+        DueloGuardiaQueCastigaElTrucoPagaEnSangre();
+        DueloGuardiaQueCastigaNoAplicaDerribado();
         DueloPoderLoserDaVueltaElAgarreVsGuardia();
         DueloPoderLoserDaVueltaLaCarrera();
         DueloPoderBrujoCruzaLasCartas();
@@ -1430,6 +1434,19 @@ class Tests
         d.Hand[side].AddRange(cards);
     }
 
+    // Las reglas de la ECONOMÍA DE CARTAS de la guardia (robar, el truco
+    // cobrado en cartas, el cruce del Brujo sin sangre) describen el modo SIN
+    // contragolpe, así que se verifican con el dial apagado — si no, cambiar
+    // el default del juego rompe tests que hablan de otra regla. Que la
+    // guardia cobre en SANGRE tiene sus propios tests (DueloGuardiaQueCastiga*).
+    // Devuelve el valor previo: el test lo restaura al terminar.
+    static bool SinContragolpe()
+    {
+        bool prev = DuelConfig.GuardCounter;
+        DuelConfig.GuardCounter = false;
+        return prev;
+    }
+
     static void DueloMazoDeVeinteYManoGarantizada()
     {
         var d = new DuelSim(3);
@@ -1486,13 +1503,15 @@ class Tests
 
     static void DueloGuardiaAltaParaElGolpeAlto()
     {
+        bool gc = SinContragolpe();
         var d = NewDuelo();
         Mano(d, 0, DuelCatalog.AttackC);   // ALTO
         Mano(d, 1, DuelCatalog.GuardHigh);
         var r = d.Resolve(0, 0);
-        Check(r.Guarded1 && d.Hp[1] == DuelConfig.MaxHp && r.Drew1 == DuelConfig.GuardDraw && r.Returned1 &&
-              d.Hand[1].Contains(DuelCatalog.GuardHigh) && !d.AwaitingChoice,
-            "duelo: guardia alta para el golpe alto (roba 1 y vuelve a la mano)",
+        bool ok = r.Guarded1 && d.Hp[1] == DuelConfig.MaxHp && r.Drew1 == DuelConfig.GuardDraw && r.Returned1 &&
+                  d.Hand[1].Contains(DuelCatalog.GuardHigh) && !d.AwaitingChoice;
+        DuelConfig.GuardCounter = gc;
+        Check(ok, "duelo: guardia alta para el golpe alto (roba 1 y vuelve a la mano)",
             $"guard {r.Guarded1}, robo {r.Drew1}, vuelve {r.Returned1}");
     }
 
@@ -1635,13 +1654,96 @@ class Tests
         Mano(d, 0, DuelCatalog.AttackC);    // ALTO
         Mano(d, 1, DuelCatalog.GuardHigh);  // derribado... pero en VENDIDO bloquea
         var r = d.Resolve(0, 0);
-        bool blocked = r.Guarded1 && !r.WrongGuard1 && r.Drew1 == DuelConfig.GuardDraw &&
+        bool blocked = r.Guarded1 && !r.WrongGuard1 && r.Drew1 == DuelConfig.GuardDrawNow &&
                        d.Hp[1] == DuelConfig.MaxHp - 3;
         bool kdOff = !d.KnockedDown[1];     // sigue durando UN turno
         DuelConfig.KdVendido = v0;
         Check(blocked && kdOn && kdOff,
             "duelo: VENDIDO — derribado la guardia SÍ bloquea (el castigo es el reveal)",
             $"guard {r.Guarded1}, drew {r.Drew1}, hp1 {d.Hp[1]}, kd {kdOn}→{!kdOff}");
+    }
+
+    // ---- LA GUARDIA QUE CASTIGA (DuelConfig.GuardCounter, DUELO.md §15) ----
+    // La guardia acertada abre contragolpe, como el Facón pero universal:
+    // trae la función del esquive de Yomi 2 sin sumar el cuarto verbo.
+
+    static void DueloGuardiaQueCastigaContragolpea()
+    {
+        bool g0 = DuelConfig.GuardCounter;
+        DuelConfig.GuardCounter = true;
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackC);                          // ALTO, 5
+        Mano(d, 1, DuelCatalog.GuardHigh, DuelCatalog.AttackD);   // acierta + patada de 7
+        var r = d.Resolve(0, 0);
+        bool pendiente = d.AwaitingChoice && d.PendingIsPunish && d.PendingSide == 1;
+        d.Punish(d.Hand[1].IndexOf(DuelCatalog.AttackD));
+        bool ok = pendiente && r.Guarded1 &&
+                  d.Hp[0] == DuelConfig.MaxHp - 7 && d.Hp[1] == DuelConfig.MaxHp;
+        DuelConfig.GuardCounter = g0;
+        Check(ok, "duelo: la guardia acertada CONTRAGOLPEA con un golpe de la mano",
+            $"pendiente {pendiente}, hp0 {d.Hp[0]}, hp1 {d.Hp[1]}");
+    }
+
+    // El dial de escala: sin tope el Cabezazo pega 9 por defender bien, más
+    // que ganar el intercambio.
+    static void DueloGuardiaQueCastigaRespetaElTope()
+    {
+        bool g0 = DuelConfig.GuardCounter; int c0 = DuelConfig.GuardCounterCap;
+        DuelConfig.GuardCounter = true;
+        DuelConfig.GuardCounterCap = 3;
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackC);
+        Mano(d, 1, DuelCatalog.GuardHigh, DuelCatalog.AttackD);   // patada de 7 → tope 3
+        d.Resolve(0, 0);
+        d.Punish(d.Hand[1].IndexOf(DuelCatalog.AttackD));
+        bool ok = d.Hp[0] == DuelConfig.MaxHp - 3;
+        DuelConfig.GuardCounter = g0; DuelConfig.GuardCounterCap = c0;
+        Check(ok, "duelo: el contragolpe respeta el tope del dial", $"hp0 {d.Hp[0]} (esperado {DuelConfig.MaxHp - 3})");
+    }
+
+    // Ley 2 aplicada al canto: si la guardia dejó de cobrar cartas, el truco
+    // multiplica la moneda que SÍ cobra (el contragolpe). Sin esto el canto
+    // se consumía multiplicando cero.
+    static void DueloGuardiaQueCastigaElTrucoPagaEnSangre()
+    {
+        bool g0 = DuelConfig.GuardCounter; int dr0 = DuelConfig.GuardCounterDraw;
+        DuelConfig.GuardCounter = true;
+        DuelConfig.GuardCounterDraw = 0;
+        var d = NewDuelo();
+        d.ResolveTruco(0, 1, true);          // TRUCO querido: ×2 armado
+        Mano(d, 0, DuelCatalog.AttackC);
+        Mano(d, 1, DuelCatalog.GuardHigh, DuelCatalog.AttackD);   // patada 7 × 2 = 14
+        var r = d.Resolve(0, 0);
+        d.Punish(d.Hand[1].IndexOf(DuelCatalog.AttackD));
+        bool ok = d.Hp[0] == DuelConfig.MaxHp - 14 && r.Truco == 1 && r.Drew1 == 0;
+        DuelConfig.GuardCounter = g0; DuelConfig.GuardCounterDraw = dr0;
+        Check(ok, "duelo: con robo 0 el truco multiplica el CONTRAGOLPE, no cartas",
+            $"hp0 {d.Hp[0]} (esperado {DuelConfig.MaxHp - 14}), truco {r.Truco}, drew {r.Drew1}");
+    }
+
+    // El oki se mantiene: derribado la guardia no bloquea, así que tampoco
+    // contragolpea. Es lo que hace que el derribo siga valiendo.
+    static void DueloGuardiaQueCastigaNoAplicaDerribado()
+    {
+        bool g0 = DuelConfig.GuardCounter;
+        DuelConfig.GuardCounter = true;
+        var d = NewDuelo();
+        Mano(d, 0, DuelCatalog.AttackA);
+        Mano(d, 1, DuelCatalog.Throw);
+        d.Resolve(0, 0);
+        d.ChoosePrize(DuelPrize.Knockdown);   // el lado 1 queda derribado
+        d.StartTurn();
+        Mano(d, 0, DuelCatalog.AttackC);                          // ALTO
+        Mano(d, 1, DuelCatalog.GuardHigh, DuelCatalog.AttackD);   // acierta la altura... pero está en el piso
+        var r = d.Resolve(0, 0);
+        // el pendiente es el PREMIO del atacante, nunca un contragolpe
+        bool sinContragolpe = !d.PendingIsPunish;
+        if (d.AwaitingChoice) d.ChoosePrize(DuelPrize.Knockdown);
+        bool ok = r.WrongGuard1 && r.GuardWasDown1 && sinContragolpe &&
+                  d.Hp[0] == DuelConfig.MaxHp;   // no contragolpeó
+        DuelConfig.GuardCounter = g0;
+        Check(ok, "duelo: derribado no hay contragolpe (la guardia está apagada)",
+            $"wrong {r.WrongGuard1}, down {r.GuardWasDown1}, hp0 {d.Hp[0]}");
     }
 
     // ---- PODERES Cosmic (DUELO.md §14) ----
@@ -1663,7 +1765,7 @@ class Tests
         Mano(d, 1, DuelCatalog.GuardLow);
         var r = d.Resolve(0, 0);
         Check(used && r.UpsetSide == 1 && r.Guarded1 && r.Winner < 0 && d.Hp[1] == DuelConfig.MaxHp &&
-              r.Drew1 == DuelConfig.GuardDraw && r.Returned1,
+              r.Drew1 == DuelConfig.GuardDrawNow && r.Returned1,
             "duelo: PODER Loser (El Perdedor) — el agarre que ganaba pierde y la guardia cobra",
             $"upset {r.UpsetSide}, guarded {r.Guarded1}, hp1 {d.Hp[1]}, drew {r.Drew1}");
     }
@@ -1682,6 +1784,7 @@ class Tests
 
     static void DueloPoderBrujoCruzaLasCartas()
     {
+        bool gc = SinContragolpe();   // el cruce se verifica sin sangre de por medio
         var d = NewDueloPoder(DuelPower.Sorcerer, DuelPower.None);
         d.UsePower(0);
         Mano(d, 0, DuelCatalog.GuardHigh);
@@ -1690,10 +1793,12 @@ class Tests
         // cruzado: el lado 0 EJECUTA el golpe del rival y el lado 1 la guardia
         // del lado 0 — bloquea y roba. Las cartas vuelven al descarte de su
         // DUEÑO y la guardia embrujada no vuelve a la mano.
-        Check(r.Swapped && r.BrujoSide == 0 && r.Guarded1 && !r.Returned1 &&
+        bool cruzaOk = r.Swapped && r.BrujoSide == 0 && r.Guarded1 && !r.Returned1 &&
               d.Hp[0] == DuelConfig.MaxHp && d.Hp[1] == DuelConfig.MaxHp &&
               r.Drew1 == DuelConfig.GuardDraw &&
-              d.Discard[0].Contains(DuelCatalog.GuardHigh) && d.Discard[1].Contains(DuelCatalog.AttackC),
+              d.Discard[0].Contains(DuelCatalog.GuardHigh) && d.Discard[1].Contains(DuelCatalog.AttackC);
+        DuelConfig.GuardCounter = gc;
+        Check(cruzaOk,
             "duelo: PODER Sorcerer (El Brujo) — cada uno ejecuta la carta del otro",
             $"swapped {r.Swapped}, guarded1 {r.Guarded1}, desc0 [{string.Join(",", d.Discard[0])}], desc1 [{string.Join(",", d.Discard[1])}]");
     }
@@ -1890,14 +1995,17 @@ class Tests
 
     static void DueloLimiteDeMano()
     {
+        bool gc = SinContragolpe();   // el tope se prueba con el robo de la guardia
         var d = NewDuelo();
         Mano(d, 0, DuelCatalog.AttackA);    // BAJO
         Mano(d, 1, DuelCatalog.GuardLow, DuelCatalog.AttackA, DuelCatalog.AttackA,
                    DuelCatalog.AttackB, DuelCatalog.AttackB, DuelCatalog.AttackC,
                    DuelCatalog.AttackC, DuelCatalog.AttackD);  // 8 = tope
         var r = d.Resolve(0, 0);
-        Check(r.Guarded1 && d.Hand[1].Count == DuelConfig.HandLimit &&
-              d.Discard[1].Contains(DuelCatalog.GuardLow),
+        bool topeOk = r.Guarded1 && d.Hand[1].Count == DuelConfig.HandLimit &&
+              d.Discard[1].Contains(DuelCatalog.GuardLow);
+        DuelConfig.GuardCounter = gc;
+        Check(topeOk,
             "duelo: con la mano llena, lo que sobra va al descarte",
             $"mano {d.Hand[1].Count}, descarte {d.Discard[1].Count}");
     }
@@ -2182,6 +2290,7 @@ class Tests
 
     static void DueloTrucoBloqueadoSePagaEnCartas()
     {
+        bool gc = SinContragolpe();   // acá el truco se cobra en CARTAS (con contragolpe se cobra en sangre)
         var d = NewDuelo();
         d.ResolveTruco(0, level: 1, quiero: true);              // ×2 armado
         Mano(d, 0, DuelCatalog.AttackC);                        // ALTO
@@ -2195,7 +2304,9 @@ class Tests
         Mano(d2, 0, DuelCatalog.AttackA);                       // BAJO
         Mano(d2, 1, DuelCatalog.GuardLow);
         var r2 = d2.Resolve(0, 0);
-        Check(dobla && r2.Drew1 == DuelConfig.GuardDraw * 3 && d2.TrucoLevel == 0,
+        bool trucoOk = dobla && r2.Drew1 == DuelConfig.GuardDraw * 3 && d2.TrucoLevel == 0;
+        DuelConfig.GuardCounter = gc;
+        Check(trucoOk,
             "duelo: la guardia acertada COBRA el truco en cartas (el robo se multiplica)",
             $"robo x2 {r.Drew1}, robo x3 {r2.Drew1}");
     }

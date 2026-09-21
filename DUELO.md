@@ -924,3 +924,95 @@ Seeker (El Confesor: pregunta sí/no que se responde con verdad).
    — hoy no existe respuesta al escape (es la válvula por diseño, Ley
    13). Sin solución todavía; pensarlo después de jugarlo.
 2. El derribo/premio en rounds cortos (el 83/17 de arriba).
+
+## 15. LA GUARDIA QUE CASTIGA (dial, 2026-08-01)
+
+Sesión de comparación contra Yomi 2 (a pedido de Patricio: "al sacar
+features siento que perdimos depth"). El inventario de lo cortado dejó dos
+huecos con nombre: **no hay carta de lectura dura** (el ESQUIVE de Yomi 2,
+que no adivina altura y castiga con un golpe de tu mano) y **el derribo
+paga en una moneda anulable** (en Yomi acelera tus moves a velocidad 10 —
+acá solo apaga la guardia, y el ESCAPE se come el 70% de los okis).
+
+Patricio descartó traer el esquive como carta firma con el argumento
+correcto: **las firmas de hoy son golpes con números raros, el esquive es
+un VERBO** — como firma pagás el costo de reglamento entero (el rival tiene
+que aprenderlo igual) repartiendo solo la mitad del beneficio. Si va, va en
+todos los mazos, y ahí cuesta el cuarto verbo, ranuras del mazo de 20 y un
+sub-turno de contragolpe.
+
+**La tercera vía elegida** (ya anotada como dial pendiente en §9): la
+**guardia acertada abre CONTRAGOLPE** — el defensor pega un golpe de su
+mano, como el castigo del Facón pero universal. Consigue la misma fantasía
+sin verbo nuevo, y es *más* lectura dura que el esquive: exige adivinar dos
+cosas (que ataca **y** la altura) en vez de una.
+
+- **Implementado detrás de `DuelConfig.GuardCounter`** (default false).
+  Reusa entera la maquinaria de `BeginPunish`/`Punish` que ya existía para
+  el Facón — UI, protocolo online y heurística de la IA incluidos.
+  Diales: `GuardCounterDraw` (robo del defensor mientras el contragolpe
+  está activo; 0 = la guardia pasa a pagar solo en sangre, Ley 2) y
+  `GuardCounterCap` (tope del contragolpe; el Cabezazo a 9 por defender
+  bien pega más que ganar el intercambio). 4 tests nuevos (175 en total).
+- **El truco sigue la Ley 2**: si la guardia dejó de cobrar cartas, el canto
+  multiplica el contragolpe. Sin eso el truco se consumía multiplicando cero.
+- **Lab**: `dueloguardia N` (barrido de las cinco variantes).
+
+### Lo que midió (4000 partidas por modo)
+
+| modo | premio dmg/kd | guard% | contra/part | brecha | info |
+|---|---|---|---|---|---|
+| off (hoy) | 83.1/16.9 | 14.1 | 0.16 | **85.8** | +1.5 |
+| contra + robo 1 | 87.4/12.6 | 16.2 | 2.25 | 73.8 | **+9.0** |
+| contra + robo 0 | 85.5/14.5 | 16.0 | 2.23 | 73.2 | +6.5 |
+| tope 4 + robo 1 | 86.6/13.4 | 16.2 | 2.29 | 75.8 | +4.4 |
+| tope 4 + robo 0 | 84.2/15.8 | 16.0 | 2.31 | 75.0 | +3.9 |
+
+Winrates: off **53.9 / 52.7 / 43.5** (Lechuza/Brujo/Lobizón) → contra+robo0
+**50.2 / 49.4 / 50.4**.
+
+1. **El valor de la información rompió el techo del proyecto**: +1.5 → **+9.0**.
+   El objetivo del §11 era >+5 pp y nunca se había alcanzado (máximo
+   histórico +3.1). Es la respuesta directa al hallazgo viejo de que leer
+   bien no cambiaba lo que jugabas: ahora la lectura correcta ("va a
+   atacar, y abajo") tiene una jugada que la cobra en sangre.
+2. **El balance de personajes se arregló solo**: el spread pasó de **10.4
+   pp a 1.0**. El Lobizón, roto en 43.5, sube a 50.4 — tiene el Cabezazo
+   de 9, el mejor contragolpe del juego, y su mazo lento-pesado por fin
+   sirve para algo que no sea perder carreras.
+3. **La brecha de habilidad BAJA**: 85.8 → 73-76. Sin tope queda debajo del
+   objetivo de 75; con tope 4 lo raspa. Más daño en el sistema = más
+   varianza = el bot random roba más partidas. **Es el costo real de esta
+   feature y hay que decidirlo, no esconderlo.**
+4. **El premio empeoró**: 83/17 → 87/12.6. Con más daño circulando, +DAÑO
+   se vuelve aún más tentador que el DERRIBO. El derribo-acelerador (§15.1)
+   sigue haciendo falta; esta feature no lo reemplaza.
+5. **Costo de diseño anotado**: el contragolpe universal **le roba la firma
+   al Brujo** — "si te la defienden el rival te pega gratis" deja de ser
+   exclusivo del Facón. Su winrate cae de 52.7 a 46.6-49.4. Si el dial
+   queda, el Facón necesita una firma nueva.
+
+**Trampa de método (para la colección del §9)**: la primera corrida dio
+`guard%` clavado en 14.1 en las cinco variantes, brecha en caída y la info
+en NEGATIVO — o sea "la feature no sirve". La causa era la IA: la mezcla
+base de `PickDuelCard` tiene pesos fijos y solo sube la guardia por truco
+armado, así que **recibía el contragolpe como ruido en vez de usarlo**. Con
+la heurística que pondera la guardia por el pesado que tenga guardado para
+castigar, los mismos cinco modos dieron vuelta el signo (info +1.5 → +9.0).
+Es la tercera vez que el lab miente por el sparring: **medir una mecánica
+nueva con una IA que no la juega mide el ruido, no la mecánica.**
+
+### 15.1 Pendientes que salieron de la misma sesión
+
+- **El derribo acelera** (el `KnockdownMinSpeed = 10` de Yomi 2): que los
+  moves lentos suban a velocidad ~8-10 el turno del oki. Ataca el 83/17 y
+  de paso le da razón de existir a la Patada (vel 4), que hoy pierde toda
+  carrera y sin combos no tiene el segundo uso que tiene en Yomi.
+- **El ESCAPE es el gem burst mal copiado.** En Yomi la salida del oki es
+  un **reversal**: un ATAQUE de velocidad 11+, que le gana a todo lo
+  acelerado a 10 pero es *unsafe on block* — si el rival lee que viene, lo
+  bloquea y te castiga. El nuestro no hace nada y es incastigable, por eso
+  se come el 70% de los okis (§13) y por eso el escenario "no existe
+  respuesta al escape" del §14 no tenía salida: **en Yomi la respuesta
+  existe y es bloquearlo.** Los dos diales van juntos: acelerar el oki sin
+  tocar el escape es regalarle el buff al escape.

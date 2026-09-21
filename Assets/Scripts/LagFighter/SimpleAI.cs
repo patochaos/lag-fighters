@@ -746,6 +746,24 @@ namespace LagFighter
                 if (g >= 0) return g;
             }
 
+            // LA GUARDIA QUE CASTIGA: defender bien cobra en SANGRE, y cuánta
+            // depende de lo que tenga guardado para el contragolpe — con un
+            // pesado en la mano la guardia sube fuerte en la mezcla; sin golpes
+            // con qué castigar vuelve a valer lo de siempre. Sin esto la IA
+            // recibía el contragolpe como ruido y el lab medía un mundo donde
+            // nadie lo usa a propósito (la trampa de método del §9).
+            if (DuelConfig.GuardCounter && strong >= 0)
+            {
+                int pega = s.Def(me, hand[strong]).Damage;
+                if (DuelConfig.GuardCounterCap > 0 && pega > DuelConfig.GuardCounterCap)
+                    pega = DuelConfig.GuardCounterCap;
+                if (_rng.NextDouble() < 0.10 + 0.03 * pega)
+                {
+                    int g = Guard();
+                    if (g >= 0) return g;
+                }
+            }
+
             // rematar: si el rival está a tiro, el golpe fuerte paga más
             if (strong >= 0 && s.Hp[opp] <= s.Def(me, hand[strong]).Damage) return strong;
 

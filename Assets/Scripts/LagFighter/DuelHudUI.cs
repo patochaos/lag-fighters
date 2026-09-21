@@ -27,6 +27,15 @@ namespace LagFighter
         readonly Text[] _who = new Text[2];
         readonly Text[] _hpNum = new Text[2];
         readonly Image[] _hpFill = new Image[2];
+        // La vida DIBUJADA persigue a la de la sim en vez de copiarla: la sim
+        // resuelve el turno entero antes de que empiece la ceremonia, así que
+        // leerla directo hacía bajar la barra ANTES de dar vuelta las cartas —
+        // el daño se veía antes que su causa y el suspenso no existía.
+        readonly Image[] _hpGhost = new Image[2];
+        readonly float[] _hpShown = { -1f, -1f };
+        readonly float[] _hpLag = { -1f, -1f };
+        bool _hpHold;                          // la ceremonia todavía no llegó al impacto
+        readonly int[] _dmgPend = new int[2];   // daño del turno, para el número flotante
         readonly Text[] _piles = new Text[2];
         readonly Image[][] _leftChip = new Image[2][];
         readonly Image[][] _leftIcon = new Image[2][];
@@ -41,7 +50,11 @@ namespace LagFighter
         const int Cols = 5;   // el strip "LE QUEDAN" es 5×2 chips
 
         // ---- revelación ----
-        enum Phase { Off, Deal, Suspense, Cross, Flip, Judge, Docked }
+        // Un beat = UNA cosa que entender. Antes Judge contaba de golpe quién
+        // ganó, por qué, el daño, el chip, el truco y el contragolpe: seis
+        // ideas en un segundo. Ahora el fallo, el golpe y el contragolpe son
+        // momentos separados (y todo sigue siendo salteable con click/espacio).
+        enum Phase { Off, Deal, Suspense, Cross, Flip, Judge, Impact, Punish, Docked }
         Phase _phase = Phase.Off;
         float _t;
         GameObject _revealRoot;
@@ -59,8 +72,15 @@ namespace LagFighter
 
         // carta espiada por LA LECHUZA durante la planificación
         GameObject _peekRoot;
+        readonly Text[] _dmgPop = new Text[2];   // el número de daño, en el beat del golpe
+        Text _counterNote;                      // "¡CONTRAGOLPE!", su propio beat
+        int _punishSide = -1, _punishDmg;
 
-        const float DealT = 0.34f, SuspenseT = 0.30f, CrossT = 0.55f, FlipT = 0.34f, JudgeT = 1.05f;
+        const float DealT = 0.42f, SuspenseT = 0.44f, CrossT = 0.55f, FlipT = 0.40f;
+        const float JudgeT = 1.25f;      // el fallo: quién ganó y POR QUÉ
+        const float DetailAt = 0.40f;    // dentro del fallo, cuándo entra la línea chica
+        const float ImpactT = 0.95f;     // el golpe: la vida baja y sale el número
+        const float PunishT = 1.00f;     // el contragolpe de la guardia, cuando lo hubo
         const float RevealW = 232f, RevealH = 318f;
         const float SlotX = 258f;
         // dockeadas: pegadas al borde y POR DEBAJO del piso de los paneles
@@ -180,6 +200,13 @@ namespace LagFighter
             // LA VIDA es el primer ciudadano: barra alta y número grande.
             var hpBg = Img(p, "HpBg", new Vector2(0f, 1f), new Vector2(PanelW * 0.5f, -68f),
                 new Vector2(HpW, 40f), Duelo.Wash(Duelo.Golpe, 0.16f));
+            // BARRA DE REZAGO (el clásico de los fighting): queda atrás en rojo
+            // y se drena después, así el golpe se VE como una cantidad y no como
+            // un número que cambió de golpe. Va antes que el fill: se dibuja detrás.
+            _hpGhost[i] = Img(hpBg.rectTransform, "Ghost", new Vector2(0f, 0.5f), Vector2.zero,
+                new Vector2(HpW - 4f, 36f), Duelo.Golpe);
+            _hpGhost[i].rectTransform.pivot = new Vector2(0f, 0.5f);
+            _hpGhost[i].rectTransform.anchoredPosition = new Vector2(2f, 0f);
             _hpFill[i] = Img(hpBg.rectTransform, "Fill", new Vector2(0f, 0.5f), Vector2.zero,
                 new Vector2(HpW - 4f, 36f), Duelo.Escape);
             _hpFill[i].rectTransform.pivot = new Vector2(0f, 0.5f);
@@ -258,10 +285,24 @@ namespace LagFighter
             int max = S.MaxHpOf(i);
             _who[i].text = (i == 0 ? "VOS · " : "RIVAL · ") + chr.Name;
 
-            float f = Mathf.Clamp01(S.Hp[i] / (float)max);
+            // arranque y camino normal: la barra persigue a la sim. Congelada
+            // (_hpHold) se queda quieta hasta que la ceremonia llegue al golpe.
+            if (_hpShown[i] < 0f) { _hpShown[i] = S.Hp[i]; _hpLag[i] = S.Hp[i]; }
+            if (!_hpHold)
+                _hpShown[i] = Mathf.MoveTowards(_hpShown[i], S.Hp[i], Mathf.Max(14f, Mathf.Abs(S.Hp[i] - _hpShown[i]) * 5f) * Time.deltaTime);
+            // el rezago corre MÁS LENTO y con un respiro: es lo que hace legible
+            // "cuánto" te sacaron
+            _hpLag[i] = _hpLag[i] < _hpShown[i]
+                ? _hpShown[i]
+                : Mathf.MoveTowards(_hpLag[i], _hpShown[i], 7f * Time.deltaTime);
+
+            float f = Mathf.Clamp01(_hpShown[i] / max);
+            float fl = Mathf.Clamp01(_hpLag[i] / max);
             _hpFill[i].rectTransform.sizeDelta = new Vector2((HpW - 4f) * f, 36f);
             _hpFill[i].color = Duelo.Hp(f);
-            _hpNum[i].text = $"{S.Hp[i]} / {max}";
+            _hpGhost[i].rectTransform.sizeDelta = new Vector2((HpW - 4f) * fl, 36f);
+            _hpGhost[i].color = Duelo.Alpha(Duelo.Golpe, fl > f + 0.001f ? 0.9f : 0f);
+            _hpNum[i].text = $"{Mathf.CeilToInt(_hpShown[i])} / {max}";
 
             _piles[i].text = $"MANO {S.Hand[i].Count}   ·   MAZO {S.Deck[i].Count}   ·   DESCARTE {S.Discard[i].Count}";
 
@@ -319,6 +360,8 @@ namespace LagFighter
             _swap = r.Swapped;
             _upset = r.UpsetSide;
             _oracle = r.OracleSide;
+            _punishSide = r.PunishCard >= 0 ? r.PunishSide : -1;
+            _punishDmg = r.PunishDamage;
 
             _revealRoot = new GameObject("Reveal", typeof(RectTransform));
             var rt = _revealRoot.GetComponent<RectTransform>();
@@ -380,6 +423,30 @@ namespace LagFighter
                 DuelHandUI.Face.Para);
             _verdict.gameObject.SetActive(false);
             _detail.gameObject.SetActive(false);
+
+            // El número de daño sale DE la carta que perdió y sube: el golpe
+            // deja de ser "la barra cambió" y pasa a tener un lugar y un momento.
+            for (int i = 0; i < 2; i++)
+            {
+                float sign = i == 0 ? -1f : 1f;
+                _dmgPop[i] = Txt(rt, "Dmg" + i, "", new Vector2(0.5f, 0.5f),
+                    new Vector2(sign * SlotX, 150f), new Vector2(300f, 80f), 62,
+                    Duelo.Golpe, TextAnchor.MiddleCenter);
+                _dmgPop[i].gameObject.SetActive(false);
+            }
+            _counterNote = Txt(rt, "Counter", "", new Vector2(0.5f, 0.5f), new Vector2(0f, -150f),
+                new Vector2(1500f, 54f), 38, Duelo.Guardia, TextAnchor.MiddleCenter);
+            _counterNote.gameObject.SetActive(false);
+
+            // la vida queda CONGELADA en el valor previo al turno hasta el beat
+            // del golpe: la sim ya resolvió, pero el jugador todavía no vio nada
+            for (int i = 0; i < 2; i++)
+            {
+                _dmgPend[i] = r.Dmg(i);
+                _hpShown[i] = Mathf.Min(S.MaxHpOf(i), S.Hp[i] + r.Dmg(i));
+                _hpLag[i] = _hpShown[i];
+            }
+            _hpHold = true;
 
             // el cartel de PODER, arriba de las cartas. Los pre-carta (Oracle,
             // Loser) ya eran públicos: se muestran desde el reparto. El Brujo
@@ -513,9 +580,17 @@ namespace LagFighter
                 // la guardia es femenina: "GUARDIA BAJA", no "GUARDIA BAJO"
                 string alt = atk.Height == DuelHeight.High ? "ALTA" : "BAJA";
                 _verdictTxt = $"GUARDIA {alt} · ¡ACERTADA!";
-                _detailTxt = $"para el golpe entero, roba {r.Drew(g)} cartas y la guardia vuelve a la mano" +
-                             (r.Chip(g) > 0 ? $" · igual pega {r.Chip(g)} de chip" : "") +
-                             (r.PunishSide == g && r.PunishCard >= 0 ? " · ¡y castiga gratis!" : "");
+                // se arma por partes: con robo 0 decía "roba 0 cartas", y el
+                // contragolpe (que ahora es EL premio de la guardia) iba último,
+                // como una nota al pie de lo que más importa del turno.
+                string cuenta = "para el golpe entero";
+                if (r.PunishSide == g && r.PunishCard >= 0)
+                    cuenta += $" y contragolpea por {r.PunishDamage}";
+                int drew = r.Drew(g);
+                if (drew > 0) cuenta += $" · roba {drew} " + (drew == 1 ? "carta" : "cartas");
+                cuenta += " · la guardia vuelve a la mano";
+                if (r.Chip(g) > 0) cuenta += $" · igual pega {r.Chip(g)} de chip";
+                _detailTxt = cuenta;
                 return;
             }
             if (r.WrongGuard0 || r.WrongGuard1)
@@ -659,10 +734,13 @@ namespace LagFighter
                                 ? Quaternion.Euler(0f, 0f, 180f) : Quaternion.identity;
                             _rc[i].localScale = Vector3.one;
                         }
+                        // el FALLO entra solo; la línea chica que lo explica
+                        // llega después (DetailAt): dos textos que aparecen
+                        // juntos se leen como un párrafo, no como un veredicto
                         _verdict.text = _verdictTxt;
                         _detail.text = _detailTxt;
                         _verdict.gameObject.SetActive(true);
-                        _detail.gameObject.SetActive(true);
+                        _detail.gameObject.SetActive(false);
                         _vs.gameObject.SetActive(false);
                         SfxLib.Play(SfxLib.Kind.Hit, 0.55f);
                     }
@@ -695,7 +773,69 @@ namespace LagFighter
                     }
                     float vp = Mathf.Clamp01(_t / 0.16f);
                     _verdict.transform.localScale = Vector3.one * Mathf.Lerp(1.5f, 1f, 1f - Mathf.Pow(1f - vp, 3f));
-                    if (_t >= JudgeT) { _phase = Phase.Docked; DockNow(); }
+                    // la explicación entra un respiro después del fallo
+                    if (_t >= DetailAt && !_detail.gameObject.activeSelf)
+                    {
+                        _detail.gameObject.SetActive(true);
+                        SfxLib.Play(SfxLib.Kind.UiTick, 0.5f);
+                    }
+                    if (_detail.gameObject.activeSelf)
+                    {
+                        float dp = Mathf.Clamp01((_t - DetailAt) / 0.22f);
+                        _detail.color = Duelo.Alpha(Duelo.Paper, 0.9f * dp);
+                    }
+                    if (_t >= JudgeT)
+                    {
+                        _phase = Phase.Impact;
+                        _t = 0f;
+                        _hpHold = false;             // recién ACÁ baja la vida
+                        bool pega = false;
+                        for (int i = 0; i < 2; i++)
+                        {
+                            if (_dmgPend[i] <= 0) continue;
+                            pega = true;
+                            _dmgPop[i].text = "−" + _dmgPend[i];
+                            _dmgPop[i].gameObject.SetActive(true);
+                        }
+                        if (pega) SfxLib.Play(SfxLib.Kind.Hit, 0.95f);
+                    }
+                    break;
+                }
+                case Phase.Impact:
+                {
+                    // el número sube y se desvanece mientras la barra se drena
+                    float t = Mathf.Clamp01(_t / ImpactT);
+                    for (int i = 0; i < 2; i++)
+                    {
+                        if (!_dmgPop[i].gameObject.activeSelf) continue;
+                        float sign = i == 0 ? -1f : 1f;
+                        _dmgPop[i].rectTransform.anchoredPosition = new Vector2(sign * SlotX, 150f + 70f * t);
+                        _dmgPop[i].transform.localScale = Vector3.one * (1f + 0.55f * Mathf.Exp(-t * 9f));
+                        _dmgPop[i].color = Duelo.Alpha(Duelo.Golpe, 1f - Mathf.Clamp01((t - 0.55f) / 0.45f));
+                    }
+                    if (_t >= ImpactT)
+                    {
+                        _t = 0f;
+                        if (_punishSide >= 0)
+                        {
+                            // el CONTRAGOLPE tiene su propio momento: es el
+                            // premio de haber leído bien, no una nota al pie
+                            _phase = Phase.Punish;
+                            _counterNote.text = _punishSide == 0
+                                ? $"¡CONTRAGOLPE!  le pegás {_punishDmg} gratis"
+                                : $"¡TE CONTRAGOLPEÓ!  te pega {_punishDmg} gratis";
+                            _counterNote.gameObject.SetActive(true);
+                            SfxLib.Play(SfxLib.Kind.Hit, 0.8f);
+                        }
+                        else { _phase = Phase.Docked; DockNow(); }
+                    }
+                    break;
+                }
+                case Phase.Punish:
+                {
+                    float t = Mathf.Clamp01(_t / 0.2f);
+                    _counterNote.transform.localScale = Vector3.one * Mathf.Lerp(1.45f, 1f, 1f - Mathf.Pow(1f - t, 3f));
+                    if (_t >= PunishT) { _phase = Phase.Docked; DockNow(); }
                     break;
                 }
             }
@@ -726,6 +866,16 @@ namespace LagFighter
                 _powerNote.rectTransform.anchoredPosition = new Vector2(0f, 296f);
                 _powerNote.fontSize = 17;
             }
+            // el contragolpe se sube con el resto del cartel: a media pantalla
+            // quedaba encima de la mano mientras el jugador elige el premio
+            if (_counterNote != null)
+            {
+                _counterNote.rectTransform.anchoredPosition = new Vector2(0f, 170f);
+                _counterNote.fontSize = 24;
+                _counterNote.transform.localScale = Vector3.one;
+            }
+            for (int i = 0; i < 2; i++)
+                if (_dmgPop[i] != null) _dmgPop[i].gameObject.SetActive(false);
         }
 
         // El jugador puede apurar la ceremonia (clic o espacio).
@@ -745,7 +895,21 @@ namespace LagFighter
             _detail.text = _detailTxt;
             _verdict.gameObject.SetActive(true);
             _detail.gameObject.SetActive(true);
+            _detail.color = Duelo.Alpha(Duelo.Paper, 0.9f);
             if (_vs != null) _vs.gameObject.SetActive(false);
+            // apurar la ceremonia no puede dejar la vida congelada ni el
+            // contragolpe sin cantar: se salta la animación, no la información
+            _hpHold = false;
+            for (int i = 0; i < 2; i++)
+                if (_dmgPop[i] != null) _dmgPop[i].gameObject.SetActive(false);
+            if (_counterNote != null && _punishSide >= 0)
+            {
+                _counterNote.text = _punishSide == 0
+                    ? $"¡CONTRAGOLPE!  le pegás {_punishDmg} gratis"
+                    : $"¡TE CONTRAGOLPEÓ!  te pega {_punishDmg} gratis";
+                _counterNote.gameObject.SetActive(true);
+                _counterNote.transform.localScale = Vector3.one;
+            }
             _phase = Phase.Docked;
             DockNow();
         }
@@ -754,6 +918,12 @@ namespace LagFighter
         {
             if (_revealRoot != null) Destroy(_revealRoot);
             _revealRoot = null;
+            _counterNote = null;
+            _dmgPop[0] = _dmgPop[1] = null;
+            _punishSide = -1;
+            // si la ceremonia se corta por el medio (fin de round, KO), la vida
+            // no puede quedarse congelada para siempre
+            _hpHold = false;
             _phase = Phase.Off;
             _t = 0f;
         }

@@ -26,8 +26,12 @@ namespace LagFighter
         // regla nueva es que NADA baja de 14px sobre 1920 (DUELO-LOOK §4).
         const float CardW = 194f, CardH = 266f;
         const float BaseY = 158f;
-        const float HoverY = 288f;
-        const float HoverScale = 1.42f;
+        // El techo del abanico manda: con HoverY 288 y escala 1.42 la carta
+        // agrandada llegaba a y≈477 y chocaba con el panel de detalle. A 276 /
+        // 1.36 llega a ≈457 y la franja de arriba queda libre — sigue creciendo
+        // y viniéndose al frente, que es lo que tiene que hacer.
+        const float HoverY = 276f;
+        const float HoverScale = 1.36f;
 
         MatchController _mc;
         RectTransform _canvasRt;
@@ -80,7 +84,18 @@ namespace LagFighter
             if (d.Chip > 0) list.Add(($"PEGA {d.Chip} AUNQUE LA DEFIENDAN", new Color(1f, 0.75f, 0.25f)));
             if (d.FreeKnockdown) list.Add(("DERRIBO GRATIS", new Color(1f, 0.5f, 0.35f)));
             if (d.PunishOnGuard) list.Add(("SI TE LA DEFIENDEN, TE PEGAN", new Color(1f, 0.4f, 0.45f)));
-            if (d.Kind == DuelKind.Guard) list.Add(("ROBÁS 2 · VUELVE A TU MANO", new Color(0.45f, 0.85f, 1f)));
+            if (d.Kind == DuelKind.Guard)
+            {
+                // NUNCA hardcodear el número: el lab mueve GuardDraw y la carta
+                // no puede mentir. Con el contragolpe activo la guardia cobra en
+                // SANGRE, y eso es lo primero que hay que ver.
+                if (DuelConfig.GuardCounter)
+                    list.Add(("ACERTÁS → LE PEGÁS GRATIS", new Color(1f, 0.62f, 0.3f)));
+                if (DuelConfig.GuardDrawNow > 0)
+                    list.Add(($"ROBÁS {DuelConfig.GuardDrawNow} · VUELVE A TU MANO", new Color(0.45f, 0.85f, 1f)));
+                else
+                    list.Add(("VUELVE A TU MANO", new Color(0.45f, 0.85f, 1f)));
+            }
             if (d.Kind == DuelKind.Grab) list.Add(("LE GANA A LA GUARDIA", new Color(0.85f, 0.6f, 1f)));
             if (d.Kind == DuelKind.Escape) list.Add(("UNA POR PARTIDA", new Color(0.5f, 1f, 0.7f)));
             return list;
@@ -98,12 +113,19 @@ namespace LagFighter
                         : "Le gana a la GUARDIA (cualquier altura) y pierde con cualquier golpe. " +
                           "Contra otro agarre gana el más rápido; si empatan, se sueltan.";
                 case DuelKind.Guard:
-                    // el número sale del config: si el lab lo mueve, la carta no miente
-                    return d.Height == DuelHeight.High
-                        ? $"Para los golpes ALTOS: no comés nada, robás {DuelConfig.GuardDraw} carta y la guardia vuelve a tu mano. " +
-                          "Los golpes BAJOS te entran enteros, y el agarre te rompe la guardia."
-                        : $"Para los golpes BAJOS: no comés nada, robás {DuelConfig.GuardDraw} carta y la guardia vuelve a tu mano. " +
-                          "Los golpes ALTOS te entran enteros, y el agarre te rompe la guardia.";
+                {
+                    // todo sale del config: si el lab mueve un dial, la carta no miente
+                    bool alta = d.Height == DuelHeight.High;
+                    string pára = alta ? "ALTOS" : "BAJOS";
+                    string pasa = alta ? "BAJOS" : "ALTOS";
+                    string premio = DuelConfig.GuardCounter
+                        ? "no comés nada y le pegás GRATIS con un golpe de tu mano"
+                        : "no comés nada";
+                    int draw = DuelConfig.GuardDrawNow;
+                    string robo = draw > 0 ? $", robás {draw} carta" : "";
+                    return $"Para los golpes {pára}: {premio}{robo}, y la guardia vuelve a tu mano. " +
+                           $"Los golpes {pasa} te entran enteros, y el agarre te rompe la guardia.";
+                }
                 case DuelKind.Escape:
                     return "No pasa nada este turno: ni pegás ni te pegan. Es la salida cuando estás " +
                            "derribado y tu guardia no funciona. Se gasta para siempre.";
@@ -358,22 +380,30 @@ namespace LagFighter
             _btnA.gameObject.SetActive(false);
             _btnB.gameObject.SetActive(false);
 
-            // detalle de la carta hovereada
-            _infoBg = MakeImage(rootRt, "Info", new Vector2(1f, 0f), new Vector2(-236f, 624f),
-                new Vector2(436f, 286f), Duelo.Panel);
+            // Detalle de la carta hovereada. Vive en la FRANJA LIBRE entre el
+            // techo del abanico (la carta agrandada llega a y≈457) y el piso de
+            // los paneles de lado (y=670): antes estaba a 286 de alto y se
+            // metía 97px DENTRO del panel del rival, que le comía el título.
+            const float InfoW = 640f, InfoH = 150f;
+            _infoBg = MakeImage(rootRt, "Info", new Vector2(1f, 0f), new Vector2(-330f, 545f),
+                new Vector2(InfoW, InfoH), Duelo.Panel);
             MakeImage(_infoBg.rectTransform, "Line", new Vector2(0.5f, 1f), new Vector2(0f, -1f),
-                new Vector2(436f, 2f), Duelo.Line);
-            Brackets(_infoBg.rectTransform, 436f, 286f, Duelo.Line);
-            _detailTitle = MakeText(_infoBg.rectTransform, "T", "", new Vector2(0.5f, 1f), new Vector2(0f, -30f),
-                new Vector2(396f, 32f), 16, Duelo.Paper, TextAnchor.MiddleCenter);
-            _detailStats = MakeText(_infoBg.rectTransform, "S", "", new Vector2(0.5f, 1f), new Vector2(0f, -64f),
-                new Vector2(400f, 26f), 17, Duelo.Gold, TextAnchor.MiddleCenter, Face.Data);
-            _detailDesc = MakeText(_infoBg.rectTransform, "D", "", new Vector2(0.5f, 1f), new Vector2(0f, -172f),
-                new Vector2(396f, 180f), 20, Duelo.Alpha(Duelo.Paper, 0.94f), TextAnchor.UpperLeft, Face.Para, wrap: true);
+                new Vector2(InfoW, 2f), Duelo.Line);
+            Brackets(_infoBg.rectTransform, InfoW, InfoH, Duelo.Line);
+            _detailTitle = MakeText(_infoBg.rectTransform, "T", "", new Vector2(0.5f, 1f), new Vector2(0f, -22f),
+                new Vector2(InfoW - 40f, 28f), 18, Duelo.Paper, TextAnchor.MiddleCenter);
+            _detailStats = MakeText(_infoBg.rectTransform, "S", "", new Vector2(0.5f, 1f), new Vector2(0f, -50f),
+                new Vector2(InfoW - 40f, 24f), 17, Duelo.Gold, TextAnchor.MiddleCenter, Face.Data);
+            _detailDesc = MakeText(_infoBg.rectTransform, "D", "", new Vector2(0.5f, 1f), new Vector2(0f, -104f),
+                new Vector2(InfoW - 40f, 88f), 18, Duelo.Alpha(Duelo.Paper, 0.94f), TextAnchor.UpperCenter, Face.Para, wrap: true);
             _infoBg.gameObject.SetActive(false);
 
-            _status = MakeText(rootRt, "Status", "", new Vector2(0.5f, 0f), new Vector2(0f, BaseY + CardH * 0.5f + 34f),
-                new Vector2(1600f, 30f), 21, Duelo.Escape, TextAnchor.MiddleCenter, Face.Data);
+            // El prompt de fase iba a y=325, o sea JUSTO DEBAJO de la carta
+            // hovereada (que cubre hasta y≈457): al pasar el mouse por una carta
+            // —que es todo el tiempo— la instrucción quedaba tapada. Ahora vive
+            // debajo de los paneles de lado, donde nada lo puede pisar.
+            _status = MakeText(rootRt, "Status", "", new Vector2(0.5f, 0f), new Vector2(0f, 640f),
+                new Vector2(1560f, 30f), 21, Duelo.Escape, TextAnchor.MiddleCenter, Face.Data);
 
             RefreshStates();
             LayoutHand();

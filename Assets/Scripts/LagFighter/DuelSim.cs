@@ -242,6 +242,31 @@ namespace LagFighter
                                              // mano del humano manda. Con truco: roba 2 · retruco 3 · vale cuatro 4.
         public static int HardTurnCap = 40;  // red de seguridad; el mazo suele cerrar antes
 
+        // ---- LA GUARDIA QUE CASTIGA (dial, 2026-08-01) ----
+        // La guardia acertada abre CONTRAGOLPE: el defensor pega un golpe de
+        // su mano, como el castigo del Facón pero universal. Trae la función
+        // del ESQUIVE de Yomi 2 (la lectura dura que paga en daño) sin sumar
+        // el cuarto verbo: acertar la guardia exige adivinar DOS cosas (que
+        // ataca y la altura), así que el premio se gana más caro que el del
+        // esquive, que no adivina altura.
+        // PRENDIDO (2026-08-01, elección de Patricio tras el A/B): la variante
+        // "contra + robo 0" — el balance más parejo de las cinco (spread de
+        // personajes 10.4 pp → 1.0) y la información arriba del objetivo.
+        public static bool GuardCounter = true;
+        // Robo del defensor mientras el contragolpe está activo. La Ley 2 dice
+        // que cada opción paga en UNA moneda: cobrar cartas Y daño es doble
+        // premio. 0 = la guardia pasa a pagar solo en sangre.
+        public static int GuardCounterDraw = 0;
+        // Tope del contragolpe universal (0 = el daño completo de la carta).
+        // El Cabezazo a 9 por defender bien pega más que ganar el intercambio;
+        // este es el dial para escalarlo sin tocar una sola carta.
+        public static int GuardCounterCap = 0;
+
+        // El robo EFECTIVO del que defiende bien. Fuente única de verdad: la
+        // sim y la UI leen de acá, así que una carta nunca puede prometer un
+        // número que el lab movió (la de guardia decía "ROBÁS 2" a mano).
+        public static int GuardDrawNow => GuardCounter ? GuardCounterDraw : GuardDraw;
+
         // ---- LOS CANTOS (DUELO.md §11) ----
         public static int EnvidoChip = 4;     // lo que cobra el ganador del envido querido (6→4 con rounds: proporcional a la vida de 26)
         public static int EnvidoFoldChip = 1; // el "no quiero" al envido paga al cantor
@@ -411,6 +436,8 @@ namespace LagFighter
         DuelTurnResult _r = new DuelTurnResult();
         int _victim = -1;
         int _prizeMult = 1;   // el multiplicador del truco cobrado, por si el premio también dobla
+        int _punishCap = 0;   // tope del contragolpe en curso (0 = daño completo)
+        int _punishMult = 1;  // truco cobrado por una guardia que paga en sangre
         bool _finished;
         bool _pendingTimeOver;
         bool _swapTurn;       // EL BRUJO: este turno cada lado EJECUTA la carta del otro
@@ -670,6 +697,7 @@ namespace LagFighter
             _r = new DuelTurnResult();
             _victim = -1;
             _prizeMult = 1;
+            _punishCap = 0; _punishMult = 1;
             PendingSide = -1; PendingIsPunish = false;
             _finished = false;
             _swapTurn = false; _upsetTurn = false;
@@ -845,24 +873,33 @@ namespace LagFighter
         {
             if (def == 0) _r.Guarded0 = true; else _r.Guarded1 = true;
             if (atk.Chip > 0) Damage(def, atk.Chip, chip: true);
-            // El truco también se cobra BLOQUEANDO (Patricio, 2026-07-25):
-            // la guardia acertada gana la apuesta en SU moneda — cartas
-            // multiplicadas (Ley 2 aplicada al canto). Robás 1 normal, 2 con
-            // truco, 3 con retruco, 4 con vale cuatro.
-            int draw = DuelConfig.GuardDraw;
+            int draw = DuelConfig.GuardDrawNow;
+            int mult = 1;
             if (TrucoLevel > 0)
             {
-                draw *= TrucoMult(TrucoLevel);
+                mult = TrucoMult(TrucoLevel);
                 _r.Truco = TrucoLevel;
                 TrucoLevel = 0;
                 TrucoCaller = -1;
             }
+            // El truco también se cobra BLOQUEANDO (Patricio, 2026-07-25):
+            // la guardia acertada gana la apuesta en SU moneda — cartas
+            // multiplicadas (Ley 2 aplicada al canto). Robás 1 normal, 2 con
+            // truco, 3 con retruco, 4 con vale cuatro. Si la guardia dejó de
+            // cobrar cartas (contragolpe con robo 0), esa moneda pasa a ser
+            // el contragolpe y el truco lo multiplica a él: sin esto el canto
+            // se consumía multiplicando cero.
+            int punishMult = 1;
+            if (draw > 0) draw *= mult; else punishMult = mult;
             for (int n = 0; n < draw; n++)
             {
                 DrawOne(def);
                 if (def == 0) _r.Drew0++; else _r.Drew1++;
             }
-            if (atk.PunishOnGuard) BeginPunish(def);
+            // El castigo del Facón pega COMPLETO (es su firma, el precio del
+            // pacto); el contragolpe universal respeta el tope del dial.
+            if (atk.PunishOnGuard) BeginPunish(def, 0, punishMult);
+            else if (DuelConfig.GuardCounter) BeginPunish(def, DuelConfig.GuardCounterCap, punishMult);
         }
 
         void Land(int side, int card)
@@ -949,10 +986,14 @@ namespace LagFighter
 
         // ---- castigo del defensor (la Y de Jaina defendida) ----
 
-        void BeginPunish(int side)
+        // cap 0 = el contragolpe pega el daño completo de la carta · mult =
+        // el multiplicador del truco cuando la guardia cobra en sangre.
+        void BeginPunish(int side, int cap = 0, int mult = 1)
         {
             PendingSide = side;
             PendingIsPunish = true;
+            _punishCap = cap;
+            _punishMult = mult;
             _victim = 1 - side;
             foreach (int c in Hand[side])
                 if (Def(side, c).IsAttack) return;
@@ -972,10 +1013,12 @@ namespace LagFighter
                 if (!d.IsAttack) return false;
                 Hand[side].RemoveAt(handIdx);
                 Discard[side].Add(card);
-                Damage(_victim, d.Damage, chip: false);
+                int dmg = _punishCap > 0 ? Math.Min(d.Damage, _punishCap) : d.Damage;
+                dmg *= _punishMult;
+                Damage(_victim, dmg, chip: false);
                 _r.PunishSide = side;
                 _r.PunishCard = card;
-                _r.PunishDamage = d.Damage;
+                _r.PunishDamage = dmg;
             }
             PendingSide = -1;
             PendingIsPunish = false;

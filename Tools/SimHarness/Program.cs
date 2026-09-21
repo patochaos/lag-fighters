@@ -64,6 +64,12 @@ class Program
             RunDueloVendido(args.Length > 1 ? int.Parse(args[1]) : 4000);
             return;
         }
+        // A/B de la guardia que castiga (el contragolpe universal).
+        if (args.Length > 0 && args[0] == "dueloguardia")
+        {
+            RunDueloGuardia(args.Length > 1 ? int.Parse(args[1]) : 4000);
+            return;
+        }
         // Poderes Cosmic: cada poder vs sin-poder, con la regla de recarga
         // barrida (1×round vs 1×partida — la pregunta de Patricio).
         if (args.Length > 0 && args[0] == "duelopoderes")
@@ -671,6 +677,66 @@ class Program
         }
         DuelConfig.KdVendido = v0;
         Console.WriteLine("  [oki-atk% = el que derribó gana el intercambio siguiente · oki-esc% = el derribado escapa]");
+    }
+
+    // A/B de LA GUARDIA QUE CASTIGA (2026-08-01): la guardia acertada abre
+    // contragolpe — la función del ESQUIVE de Yomi 2 (lectura dura que paga
+    // en daño) sin sumar el cuarto verbo. El barrido cruza el tope del
+    // contragolpe con el robo porque cobrar cartas Y sangre es doble premio
+    // (Ley 2: cada opción paga en UNA moneda).
+    // Columnas que deciden: guard% (si defender pasa a ser el default, el
+    // agarre se queda sin presa y el juego se estanca), el premio dmg/kd
+    // (flag Ley 12: hoy 83/17) y que la brecha no se caiga.
+    static void RunDueloGuardia(int matches)
+    {
+        bool g0 = DuelConfig.GuardCounter;
+        int cap0 = DuelConfig.GuardCounterCap, dr0 = DuelConfig.GuardCounterDraw;
+        var modos = new (string Name, bool On, int Cap, int Draw)[]
+        {
+            ("off (hoy)",       false, 0, 1),
+            ("contra + robo 1", true,  0, 1),
+            ("contra + robo 0", true,  0, 0),
+            ("tope 4 + robo 1", true,  4, 1),
+            ("tope 4 + robo 0", true,  4, 0),
+        };
+        int nc = DuelCatalog.Chars.Length;
+        Console.WriteLine($"=== DUELO: la guardia que castiga ({matches} partidas por modo) ===");
+        Console.WriteLine("  modo             | turnos rounds   KO%  premio dmg/kd  guard%  acierto%  contra/part  brecha   info");
+        foreach (var mo in modos)
+        {
+            DuelConfig.GuardCounter = mo.On;
+            DuelConfig.GuardCounterCap = mo.Cap;
+            DuelConfig.GuardCounterDraw = mo.Draw;
+            var st = new DuelStats();
+            var wins = new double[nc]; var games = new int[nc];
+            for (int m = 0; m < matches; m++)
+            {
+                int c0 = (m / nc) % nc, c1 = m % nc;
+                int w = PlayDuel(m + 1, c0, c1, DuelBot.Full, DuelBot.Full, st);
+                games[c0]++; games[c1]++;
+                if (w == 0) wins[c0] += 1; else if (w == 1) wins[c1] += 1;
+                else { wins[c0] += 0.5; wins[c1] += 0.5; }
+            }
+            double gap = Duel1v1(matches, DuelBot.Full, DuelBot.Random);
+            double con = Duel1v1(matches, DuelBot.Full, DuelBot.Predictable);
+            double sin = Duel1v1(matches, DuelBot.NoReads, DuelBot.Predictable);
+            long premios = Math.Max(1, st.PrizeDmg + st.PrizeKd);
+            long guardias = Math.Max(1, st.GuardOk + st.GuardMal);
+            Console.WriteLine($"  {mo.Name,-16} | {(double)st.Turns / matches,6:0.0} {(double)st.RoundsSum / matches,6:0.0} {100.0 * st.Kos / matches,5:0.0} " +
+                              $"{100.0 * st.PrizeDmg / premios,7:0.0}/{100.0 * st.PrizeKd / premios,-5:0.0} " +
+                              $"{100.0 * guardias / Math.Max(1, st.Turns * 2),6:0.0} {100.0 * st.GuardOk / guardias,9:0.0} " +
+                              $"{(double)st.Punishes / matches,11:0.00} " +
+                              $"{gap * 100,7:0.0} {(con - sin) * 100,6:+0.0;-0.0}");
+            Console.Write("                     personajes:");
+            for (int i = 0; i < nc; i++)
+                Console.Write($" {DuelCatalog.Chars[i].Name} {100.0 * wins[i] / Math.Max(1, games[i]):0.0}");
+            Console.WriteLine();
+        }
+        DuelConfig.GuardCounter = g0;
+        DuelConfig.GuardCounterCap = cap0;
+        DuelConfig.GuardCounterDraw = dr0;
+        Console.WriteLine("  [guard% = turnos-jugador que abrieron con guardia · acierto% = de esas, cuántas pegaron la altura]");
+        Console.WriteLine("  [contra/part = contragolpes cobrados por partida · si guard% se dispara, defender se volvió el default]");
     }
 
     // ---- PODERES Cosmic (DUELO.md §14) ------------------------------------
